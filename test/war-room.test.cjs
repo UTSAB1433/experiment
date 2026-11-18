@@ -1,77 +1,6 @@
-// node --test — run the real inline app; no network, credentials, or production rooms.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
-const { join } = require('node:path');
-const vm = require('node:vm');
-
-const html = readFileSync(join(__dirname, '../index.html'), 'utf8');
-const app = new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1], {filename:'index.html'});
-const room = 'sync-test', key = 'eot-live-state:' + room;
-const prefix = 'lands-eot/v1/' + room + '/';
-const flush = () => new Promise(resolve => setImmediate(resolve));
-const now = Date.UTC(2026, 0, 1);
-const mockTime = t => t.mock.timers.enable({apis:['setTimeout', 'setInterval', 'Date'], now});
-
-function publication(topic, value){
-  const topicBytes = Buffer.from(topic), length = Buffer.alloc(2);
-  length.writeUInt16BE(topicBytes.length);
-  const body = Buffer.concat([length, topicBytes, Buffer.from(JSON.stringify(value))]);
-  const size = []; let n = body.length;
-  do { size.push(n % 128 + (n >= 128 ? 128 : 0)); n = Math.floor(n / 128); } while(n);
-  return Buffer.concat([Buffer.from([0x31, ...size]), body]);
-}
-function publications(socket){
-  return socket.sent.filter(b => b[0] >> 4 === 3).map(b => {
-    let i = 1; while(b[i++] & 128) {} // Skip MQTT remaining-length field.
-    const end = i + 2 + b.readUInt16BE(i);
-    return {topic:b.toString('utf8', i + 2, end), data:JSON.parse(b.toString('utf8', end)), retain:!!(b[0] & 1)};
-  });
-}
-function launch({cached, identity, fb, fetch, claude, WebSocket, timers, random} = {}){
-  const sockets = [], channels = [], nodes = new Map(), events = new Map();
-  const storage = new Map(cached === undefined ? [] : [[key, typeof cached === 'string' ? cached : JSON.stringify(cached)]]);
-  if(identity){ storage.set('eot-me', identity.name); storage.set('eot-ph', identity.ph); }
-  function element(){ return {querySelectorAll:() => [], innerHTML:'', children:[], classList:{toggle(){}}, focus(){}, style:{setProperty(){}}, setAttribute(){}, addEventListener(){}, appendChild(el){ this.children.push(el); }, remove(){}, contains(){ return false; }}; }
-  function $(s){ if(!nodes.has(s)) nodes.set(s, element()); return nodes.get(s); }
-  const window = {claude, addEventListener(){}, removeEventListener(){}};
-  const document = {querySelector:$, querySelectorAll:() => [], documentElement:element(), createElement:element, addEventListener:(e, f) => events.set(e, f)};
-  class Socket {
-    constructor(url, protocol){ this.url = url; this.protocol = protocol; this.readyState = 0; this.sent = []; sockets.push(this); }
-    send(bytes){ assert.equal(this.readyState, 1); this.sent.push(Buffer.from(bytes)); }
-    close(){ this.readyState = 3; this.onclose?.(); }
-    open(){ this.readyState = 1; this.onopen(); }
-    receive(bytes){ this.onmessage?.({data:Uint8Array.from(bytes).buffer}); }
-    subscribe(){ this.open(); this.receive([0x20, 2, 0, 0]); this.receive([0x90, 3, 0, 1, 0]); }
-    message(sub, data){ this.receive(publication(prefix + sub, data)); }
-  }
-  class Channel {
-    constructor(name){ this.name = name; this.sent = []; channels.push(this); }
-    postMessage(msg){ assert.ok(!this.closed); this.sent.push(msg); }
-    close(){ this.closed = true; }
-  }
-  const location = new URL('https://example.test/?room=' + room + (fb ? '&fb=https://example.test' : ''));
-  app.runInNewContext({document, window, location, history:{replaceState(){}}, URL, URLSearchParams,
-    WebSocket:WebSocket || Socket, BroadcastChannel:Channel, fetch:fetch || (() => { throw Error('Unexpected fetch'); }),
-    localStorage:{getItem:k => storage.get(k) ?? null, setItem:(k, v) => storage.set(k, v)},
-    ...(random && {Math:Object.assign(Object.create(Math), {random})}),
-    TextEncoder, TextDecoder, ArrayBuffer, Uint8Array, Date, setTimeout, clearTimeout, setInterval, clearInterval, ...timers});
-  return {game:window.__eot, sockets, channels, $, storage, document, click:(act, data = {}) => events.get('click')({target:{closest:() => ({dataset:{act, ...data}})}}),
-    change:(chg, value) => events.get('change')({target:{closest:() => ({dataset:{chg}, value})}})};
-}
-const {game:factory} = launch({timers:{setTimeout(){}, setInterval(){}}, random:() => 0.5});
-function saved(rev){
-  const st = factory.newGame(now - 60000); st.v = 6; st.rev = rev;
-  st.players.Veteran = {team:'dawn', role:'soldier', title:'Saved post #' + rev, cd:1234};
-  st.teams.dawn.res.gold = 200 + rev;
-  return st;
-}
-function checkReadOnly({sockets, channels}){
-  const pubs = sockets.flatMap(publications);
-  assert.ok(!pubs.some(p => p.retain || p.topic.endsWith('/state')), 'no state was published to a broker');
-  assert.ok(!channels.flatMap(c => c.sent).some(p => p.sub === 'state'), 'no state was broadcast to other tabs');
-}
-const enlist = {name:'New player', team:'dawn', pw:'a'.repeat(64)};
+const {key,prefix,RULES,masterKey,ceiling,flush,now,mockTime,finishOrder,publication,publications,launch,factory,saved,masterySaved,checkReadOnly,enlist,purchaseRoom} = require('../test-support/war-room.cjs');
 
 test('warm first paint; parallel discovery chooses the freshest responding broker, not the fastest handshake', async t => {
   mockTime(t);
@@ -247,32 +176,10 @@ test('a slow shared DB capability cannot delay warm paint or roll back a newer s
   assert.equal(tab.game.S.rev, 31); assert.equal(tab.sockets.length, 0); checkReadOnly(tab);
 });
 
-// The VM DOM normally just records innerHTML. Expose the rendered panel's price tags
-// as elements so the app's real clock can change their disabled state and cost color.
-function purchaseRoom(st, team, role = 'chief'){
-  const identity = {name:'Test chief', ph:'fixture-only'};
-  st.players[identity.name] = {team, role, pw:identity.ph, title:'Test', cd:0};
-  const tab = launch({cached:st, identity}), panel = tab.$('#panel');
-  let html, elements;
-  function controls(){
-    if(html !== panel.innerHTML){
-      html = panel.innerHTML;
-      elements = Array.from(html.matchAll(/<(button|span)\b([^>]*)>/g), ([tag, type, attrs]) => ({
-        tagName:type.toUpperCase(), disabled:/\sdisabled\b/.test(tag), classList:{toggle(k, on){ this[k] = on; }},
-        dataset:Object.fromEntries(Array.from(attrs.matchAll(/\sdata-(\w+)(?:="([^"]*)")?/g), ([,k,v]) => [k, v ?? '']))
-      }));
-    }
-    return elements;
-  }
-  panel.querySelectorAll = tab.document.querySelectorAll = sel => sel === '[data-price]' ? controls().filter(el => 'price' in el.dataset) : [];
-  const [relay, b, c] = tab.sockets; relay.subscribe(); b.onerror(); c.onerror(); relay.message('state', st);
-  return {tab, controls, relay};
-}
-
 for(const team of ['reich','dawn']) test(`${team} research unlocks with passive income and charges the displayed price once`, async t => {
   mockTime(t);
   const st = saved(30); st.t = now;
-  const T = st.teams[team], ctx = {team, now, name:'Test chief'}, payload = {k:'ind'};
+  const T = st.teams[team], ctx = {team, now, name:'Test chief'}, payload = {k:'ind', rank:1, quote:factory.researchCost(st, team, 1)};
   const upgraded = structuredClone(st), projected = structuredClone(st);
   assert.ok(factory.A.research(upgraded, ctx, payload).ok);
   const steel = T.res.steel - upgraded.teams[team].res.steel, gold = T.res.gold - upgraded.teams[team].res.gold;
@@ -309,7 +216,7 @@ test('recruit buttons track full batch cost and command points, and a newer room
   t.mock.timers.tick(1000); assert.equal(buy(1).disabled, false); assert.equal(buy(5).disabled, true);
   tab.click('tab', {k:'troops'}); assert.equal(buy(1).disabled, false); assert.equal(buy(5).disabled, true);
   t.mock.timers.tick(2000); assert.equal(buy(5).disabled, false); assert.equal(buy(1,'rk_maus').disabled, true, 'still tech locked');
-  const order = tab.game.act('recruit', {tid:'BER', unit:'inf', n:5});
+  const order = tab.game.act('recruit', {tid:'BER', unit:'inf', n:5, quote:factory.recruitCost(st, 'reich', 'inf', 5)});
   const spent = structuredClone(st); spent.rev++; spent.t = Date.now(); spent.teams.reich.res.man = 0; spent.teams.reich.cp = 4;
   relay.message('state', spent); // A teammate spent the balance while we waited for the lock.
   t.mock.timers.tick(75); await order;
@@ -319,7 +226,7 @@ test('recruit buttons track full batch cost and command points, and a newer room
 
 for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} formation research: a v6 room can browse, accrue funds, buy and reload one rank`, async t => {
   mockTime(t);
-  const st = saved(42), T = st.teams[team]; st.t = now; T.res.steel = 0;
+  const st = masterySaved(42), T = st.teams[team]; st.t = now; T.res.steel = 0;
   const {tab, controls} = purchaseRoom(st, team);
   tab.click('tab', {k:'tech'}); tab.click('researchbranch', {k:'mastery'});
   const abilities = () => controls().filter(el => el.dataset.act === 'mastery');
@@ -330,8 +237,8 @@ for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} fo
   assert.deepEqual([price.gold, price.steel, price.oil], team === 'reich' ? ['6','9',undefined] : ['5','8',undefined]);
   t.mock.timers.tick(1000 + Math.ceil(60000 * Number(price.steel) / minute.teams[team].res.steel));
   assert.equal(button().disabled, false); checkReadOnly(tab);
-  const buy = tab.click('mastery', price); t.mock.timers.tick(75); await buy;
-  const beforePayment = structuredClone(st); factory.tick(beforePayment, Date.now());
+  const buy = tab.click('mastery', price); await finishOrder(t,buy);
+  const beforePayment = structuredClone(st); factory.tick(beforePayment, tab.game.S.t);
   const result = tab.game.S, side = result.teams[team];
   assert.equal(side.res.gold, beforePayment.teams[team].res.gold - Number(price.gold));
   assert.equal(side.res.steel, beforePayment.teams[team].res.steel - Number(price.steel));
@@ -340,7 +247,7 @@ for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} fo
   assert.equal(result.rev, 43); assert.equal(result.v, 6); const next = button().dataset;
   assert.equal(next.rank, '2'); assert.deepEqual([next.gold, next.steel, next.oil], team === 'reich' ? ['12','18','6'] : ['10','15','5']);
   assert.equal(tab.sockets.flatMap(publications).filter(p => p.retain).length, 1);
-  const restored = launch({cached:tab.storage.get(key)}); assert.equal(restored.game.S.teams[team].mastery[unit].atk, 1); checkReadOnly(restored);
+  const restored = launch({cached:tab.storage.get(masterKey), rules:RULES}); assert.equal(restored.game.S.teams[team].mastery[unit].atk, 1); checkReadOnly(restored);
   const locked = team === 'reich' ? 'rk_p1500' : 'bd_gsyn'; tab.change('masteryunit', locked);
   assert.equal(abilities().length, 4); assert.ok(abilities().every(el => el.dataset.u === locked && el.disabled));
   tab.click('researchbranch', {k:'doctrine'}); assert.ok(controls().some(el => el.dataset.act === 'research'));
@@ -349,7 +256,7 @@ for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} fo
 test('every formation in both Troops rosters is selectable and can master all four abilities', t => {
   mockTime(t);
   for(const team of ['reich', 'dawn']){
-    const st = saved(70), T = st.teams[team];
+    const st = masterySaved(70), T = st.teams[team];
     Object.keys(T.tech).forEach(k => T.tech[k] = 4); Object.keys(T.res).forEach(k => T.res[k] = 1000000);
     const {tab, controls, relay} = purchaseRoom(st, team);
     tab.click('tab', {k:'troops'});
@@ -358,7 +265,7 @@ test('every formation in both Troops rosters is selectable and can master all fo
     const options = Array.from(tab.$('#panel').innerHTML.matchAll(/<option value="([^"]+)"/g), m => m[1]);
     assert.ok(roster.length > 0); assert.deepEqual(options.sort(), roster.sort());
     for(const unit of roster) for(let rank = 1; rank <= 5; rank++) for(const skill of ['atk','def','vit','talent']){
-      const result = factory.A.mastery(st, {team, name:'Test chief', now}, {unit, skill, rank});
+      const result = factory.A.mastery(st, {team, name:'Test chief', now}, {unit, skill, rank, quote:ceiling});
       assert.ok(result.ok, `${unit} ${skill} ${rank}: ${result.err}`);
     }
     st.rev++; relay.message('state', st);
@@ -369,9 +276,9 @@ test('every formation in both Troops rosters is selectable and can master all fo
 });
 
 test('mastery rejects unmet requirements, skipped/stale ranks, invalid keys, foreign units, insufficient funds and maxed skills without spending', () => {
-  const st = saved(8), side = st.teams.reich, ctx = {team:'reich', name:'Test leader', now};
+  const st = masterySaved(8), side = st.teams.reich, ctx = {team:'reich', name:'Test leader', now};
   st.players[ctx.name] = {role:'leader', team:'reich'}; side.res = {steel:10000, gold:10000, oil:10000, man:10000};
-  const train = (unit, skill, rank) => factory.A.mastery(st, ctx, {unit, skill, rank});
+  const train = (unit, skill, rank) => factory.A.mastery(st, ctx, {unit, skill, rank, quote:ceiling});
   const reject = (u, k, rank, why) => { const before = JSON.stringify(st); assert.match(train(u,k,rank).err, why); assert.equal(JSON.stringify(st),before); };
   reject('rk_p1500','atk',1,/Requires Armor level 4/); reject('bd_init','atk',1,/faction/);
   reject('inf','__proto__',1,/ability/); reject('constructor','def',1,/formation/); reject('inf','atk',2,/rank changed/);
@@ -387,15 +294,15 @@ test('mastery rejects unmet requirements, skipped/stale ranks, invalid keys, for
 
 test('mastery is read-only for soldiers; an order cannot override a concurrent purchase, demotion or spend', async t => {
   mockTime(t);
-  const read = purchaseRoom(saved(5), 'reich', 'soldier'); read.tab.click('showmastery', {u:'inf'});
+  const read = purchaseRoom(masterySaved(5), 'reich', 'soldier'); read.tab.click('showmastery', {u:'inf'});
   assert.ok(read.controls().find(el => el.dataset.act === 'mastery' && el.dataset.skill === 'atk').disabled);
-  const payload = {unit:'inf', skill:'atk', rank:1};
+  const payload = {unit:'inf', skill:'atk', rank:1, quote:ceiling};
   await read.tab.game.act('mastery', payload); checkReadOnly(read.tab);
   for(const change of [s => s.teams.reich.mastery = {inf:{atk:1}}, s => s.players['Test chief'].role = 'soldier', s => s.teams.reich.res.gold = 0]){
-    const st = saved(9), {tab, relay} = purchaseRoom(st, 'reich');
+    const st = masterySaved(9), {tab, relay} = purchaseRoom(st, 'reich');
     const order = tab.game.act('mastery', payload);
     const updated = structuredClone(st); updated.rev++; updated.t = Date.now(); change(updated);
-    relay.message('state', updated); t.mock.timers.tick(75); await order;
+    relay.message('state', updated); await finishOrder(t,order);
     assert.equal(tab.game.S.rev, updated.rev); assert.deepEqual(structuredClone(tab.game.S.teams.reich), updated.teams.reich); checkReadOnly(tab);
   }
 });
@@ -429,8 +336,8 @@ test('formation talents modify matching tactics, coastal defense or specialist r
   assert.ok(skirmish({...nav, to:'FRN', enemyStudy}).att.bd_oath < skirmish({...nav, to:'FRN'}).att.bd_oath);
   assert.deepEqual(skirmish({...nav,enemyStudy}), skirmish(nav));
   const fee = (unit, mastery) => {
-    const st = saved(1), T = st.teams.dawn, gold = T.res.gold; T.mastery = mastery;
-    assert.ok(factory.A.recruit(st,{team:'dawn',name:'Tester',now},{unit,n:1,tid:'BUC'}).ok); return gold - T.res.gold;
+    const st = masterySaved(1), T = st.teams.dawn, gold = T.res.gold; T.mastery = mastery;
+    assert.ok(factory.A.recruit(st,{team:'dawn',name:'Tester',now},{unit,n:1,tid:'BUC',quote:ceiling}).ok); return gold - T.res.gold;
   };
   assert.equal(fee('bd_arch',{bd_arch:{talent:5}}),Math.round(fee('bd_arch',{}) * 0.75));
   assert.equal(fee('bd_whis',{bd_arch:{talent:5}}),fee('bd_whis',{}));

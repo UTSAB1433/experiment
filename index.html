@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html lang="en"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Lands at the Ends of Time</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -103,7 +103,7 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 430px;
 .mastery-dossier{border-top:2px solid var(--acc)}
 .mastery-dossier label{display:grid;gap:4px}.mastery-dossier select{width:100%}
 .mastery-card h3{color:var(--ink);margin:0;font-size:18px}.mastery-card .pip{width:8px;height:8px}
-.mastery-gain{font-family:var(--mono);font-size:12px}.mastery-gain b{color:var(--acc)}
+.mastery-gain{font-family:var(--mono);font-size:12px}.mastery-gain b{color:var(--ink);color:color-mix(in srgb,var(--acc) 65%,var(--ink))}
 .mastery-talent{border-left:3px solid var(--acc)}
 .log{display:flex;flex-direction:column;gap:6px}
 .log div{font-size:13px;border-left:3px solid var(--line);padding-left:8px}
@@ -122,7 +122,7 @@ input[type=text],input[type=number],select{background:var(--panel);border:1px so
 .pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
 .pick button{text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
 .pick button:hover{border-color:var(--acc)}
-.toasts{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:6px;z-index:50;max-width:min(380px,calc(100vw - 32px))}
+.toasts{pointer-events:none;position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:6px;z-index:50;max-width:min(380px,calc(100vw - 32px))}
 .toast{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:4px;padding:8px 10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
 .toast.bad{border-left-color:var(--bad)}
 .toast.win{border-left-color:var(--ok)}
@@ -152,7 +152,7 @@ input[type=text],input[type=number],select{background:var(--panel);border:1px so
   <div id="banner"></div>
   <main>
     <section class="mapwrap">
-      <svg id="map" role="img" aria-label="Strategic world map"></svg>
+      <svg id="map" role="group" aria-label="Strategic world map"></svg>
       <div class="mapctl">
         <button class="btn" data-act="zoom" data-d="1" aria-label="Zoom in">+</button>
         <button class="btn" data-act="zoom" data-d="-1" aria-label="Zoom out">&minus;</button>
@@ -176,7 +176,7 @@ input[type=text],input[type=number],select{background:var(--panel);border:1px so
   </main>
 </div>
 <div id="modal"></div>
-<div class="toasts" id="toasts"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite" aria-relevant="additions"></div>
 
 <script>
 (() => {
@@ -411,6 +411,7 @@ const UNITS = {
 const REICH_UNITS = Object.keys(UNITS).filter(k => UNITS[k].team === 'reich');
 const DAWN_UNITS = Object.keys(UNITS).filter(k => UNITS[k].team === 'dawn');
 const UORDER = [...REICH_UNITS, ...DAWN_UNITS];
+const knownUnit = u => typeof u === 'string' && Object.hasOwn(UNITS, u);
 const unitsFor = team => team === 'dawn' ? DAWN_UNITS : REICH_UNITS;
 const divsFor = team => team === 'dawn' ? ['all','land','air','water','intel','pol','econ'] : ['all','land','air','water'];
 const divSub = (team, d) => team === 'dawn' ? (DIV_SUB[d] || '') : ({land:'Wehrmacht & Panzertruppen', air:'Luftwaffe', water:'Kriegsmarine'}[d] || '');
@@ -443,7 +444,7 @@ const TACT = {
   air:{n:'Air strike', units:[...REICH_UNITS.filter(u => UNITS[u].div === 'air'), 'bd_rave', 'bd_vair', 'bd_obsv', 'bd_noct', 'bd_hera'], req:['air',2], d:'Aerial forces lead. Good against Dig-in and Elastic.'}
 };
 // Mastery is per formation, unlike the faction-wide doctrine in T.tech.
-const MASTERY_MAX = 5;
+const MASTERY_RULES = 'mastery-1', MASTERY_MAX = 5;
 const CORE_SKILLS = {
   atk:{name:'Attack', stat:'attack strength', step:5, desc:'Increases this formation’s power when it attacks.'},
   def:{name:'Defense', stat:'defense strength', step:5, desc:'Increases this formation’s power when it holds a territory.'},
@@ -456,7 +457,7 @@ const TALENTS = {
   arm:tacticTalent('Spearhead cohesion','blitz'), air:tacticTalent('Wing coordination','air'),
   nav:{name:'Coastal watch', terrain:'coast', stat:'coastal defense', step:8, desc:'Adds defense to this formation while it holds a coastal province.'}
 };
-const SUPPORT_TALENT = {name:'Apprenticeship', discount:true, stat:'recruit cost', step:-5, desc:'Lowers each resource cost to recruit this specialist, before rounding. Minimum 1 per resource.'};
+const SUPPORT_TALENT = {name:'Apprenticeship', discount:true, stat:'recruit cost', step:-5, desc:'Discounts the whole recruitment order before rounding. Small single orders may cost the same; train in batches to save more.'};
 const talentFor = u => TALENTS[UNITS[u].cat] || SUPPORT_TALENT;
 const masterySkill = (u, k) => k === 'talent' ? talentFor(u) : CORE_SKILLS[k];
 const MATRIX = {
@@ -641,6 +642,10 @@ RAW.trim().split('\n').forEach(l => {
   TD[id] = {id, name, lon:+lon, lat:+lat, x, y, res, amt:+amt, vp:+vp, terr, owner0:owner, g:+g, cap:cap === '1' || cap === '2', fcap:cap === '2', reg:regionOf(+lon, +lat)};
   TIDS.push(id);
 });
+// v6 saves have a single PER (Lima). The old map table lists that ID twice.
+// Preserve its existing economic/VP weights for Classic compatibility; selectable
+// provinces and routes must be unique or Lima can spend CP moving troops to itself.
+const PROVINCES = Object.keys(TD);
 /* land polygons (lon,lat), rough on purpose */
 const LAND = [
  [-9.2,37,-9.5,39,-8.8,42,-9.3,43.2,-2,43.6,-1.3,45.5,-1.2,46.2,-4.7,48.3,-3,48.8,-1.5,48.7,-1.3,49.6,0.2,49.5,1.6,50.9,3.2,51.3,4.2,52.2,4.8,53.2,7,53.6,8.6,53.9,8.2,55.5,8.1,57,10.5,57.6,10.6,56,9.8,55,10,54.3,12,54.1,14,54,18,54.8,19.5,54.4,21,55.3,21,57,24,57.2,24.3,58.5,23.5,59.2,28,59.5,30,60,33,60,58,60,58,32,48.5,30,44,33,40,36.7,36,36.8,33,36.2,30,36.6,27.3,36.8,26.5,38.5,26.2,40,26,40.8,23,40.3,24,38,23,36.5,21.5,37,20,39.5,19.5,41.5,19,42.5,16.5,43.5,14.5,45,13.7,45.7,12.3,44.9,13.5,43.5,16,41.9,18.5,40.2,16.5,38.5,15.7,38,16,40,14.5,41,12,41.5,10.5,43,9,44.3,7.5,43.8,4,43.4,3,42.3,3.2,41.8,0.5,40.5,-0.2,39,0,38.6,-0.7,37.6,-2,36.8,-4.5,36.6,-5.4,36],
@@ -680,13 +685,13 @@ function inPoly(lon, lat, p){let c = false; for(let i = 0, j = p.length - 2; i <
 function isLand(lon, lat){ if(inPoly(lon, lat, CRIMEA)) return true; if(!LAND.some(p => inPoly(lon, lat, p))) return false; return !WATER.some(p => inPoly(lon, lat, p)); }
 const unproj = (x, y) => [x / 16 - 170, 73 - y / 16];
 /* links: Gabriel graph, sea if the midpoint is water */
-const LINKS = []; const ADJ = {}; TIDS.forEach(i => ADJ[i] = []);
+const LINKS = []; const ADJ = {}; PROVINCES.forEach(i => ADJ[i] = []);
 (() => {
-  for(let a = 0; a < TIDS.length; a++) for(let b = a + 1; b < TIDS.length; b++){
-    const A = TD[TIDS[a]], B = TD[TIDS[b]];
+  for(let a = 0; a < PROVINCES.length; a++) for(let b = a + 1; b < PROVINCES.length; b++){
+    const A = TD[PROVINCES[a]], B = TD[PROVINCES[b]];
     const d2 = (A.x-B.x)**2 + (A.y-B.y)**2; if(d2 > 360*360) continue;
     const mx = (A.x+B.x)/2, my = (A.y+B.y)/2; let ok = true;
-    for(const k of TIDS){ if(k === A.id || k === B.id) continue; const C = TD[k]; if((C.x-mx)**2 + (C.y-my)**2 < d2/4){ok = false; break;} }
+    for(const k of PROVINCES){ if(k === A.id || k === B.id) continue; const C = TD[k]; if((C.x-mx)**2 + (C.y-my)**2 < d2/4){ok = false; break;} }
     if(!ok) continue;
     const [lon, lat] = unproj(mx, my);
     const sea = !isLand(lon, lat);
@@ -812,7 +817,7 @@ function masteryRequirement(s, team, u, k, rank){
   }
   return '';
 }
-function unitCost(s, team, u){
+function recruitCost(s, team, u, n = 1, talentRank = masteryRank(s.teams[team], u, 'talent')){
   const U = UNITS[u], raw = U.cost, out = {};
   let mult = 1;
   if(team === 'dawn'){
@@ -820,8 +825,13 @@ function unitCost(s, team, u){
     if(U.elite) mult *= 1.10;
     else if(U.basic) mult *= (1 - b.basicDisc);
   }
-  if(talentFor(u).discount) mult *= masteryFactor(s.teams[team], u, 'talent');
-  for(const r in raw) out[r] = Math.max(1, Math.round(raw[r] * mult));
+  // Rank zero must keep the classic integer price (including elite/basic modifiers).
+  // Apply Apprenticeship ONCE to the batch; rounding per recruit erased whole ranks.
+  const percent = 100 + (talentFor(u).discount ? SUPPORT_TALENT.step * talentRank : 0);
+  for(const r in raw){
+    const each = Math.max(1, Math.round(raw[r] * mult));
+    out[r] = Math.max(n, Math.round(each * n * percent / 100));
+  }
   return out;
 }
 const fortCost = level => ({steel:15 * (level + 1)});
@@ -894,8 +904,16 @@ const hasTech = (s, team, req) => !req || s.teams[team].tech[req[0]] >= req[1];
 const unitMult = (s, team, u) => (!UNITS[u] || team === 'neutral') ? 1 : 1 + 0.12 * (s.teams[team].tech[UNITS[u].cat] || 0);
 const trainedStat = (s, team, u, stat) => UNITS[u][stat] * unitMult(s, team, u) * masteryFactor(s.teams[team], u, stat);
 const RESOURCE_EPS = 1e-9;
-function afford(s, team, cost, k = 1){ return RK.every(r => (cost[r] || 0) * k <= s.teams[team].res[r] + RESOURCE_EPS); }
-function pay(s, team, cost, k = 1){ RK.forEach(r => s.teams[team].res[r] -= (cost[r] || 0) * k); }
+const PRICE_CHANGED = 'The price changed. Review the updated cost and click again.';
+// The click carries a ceiling, never the amount to debit. A better live price is fine.
+function withinQuote(cost, quote){
+  return !!quote && RK.every(r => {
+    const ceiling = quote[r] ?? 0;
+    return Number.isSafeInteger(ceiling) && ceiling >= (cost[r] || 0);
+  });
+}
+function afford(s, team, cost){ return RK.every(r => (cost[r] || 0) <= s.teams[team].res[r] + RESOURCE_EPS); }
+function pay(s, team, cost){ RK.forEach(r => s.teams[team].res[r] -= cost[r] || 0); }
 function visible(s, viewer, id){
   const t = s.terr[id]; if(t.o === viewer) return true;
   if((((s.intel[viewer] || {})[id]) || 0) > Date.now()) return true;
@@ -972,7 +990,15 @@ function applyLoss(units, fraction, side){
   }
   return {out, lost};
 }
-function validGroup(s, src, grp){ let n = 0; for(const u in grp){ const c = grp[u]; if(c < 0 || c > (s.terr[src].u[u] || 0)) return false; n += c; } return n > 0; }
+function validGroup(s, src, grp){
+  if(!grp || typeof grp !== 'object' || Array.isArray(grp)) return false;
+  let n = 0;
+  for(const [u,c] of Object.entries(grp)){
+    if(!knownUnit(u) || !Number.isSafeInteger(c) || c < 0 || c > (s.terr[src].u[u] || 0)) return false;
+    n += c;
+  }
+  return n > 0;
+}
 function seaOK(s, team, grp){
   const airCnt = Object.keys(grp).reduce((a, u) => a + (grp[u] && UNITS[u] && UNITS[u].div === 'air' ? grp[u] : 0), 0);
   const onlyAir = Object.keys(grp).every(u => !grp[u] || (UNITS[u] && UNITS[u].div === 'air'));
@@ -1002,24 +1028,27 @@ A.contribute = (s, c, p) => {
   return {ok:`${c.name} ${k[2]}: +${k[1]} ${RES[k[0]]}.`};
 };
 A.recruit = (s, c, p) => {
-  const t = s.terr[p.tid], U = UNITS[p.unit], n = Math.max(1, Math.min(20, p.n | 0));
+  const t = s.terr[p.tid], U = UNITS[p.unit], n = p.n;
+  if(!Number.isInteger(n) || n < 1 || n > 20) return {err:'Choose a valid recruitment quantity.'};
   if(!t || t.o !== c.team) return {err:'You can only recruit in your own territory.'};
-  if(!U || (U.team && U.team !== c.team) || (!U.team && c.team === 'dawn')) return {err:'That formation does not belong to your faction.'};
+  if(!knownUnit(p.unit) || U.team !== c.team) return {err:'That formation does not belong to your faction.'};
   if(!hasTech(s, c.team, U.req)) return {err:'Research required.'};
   if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
   if(U.max){
     const have = TIDS.reduce((a, i) => a + (s.terr[i].o === c.team ? (s.terr[i].u[p.unit] || 0) : 0), 0);
     if(have + n > U.max) return {err:U.limitMsg || `Only ${U.max} ${U.n} may exist at a time.`};
   }
-  const cost = unitCost(s, c.team, p.unit);
-  if(!afford(s, c.team, cost, n)) return {err:'Not enough resources.'};
-  pay(s, c.team, cost, n); s.teams[c.team].cp -= 1; t.u[p.unit] = (t.u[p.unit] || 0) + n;
+  const cost = recruitCost(s, c.team, p.unit, n);
+  if(!withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
+  if(!afford(s, c.team, cost)) return {err:'Not enough resources.'};
+  pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.u[p.unit] = (t.u[p.unit] || 0) + n;
   log(s, c.now, c.team, `${c.name} raised ${n} ${uname(p.unit, c.team)} in ${T_(p.tid)}.`);
   return {ok:`Raised ${n} ${uname(p.unit, c.team)}.`};
 };
 A.fort = (s, c, p) => {
   const t = s.terr[p.tid]; if(!t || t.o !== c.team) return {err:'Not your territory.'}; if(t.f >= 3) return {err:'Fortifications are at maximum.'};
-  const cost = fortCost(t.f); if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
+  const cost = fortCost(t.f); if(p.rank !== t.f + 1 || !withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
+  if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
   pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.f++; log(s, c.now, c.team, `${T_(p.tid)} fortified to level ${t.f}.`);
   return {ok:`Fortified ${T_(p.tid)}.`};
 };
@@ -1029,15 +1058,18 @@ A.stance = (s, c, p) => {
   log(s, c.now, c.team, `${T_(p.tid)} now holds a ${STANCES[p.st]} posture.`); return {ok:`${T_(p.tid)}: ${STANCES[p.st]}.`};
 };
 A.research = (s, c, p) => {
+  if(!TKEYS.includes(p.k)) return {err:'Unknown doctrine.'};
   const T = s.teams[c.team], lvl = T.tech[p.k]; if(lvl == null || lvl >= 4) return {err:'Already at maximum.'};
   const nx = lvl + 1, cost = researchCost(s, c.team, nx);
+  if(nx !== p.rank || !withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
   if(!afford(s, c.team, cost)) return {err:'Not enough resources.'}; pay(s, c.team, cost); T.tech[p.k] = nx;
   log(s, c.now, 'all', `${TEAMS[c.team].name} advances in ${TECH[p.k].n}.`); return {ok:`${TECH[p.k].n} level ${nx}: ${TECH[p.k].d[nx - 1]}.`};
 };
 A.mastery = (s, c, p) => {
+  if(s.ruleset !== MASTERY_RULES) return {err:'Open the mastery room to train this ability.'};
   const {unit:u, skill:k, rank} = p, officer = s.players[c.name];
   if(!officer || officer.team !== c.team || !can(officer.role, 'research')) return {err:'Only your faction’s leader and chiefs can research.'};
-  if(!Object.hasOwn(UNITS, u) || UNITS[u].team !== c.team || !MASTERY_KEYS.includes(k)) return {err:'Unknown formation or ability for your faction.'};
+  if(!knownUnit(u) || UNITS[u].team !== c.team || !MASTERY_KEYS.includes(k)) return {err:'Unknown formation or ability for your faction.'};
   const T = s.teams[c.team], current = masteryRank(T, u, k);
   if(current === MASTERY_MAX) return {err:'This ability is already mastered.'};
   // Purchase the rank shown, not a more expensive one if a teammate got there first.
@@ -1045,6 +1077,7 @@ A.mastery = (s, c, p) => {
   const requirement = masteryRequirement(s, c.team, u, k, rank);
   if(requirement) return {err:requirement};
   const cost = masteryCost(s, c.team, u, rank);
+  if(!withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
   if(!afford(s, c.team, cost)) return {err:'Not enough resources.'};
   pay(s, c.team, cost);
   T.mastery ||= {}; T.mastery[u] ||= {}; T.mastery[u][k] = rank;
@@ -1074,7 +1107,7 @@ A.attack = (s, c, p) => {
   const AP = attackPower(s, c.team, p.grp, p.tactic, d.st, r1, c.now, p.from, p.to), DP = defPower(s, p.to, p.tactic, c.team, r2, p.grp) + 0.01;
   const win = AP > DP, pw = (win ? AP : DP) / (AP + DP);
   const before = {att:total(p.grp), def:total(d.u)}; const dname = d.o === 'neutral' ? 'neutral forces' : TEAMS[d.o].name; const prevOwner = d.o;
-  const sent = clone(p.grp); for(const u in sent){ a.u[u] -= sent[u]; if(a.u[u] <= 0) delete a.u[u]; }
+  const sent = clone(p.grp); for(const u in sent){ if(!sent[u]) continue; a.u[u] -= sent[u]; if(a.u[u] <= 0) delete a.u[u]; }
   let msg, kind = 'battle';
   const wl = Math.min(0.6, Math.max(0.05, (1 - pw) * 0.75));
   if(win){
@@ -1133,7 +1166,8 @@ A.decap = (s, c, p) => {
 A.annex = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o !== 'neutral') return {err:'Only neutral lands can be annexed.'};
   if(!ADJ[p.tid].some(n => s.terr[n.id].o === c.team)) return {err:'You need a border with it.'}; const g = total(d.u); if(g > 12) return {err:'The garrison is too strong to buy (12 units or fewer).'};
-  const cost = annexCost(s, c.team, g); if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(s.teams[c.team].cp < 2) return {err:'Costs 2 command points.'};
+  const cost = annexCost(s, c.team, g); if(!withinQuote({gold:cost}, p.quote)) return {err:PRICE_CHANGED};
+  if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(s.teams[c.team].cp < 2) return {err:'Costs 2 command points.'};
   s.teams[c.team].res.gold -= cost; s.teams[c.team].cp -= 2; d.o = c.team; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.`, 'dip'); return {ok:`${T_(p.tid)} joins you.`};
 };
 A.propose = (s, c, p) => {
@@ -1173,7 +1207,13 @@ A.setrole = (s, c, p) => {
 };
 A.remove = (s, c, p) => { const pl = s.players[p.name]; if(!pl || pl.team !== c.team || p.name === c.name) return {err:'Not possible.'}; delete s.players[p.name]; return {ok:'Removed.'}; };
 A.enlist = (s, c, p) => { const n = String(p.name || '').trim().slice(0, 30); if(!n) return {err:'Enter a name.'}; if(s.players[n]) return {err:'That name is taken.'}; if(!TEAMS[p.team]) return {err:'Pick a side.'}; if(!p.pw || String(p.pw).length !== 64) return {err:'Choose a password.'}; s.players[n] = {team:p.team, role:'soldier', title:'Recruit', cd:0, pw:p.pw}; log(s, c.now, 'all', `${n} enlists with ${TEAMS[p.team].name}.`); return {ok:'Welcome.'}; };
-A.reset = (s, c) => { const players = s.players; const fresh = newGame(c.now); Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players}); return {ok:'The map is reset.', reset:true}; };
+A.reset = (s, c, p) => {
+  if(p.rev !== s.rev || p.origin !== s.origin || p.created !== s.created) return {err:'The room changed. Review the latest map before resetting.'};
+  const players = s.players, fresh = newGame(c.now);
+  if(s.ruleset) fresh.ruleset = s.ruleset;
+  Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players});
+  return {ok:'The map is reset.', reset:true};
+};
 A.noop = () => ({});
 
 /* ============================ STORE & REAL-TIME MULTIPLAYER ============================ */
@@ -1181,9 +1221,16 @@ let db = null, S = null, mode = 'connecting', busy = false, loadTimer = null;
 const TAB = Math.random().toString(36).slice(2, 10);
 const sanitizeRoom = r => String(r || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'utsab1433-1939';
 const QSP = new URLSearchParams(location.search);
-let ROOM = sanitizeRoom(QSP.get('room'));
+let ROOM = sanitizeRoom(QSP.get('room')), rules = QSP.get('rules') || '';
+let via = rules ? QSP.get('via') || (QSP.get('fb') ? 'firebase' : '') : '';
+const transportOf = key => key === 'shared' || key === 'mqtt' ? key : 'firebase';
+// ':' cannot occur in a sanitized classic room code. Legacy binaries physically cannot
+// address a Mastery state/lock, even when they stay online, reconnect, or reset Classic.
+const wireRoom = () => rules ? ROOM + ':' + rules : ROOM;
+let seed = null, backend = '', sawSavedRoom = false;
+const inMastery = () => rules === MASTERY_RULES;
 const cleanFbUrl = u => String(u || '').trim().replace(/\/+$/, '');
-let FB_URL = cleanFbUrl(QSP.get('fb') || (() => { try{ return localStorage.getItem('eot-fb:' + ROOM); }catch(e){ return ''; } })());
+let FB_URL = cleanFbUrl(QSP.get('fb') || (rules ? '' : (() => { try{ return localStorage.getItem('eot-fb:' + ROOM); }catch(e){ return ''; } })()));
 const NET = { status:'connecting', transport:'Starting…', peers:new Map(), reconnect:null, announce:()=>{}, destroy:null };
 const onlineList = () => {
   const now = Date.now(), out = [{tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), self:true}];
@@ -1206,25 +1253,49 @@ function isBetterState(inc, cur){
   if(inc.created !== cur.created) return (inc.created || 0) < (cur.created || 0);
   return String(inc.origin || '') < String(cur.origin || '');
 }
+const record = x => !!x && typeof x === 'object' && !Array.isArray(x);
+const sideId = x => x === 'reich' || x === 'dawn';
+const levelIn = (n, max) => Number.isSafeInteger(n) && n >= 0 && n <= max;
+function validMastery(m, team){
+  return m == null || (record(m) && Object.entries(m).every(([u, skills]) => knownUnit(u) && UNITS[u].team === team &&
+    record(skills) && Object.entries(skills).every(([k, n]) => MASTERY_KEYS.includes(k) && levelIn(n, MASTERY_MAX))));
+}
+function validSave(p){
+  return p?.v === GAME_V && Number.isSafeInteger(p.rev) && p.rev > 0 && Number.isFinite(p.created) && Number.isFinite(p.t) &&
+    record(p.players) && Object.values(p.players).every(pl => sideId(pl?.team) && Object.hasOwn(ROLES, pl.role)) &&
+    record(p.intel?.reich) && record(p.intel.dawn) && record(p.treach) && (!p.win || sideId(p.win.team)) && (!p.dom || sideId(p.dom.team)) &&
+    Array.isArray(p.log) && p.log.every(l => Number.isFinite(l?.t) && typeof l.msg === 'string') &&
+    Array.isArray(p.props) && p.props.every(q => sideId(q?.from) && (q.type === 'ceasefire' || (q.type === 'trade' &&
+      [q.give, q.get].every(x => x && RK.includes(x.r) && Number.isFinite(x.n))))) &&
+    ['reich','dawn'].every(t => { const T = p.teams?.[t]; return record(T?.tech) && TKEYS.every(k => levelIn(T.tech[k], 4)) &&
+      Number.isFinite(T.cp) && RK.every(r => Number.isFinite(T.res?.[r])) && validMastery(T.mastery, t); }) &&
+    PROVINCES.every(id => { const t = p.terr?.[id]; return record(t?.u) && (sideId(t.o) || t.o === 'neutral') &&
+      Object.hasOwn(STANCES, t.st) && levelIn(t.f, 3) && Object.entries(t.u).every(([u,n]) => knownUnit(u) && Number.isSafeInteger(n) && n >= 0); });
+}
+function nextRevision(rev){
+  if(!Number.isSafeInteger(rev + 1)) throw Error('Cannot advance this room revision safely. No changes made.');
+  return rev + 1;
+}
+const matchesRules = st => rules ? st?.ruleset === rules : !st?.ruleset;
+const classicWithRanks = st => !rules && ['reich','dawn'].some(t => Object.values(st?.teams[t]?.mastery || {}).some(skills => Object.values(skills).some(n => n > 0)));
 function loadLiveCache(room){
   try{
     const p = JSON.parse(localStorage.getItem('eot-live-state:' + room));
-    if(!p || (p.v || 1) < GAME_V || !p.players || !p.intel || !Array.isArray(p.log) || !Array.isArray(p.props)) return null;
-    if(!['reich','dawn'].every(t => p.teams?.[t]?.res && p.teams[t].tech) || !TIDS.every(id => p.terr?.[id]?.u)) return null;
-    return p;
+    return validSave(p) && matchesRules(p) ? p : null;
   }catch(e){ return null; }
 }
 function saveLiveCache(room, st){
+  if(!validSave(st) || !matchesRules(st)) return;
   try{ if(isBetterState(st, loadLiveCache(room))) localStorage.setItem('eot-live-state:' + room, JSON.stringify(st)); }catch(e){}
 }
-function createMqttDb(room, cached){
+function createMqttDb(room, cached, cacheKey = room){
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
   const PFX = 'lands-eot/v1/' + room + '/';
-  const DIAL_MS = 2000, DISCOVERY_MS = 600, RETRY_MS = 350;
+  const DIAL_MS = 2000, DISCOVERY_MS = 600, RETRY_MS = 350, LEASE_MS = 1500;
   const clients = new Set();
   let active = null, latest = cached, observed = null, activeLock = null, onSnap = null, dead = false;
-  let kaTimer, retryTimer, retryDelay = RETRY_MS;
-  let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + room); }catch(e){}
+  let kaTimer, retryTimer, retryDelay = RETRY_MS, claimNo = 0;
+  let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + cacheKey); }catch(e){}
   const emitSnap = st => { if(onSnap) onSnap({exists:!!st, data:() => st}); };
   const send = (c, pkt) => { if(c && c.ws.readyState === 1) c.ws.send(pkt); };
   const publish = (c, sub, obj, retain = false) => send(c, buildPkt(0x30 | (retain ? 1 : 0), encStr(PFX + sub), te_.encode(JSON.stringify(obj))));
@@ -1233,22 +1304,48 @@ function createMqttDb(room, cached){
     if(active) publish(active, sub, obj, retain);
     if(bc) try{ bc.postMessage({sub, obj}); }catch(e){}
   };
+  const confirmedHere = () => !!active?.record && !isBetterState(latest, active.record);
   function handleMsg(c, sub, msg){
-    if(!msg || typeof msg !== 'object') return;
-    if(sub === 'state' || (sub === 'sync' && msg.type === 'res')){
-      const st = sub === 'state' ? msg : msg.state;
+    if(sub === 'state' || (sub === 'sync' && msg?.type === 'res')){
+      const st = sub === 'state' ? msg : msg.state, stateTopic = c && sub === 'state';
+      const valid = validSave(st) && matchesRules(st);
+      if(stateTopic){
+        c.present = true; c.invalid = !valid; c.record = valid ? st : null;
+        // Keep the version/revision for relay selection, even when this build can't play it.
+        if(isBetterState(st, c.state)) c.state = st;
+      }
+      if(!valid){
+        if(stateTopic && c === active) emitSnap({}); // An unreadable state is NOT an empty room.
+        if(stateTopic && c.subscribed) finishProbe(c);
+        return;
+      }
       if(c && isBetterState(st, c.state)) c.state = st;
-      if(c && sub === 'state' && st.terr && st.teams) c.sawState = true;
+      if(stateTopic){
+        c.sawState = true;
+        const pending = c.pendingSave;
+        if(pending && st.origin === TAB && st.rev === pending.rev && st.created === pending.created) pending.finish(true);
+      }
       if(isBetterState(st, observed)) observed = st;
       if(isBetterState(st, latest)){
-        latest = st;
-        if((st.v || 1) >= GAME_V) saveLiveCache(room, st);
+        latest = st; saveLiveCache(cacheKey, st);
         emitSnap(st); // Show newer snapshots even while the other probes are running.
-      }
+      } else if(stateTopic && c === active && mode === 'incompatible') emitSnap(latest);
       if(c && c.subscribed && c.sawState) finishProbe(c);
       return;
     }
-    if(c && sub === 'sync' && msg.type === 'req' && msg.from === TAB) c.echoed = true;
+    if(!msg || typeof msg !== 'object') return;
+    if(c && sub === 'sync' && msg.type === 'req' && msg.from === TAB){
+      c.echoed = true; if(c === active && inMastery() && !S) renderPanel();
+    }
+    if(inMastery() && sub === 'lock'){
+      // Coordinate only in the selected broker’s delivery order, never in two
+      // independent orders (BroadcastChannel and MQTT). Observe locks during discovery too.
+      const now = Date.now(), span = msg.until - msg.ts;
+      if(!c || typeof msg.holder !== 'string' || typeof msg.token !== 'string' || !(span > 0 && span <= LEASE_MS)) return;
+      if(!c.lease || c.lease.until <= now || c.lease.holder === msg.holder) c.lease = {holder:msg.holder, until:now + span};
+      if(msg.holder === TAB && msg.token === c.waiter?.token) c.waiter.finish(c.lease.holder === TAB);
+      return;
+    }
     if(c && c !== active) return;
     if(sub === 'lock'){ if(!activeLock || msg.ts >= activeLock.ts || activeLock.until < Date.now()) activeLock = msg; }
     if(sub === 'sync' && msg.type === 'req' && msg.from !== TAB && active && observed){
@@ -1269,7 +1366,7 @@ function createMqttDb(room, cached){
   window.addEventListener('beforeunload', onUnload);
 
   function discard(c){
-    clients.delete(c);
+    clients.delete(c); c.waiter?.finish(false); c.pendingSave?.finish(false);
     clearTimeout(c.timer);
     if(c.ws){
       c.ws.onopen = c.ws.onmessage = c.ws.onerror = c.ws.onclose = null;
@@ -1290,14 +1387,14 @@ function createMqttDb(room, cached){
     let best = null;
     for(const c of clients){
       if(!c.done) return;
-      if(!best || isBetterState(c.state, best.state)) best = c;
+      if(!best || isBetterState(c.state, best.state) || (!best.state && !c.state && !best.present && c.present)) best = c;
     }
     active = best;
     for(const c of clients) if(c !== active) discard(c);
     retryDelay = RETRY_MS;
     NET.status = 'live'; NET.transport = 'MQTT (' + new URL(BROKERS[active.idx]).host + ')'; mode = 'live';
     kaTimer = setInterval(() => send(active, new Uint8Array([0xC0, 0])), 20000);
-    emitSnap(active.state && (active.state.v || 1) < GAME_V ? active.state : latest);
+    emitSnap(active.invalid ? {} : latest);
     announcePres();
   }
   function finishProbe(c){
@@ -1326,7 +1423,7 @@ function createMqttDb(room, cached){
         send(c, buildPkt(0x82, new Uint8Array([0, 1]), encStr(PFX + '#'), new Uint8Array([0])));
       } else if(type === 9){ // SUBACK for our one subscription, QoS 0.
         if(body[0] !== 0 || body[1] !== 1 || body[2] !== 0) return fail(c);
-        c.subscribed = true;
+        c.subscribed = true; c.joinedAt = Date.now();
         if(mode === 'local'){ mode = NET.status = 'connecting'; NET.transport = 'Checking room revisions…'; renderHud(); }
         clearTimeout(c.timer);
         publish(c, 'sync', {type:'req', from:TAB});
@@ -1337,7 +1434,7 @@ function createMqttDb(room, cached){
         let off = 2 + tlen;
         if(qos > 0){ send(c, new Uint8Array([0x40, 2, body[off], body[off + 1]])); off += 2; }
         if(topic.startsWith(PFX)){
-          let msg; try{ msg = JSON.parse(td_.decode(body.subarray(off))); }catch(e){ continue; }
+          let msg; try{ msg = JSON.parse(td_.decode(body.subarray(off))); }catch(e){ msg = null; } // An unreadable state topic is not an empty room.
           handleMsg(c, topic.slice(PFX.length), msg);
         }
       }
@@ -1372,6 +1469,26 @@ function createMqttDb(room, cached){
       }catch(e){ fail(c); }
     }
   }
+  async function acquireMasteryLease(c, holder, ttl){
+    if(!c) return {acquired:false};
+    // A newly subscribed client may have missed an in-flight, non-retained claim.
+    const warmup = c.joinedAt + LEASE_MS - Date.now();
+    if(warmup > 0) await sleep(warmup);
+    const now = Date.now();
+    if(dead || c !== active || (c.lease && c.lease.holder !== holder && c.lease.until > now)) return {acquired:false};
+    const token = holder + ':' + (++claimNo), until = now + ttl;
+    return new Promise((resolve, reject) => {
+      const finish = (won, err) => {
+        clearTimeout(timer); c.waiter = null;
+        const acquired = won && active === c && Date.now() < until;
+        c.grantedUntil = acquired ? until : 0;
+        if(err) reject(err); else resolve({acquired});
+      };
+      const timer = setTimeout(() => finish(false, Error('No live lock echo. Reconnect and retry.')), ttl);
+      c.waiter = {token, finish};
+      try{ publish(c, 'lock', {holder, ts:now, until, token}); }catch(e){ finish(false, e); }
+    });
+  }
   NET.reconnect = connect;
   NET.destroy = () => {
     dead = true; stopRace(); clearInterval(presTimer);
@@ -1379,69 +1496,115 @@ function createMqttDb(room, cached){
     if(bc) bc.close();
   };
   return {
-    get hasLiveState(){ return !!observed && !isBetterState(latest, observed); },
+    // Do not create competing first saves on different empty fallback brokers.
+    get canInitialize(){ return active?.idx === 0 && !!active.echoed && !active.present; },
+    get hasLiveState(){ return !!active && !active.invalid && (!inMastery() || confirmedHere()) && !!observed && !isBetterState(latest, observed); },
     doc(path){
       if(path === 'game/lock') return {
         async acquire({holder, ttlMs}){
-          const now = Date.now();
+          if(inMastery()) return acquireMasteryLease(active, holder, Math.min(LEASE_MS, ttlMs || LEASE_MS));
+          const now = Date.now(), relay = active;
           if(activeLock && activeLock.holder !== holder && activeLock.until > now) return {acquired:false};
           const claim = {holder, until:now + (ttlMs || 1500), ts:now};
           activeLock = claim;
           pubMqtt('lock', claim, false);
           await sleep(70);
-          return {acquired:!!active && !(activeLock.holder !== holder && activeLock.until > Date.now())};
+          return {acquired:!!relay && active === relay && !(activeLock.holder !== holder && activeLock.until > Date.now())};
         }
       };
       return {
-        async get(){ const st = observed; return {exists:!!st, data:() => st}; },
+        async get(){
+          if(active?.invalid) throw Error('Incompatible or unreadable saved room. No changes made.');
+          const st = observed; return {exists:!!st, data:() => st};
+        },
         async set(data){
           // A timeout isn't a read barrier. For a silent room, wait for the broker to
           // loop our post-subscription request back before accepting even a first order.
           if(!active || active.ws.readyState !== 1 || !(active.sawState || active.echoed)) throw new Error('Wait for live sync.');
+          if(inMastery() && (active.lease?.holder !== TAB || !(active.grantedUntil > Date.now()))) throw new Error('The room lock expired. Review the latest save and retry.');
+          if(active.invalid || (inMastery() && observed && !confirmedHere())) throw new Error('No confirmed save on this relay. Reconnect and try again.');
           if(latest && (data.rev || 1) <= (latest.rev || 1)) throw new Error('The room has a newer save. Reconnect and try again.');
+          if(inMastery()){
+            // A local send is not proof that the broker retained the purchase. Only
+            // its state-topic echo may advance the cache, notify peers or confirm the order.
+            const c = active;
+            try{
+              await new Promise((resolve, reject) => {
+                const finish = ok => {
+                  clearTimeout(timer); c.pendingSave = null;
+                  if(ok) resolve(); else reject(Error('Save not confirmed. Reconnecting to check the room.'));
+                };
+                const timer = setTimeout(() => finish(false), DIAL_MS);
+                c.pendingSave = {rev:data.rev, created:data.created, finish};
+                try{ publish(c, 'state', data, true); }catch(e){ finish(false); }
+              });
+            }catch(e){ if(!dead && active === c) connect(); throw e; }
+            if(!dead && bc) try{ bc.postMessage({sub:'state', obj:data}); }catch(e){}
+            return;
+          }
           pubMqtt('state', data, true);
-          active.state = observed = latest = clone(data);
-          saveLiveCache(room, latest);
+          active.present = active.sawState = true; active.record = active.state = observed = latest = clone(data);
+          saveLiveCache(cacheKey, latest);
         },
         onSnapshot(cb){ onSnap = cb; connect(); }
       };
     }
   };
 }
-function createFirebaseDb(fbBase, room, cached){
+// RTDB omits empty maps/lists rather than returning {} or []. Restore only these
+// known empty containers on the in-memory JSON read, never manufacture a missing province/team.
+function restoreFirebaseEmpties(st){
+  if(st?.v === GAME_V && st.terr && st.teams){
+    st.intel ??= {}; if(record(st.intel)){ st.intel.reich ??= {}; st.intel.dawn ??= {}; } st.treach ??= {};
+    st.props ??= []; st.log ??= [];
+    for(const id of PROVINCES) if(record(st.terr[id])) st.terr[id].u ??= {};
+  }
+  return st;
+}
+function createFirebaseDb(fbBase, room, cached, cacheKey = room){
   const base = fbBase + '/eot-rooms/' + encodeURIComponent(room);
-  let latest = cached, observed = null, onSnap = null, es = null, pollTimer = null, streaming = false, dead = false;
-  let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + room); }catch(e){}
+  let latest = cached, observed = null, onSnap = null, es = null, pollTimer = null, streaming = false, dead = false, empty = false, generation = 0;
+  let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + cacheKey); }catch(e){}
   function emit(st, refresh = false){
     if(dead) return;
     if(isBetterState(st, latest)){
       latest = st; refresh = true;
-      if((st.v || 1) >= GAME_V) saveLiveCache(room, latest);
+      saveLiveCache(cacheKey, latest);
     }
     if(refresh && onSnap){
-      const view = st && (st.v || 1) < GAME_V ? st : latest;
-      onSnap({exists:!!view, data:() => view});
+      onSnap({exists:!!latest, data:() => latest});
     }
   }
-  if(bc) bc.onmessage = e => { if(e.data && e.data.sub === 'state') emit(e.data.obj); };
+  if(bc) bc.onmessage = e => { if(e.data?.sub === 'state' && validSave(e.data.obj) && matchesRules(e.data.obj)) emit(e.data.obj); };
   async function readState(withTag = false){
+    const at = generation;
     const r = await fetch(base + '/state.json', {cache:'no-store', headers:withTag ? {'X-Firebase-ETag':'true'} : {}});
     if(!r.ok) throw new Error('Firebase HTTP ' + r.status);
-    const st = await r.json();
-    if(st !== null && (!st || !st.terr || !st.teams)) throw new Error('Invalid room snapshot.');
-    return {st, tag:withTag ? r.headers.get('etag') : null};
+    const st = restoreFirebaseEmpties(await r.json());
+    return {st, at, tag:withTag ? r.headers.get('etag') : null};
   }
   function live(st){
     if(dead) return;
+    generation++;
     const refresh = mode !== 'live';
-    if(!st || isBetterState(st, observed)) observed = st;
-    NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live';
+    NET.status = 'live'; NET.transport = 'Firebase RTDB';
+    empty = st === null;
+    if(!empty && (!validSave(st) || !matchesRules(st))){
+      observed = null; onSnap?.({exists:true, data:() => st}); return;
+    }
+    if(empty || isBetterState(st, observed)) observed = st;
+    mode = 'live';
     emit(st, refresh);
   }
+  function observeRead({st, at}){
+    // A slow GET (even null) must not undo a newer stream event or conditional write.
+    if(at === generation || (mode !== 'incompatible' && isBetterState(st, latest))) live(st);
+  }
   async function refresh(){
-    try{ const {st} = await readState(); live(st); }
+    const at = generation;
+    try{ observeRead(await readState()); }
     catch(e){
-      if(dead || streaming) return;
+      if(dead || streaming || generation !== at) return;
       NET.status = 'off'; NET.transport = 'Firebase unreachable'; mode = 'local';
       if(!S) emit(null, true); else renderHud();
     }
@@ -1455,7 +1618,7 @@ function createFirebaseDb(fbBase, room, cached){
       const stream = es = new EventSource(base + '/state.json');
       stream.addEventListener('put', e => {
         if(dead || stream !== es) return;
-        try{ const d = JSON.parse(e.data); if(d.path !== '/') return; live(d.data); streaming = true; }catch(_){ return; }
+        try{ const d = JSON.parse(e.data); if(d.path !== '/') return; live(restoreFirebaseEmpties(d.data)); streaming = true; }catch(_){ return; }
         clearInterval(pollTimer); pollTimer = null;
       });
       stream.onerror = () => {
@@ -1467,6 +1630,7 @@ function createFirebaseDb(fbBase, room, cached){
   NET.reconnect = () => { refresh(); startStream(); };
   NET.destroy = () => { dead = true; clearInterval(pollTimer); if(es) es.close(); if(bc) bc.close(); };
   return {
+    get canInitialize(){ return empty && !latest; },
     get hasLiveState(){ return !!observed && !isBetterState(latest, observed); },
     doc(path){
       if(path === 'game/lock') return {
@@ -1484,8 +1648,9 @@ function createFirebaseDb(fbBase, room, cached){
       return {
         async get(){
           const result = await readState(true); tag = result.tag;
-          emit(result.st);
-          return {exists:!!result.st, data:() => result.st};
+          observeRead(result);
+          if(result.st !== null && (!validSave(result.st) || !matchesRules(result.st))) throw Error('Incompatible or unreadable saved room.');
+          return {exists:result.st !== null, data:() => result.st};
         },
         async set(data){
           if(dead || !tag || (latest && (data.rev || 1) <= (latest.rev || 1))) throw new Error('The room changed. Please retry.');
@@ -1506,17 +1671,40 @@ function createFirebaseDb(fbBase, room, cached){
 
 let me = {name:null};
 try{ me.name = localStorage.getItem('eot-me'); me.ph = localStorage.getItem('eot-ph'); }catch(e){}
-const expectedPw = n => PWH[n] || (S && S.players[n] && S.players[n].pw) || null;
+const expectedPw = (n, state = S) => PWH[n] || state?.players[n]?.pw || null;
+const officerIn = (st, who) => st?.players[who.name] && !!who.ph && expectedPw(who.name, st) === who.ph && can(st.players[who.name].role, 'research');
 const authed = () => me.name === '__spectator' || !!(S && S.players[me.name] && expectedPw(me.name) && me.ph === expectedPw(me.name));
 let PWASK = null, PWERR = '';
 const myTeam = () => (S && S.players[me.name] && authed()) ? S.players[me.name].team : null;
 const myRole = () => (S && S.players[me.name] && authed()) ? S.players[me.name].role : null;
+function requireLive(store){
+  if(store !== db || mode !== 'live') throw Error('Room changed before the order completed.');
+}
+async function lockedState(store){
+  for(let i = 0; i < 10; i++){
+    requireLive(store);
+    const r = await store.doc('game/lock').acquire({holder:TAB, ttlMs:1500});
+    requireLive(store);
+    if(r.acquired){
+      const ref = store.doc('game/state'), snap = await ref.get();
+      requireLive(store);
+      const remote = snap.exists ? snap.data() : null;
+      if(snap.exists && (!validSave(remote) || !matchesRules(remote))) throw Error('Incompatible or unreadable saved game.');
+      return {ref, remote};
+    }
+    await sleep(250);
+  }
+  throw new Error('The table is busy. Try again.');
+}
 async function act(name, payload){
   if(busy || !S) return;
-  if(mode !== 'live' && mode !== 'local'){ if(name !== 'noop') toast('Wait for the room to sync before sending orders.'); return; }
+  if(mode !== 'live' && (mode !== 'local' || inMastery())){ if(name !== 'noop') toast('Wait for the room to sync before sending orders.'); return; }
   const store = db, live = mode === 'live';
-  if(name === 'noop' && live && store.hasLiveState === false) return;
-  const pl = S.players[me.name]; const needs = {contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
+  if(live && store.hasLiveState === false){
+    if(name === 'noop') return;
+    if(inMastery()) return toast('Wait for the live mastery save before sending orders.');
+  }
+  const who = {...me}, pl = S.players[who.name]; const needs = {contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
   if(name !== 'enlist' && name !== 'noop'){
     if(!pl || !authed()) return toast('Choose your post and enter its password first.', 'bad');
     const need = needs[name]; if(need === '*' ? pl.role !== 'leader' : !can(pl.role, need)) return toast(`Your role (${ROLES[pl.role]}) cannot do that.`, 'bad');
@@ -1525,27 +1713,31 @@ async function act(name, payload){
   try{
     let base, ref;
     if(live){
-      ref = store.doc('game/state');
-      let got = false; for(let i = 0; i < 10 && !got; i++){ if(store !== db || mode !== 'live') return; const r = await store.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(250); }
-      if(!got){ toast('The table is busy. Try again.', 'bad'); return; }
-      const snap = await ref.get();
-      if(store !== db || mode !== 'live') return;
-      const remote = snap.exists ? snap.data() : null;
-      if(remote && (remote.v || 1) < GAME_V) throw new Error('Incompatible saved game.');
+      const locked = await lockedState(store), remote = locked.remote; ref = locked.ref;
+      requireLive(store);
+      if(!remote && (inMastery() || sawSavedRoom || loadLiveCache(ROOM))) throw new Error('Wait for the saved room to sync.');
       if(name === 'noop' && (!remote || isBetterState(S, remote))) return;
-      if(remote && (remote.rev || 1) < (S.rev || 1)) throw new Error('The relay is behind the displayed revision. Reconnect and try again.');
+      if(remote && (remote.rev < S.rev || (sawSavedRoom && isBetterState(S, remote)))) throw new Error('The relay is behind the displayed revision. Reconnect and try again.');
+      if(remote && isBetterState(remote, S)) S = clone(remote); // Refresh the quote/role even on a rejected order.
       base = clone(remote || S);
     } else base = clone(S);
-    const nextRev = (base.rev || 1) + 1;
+    if(classicWithRanks(base)) return toast('This save already has mastery ranks. Continue from Classic in Research to keep them.', 'bad');
+    const nextRev = nextRevision(base.rev);
+    if(base.win && name !== 'reset') return toast('The war is over. A leader can reset the map.', 'bad');
     const now = Date.now(); tick(base, now);
-    if(base.win && name !== 'reset'){ toast('The war is over. A leader can reset the map.', 'bad'); if(!isBetterState(S, base)) S = base; return; }
-    const ctx = {now, name:me.name, team:pl ? pl.team : null, role:pl ? pl.role : null};
+    if(me.name !== who.name || me.ph !== who.ph) return;
+    const player = base.players[who.name], need = needs[name];
+    if(name !== 'enlist' && name !== 'noop' && (!player || !who.ph || expectedPw(who.name, base) !== who.ph || player.team !== pl.team || (need === '*' ? player.role !== 'leader' : !can(player.role, need)))){
+      toast('Your post or permissions changed. Review the latest room.', 'bad'); return;
+    }
+    const ctx = {now, name:who.name, team:player?.team, role:player?.role};
     const res = (name === 'enlist') ? A.enlist(base, {now, name:me.name}, payload) : A[name](base, ctx, payload || {});
     if(res.err){ toast(res.err, 'bad'); return; }
     if(!res.reset) checkWin(base, now);
     if(live){
       base.rev = nextRev; base.origin = TAB; await ref.set(base);
       if(store !== db || isBetterState(S, base)) return;
+      sawSavedRoom = true;
     }
     S = base; seen = Date.now() - 1;
     if(res.ok) toast(res.ok, res.battle === false ? 'bad' : (res.battle ? 'win' : ''));
@@ -1554,18 +1746,33 @@ async function act(name, payload){
   finally{ busy = false; renderAll(); }
 }
 let bootId = 0;
-async function boot(){
-  const id = ++bootId;
+async function boot(prepared = null){
+  const id = ++bootId, wire = wireRoom(); seed = prepared; ui.confirmReset = null; sawSavedRoom = false; backend = '';
   if(NET.destroy) NET.destroy();
   clearTimeout(loadTimer); NET.peers.clear(); db = NET.destroy = NET.reconnect = null; NET.announce = () => {};
   mode = NET.status = 'connecting'; NET.transport = 'Syncing room…';
-  let cached = loadLiveCache(ROOM);
+  const fallbackKey = inMastery() ? wire + '|' + (via === 'mqtt' ? 'mqtt' : FB_URL || 'mqtt') : wire;
+  const tryShared = !rules || !via || via === 'shared';
+  let cached = inMastery() && via === 'shared' ? loadLiveCache(wire + '|shared') :
+    inMastery() && !via && window.claude?.use ? null : loadLiveCache(fallbackKey);
   S = cached; seen = Date.now(); // Read-only first paint, before any network await.
   try{ renderAll(); }catch(e){ if(!cached) throw e; S = cached = null; renderAll(); }
+  if(rules && (!inMastery() || !['','mqtt','shared','firebase'].includes(via) || (via === 'firebase' && !FB_URL))){ mode = 'incompatible'; S = null; renderAll(); return; }
   let cap = null;
-  try{ if(window.claude && window.claude.use) cap = await window.claude.use('db'); }catch(e){}
+  try{ if(tryShared && window.claude?.use) cap = await window.claude.use('db'); }catch(e){}
   if(id !== bootId) return;
-  db = cap || (FB_URL ? createFirebaseDb(FB_URL, ROOM, cached) : createMqttDb(ROOM, cached));
+  if(inMastery() && via === 'shared' && !cap){
+    mode = 'error'; NET.status = 'off'; NET.transport = 'Open this invite in its original shared workspace.';
+    NET.reconnect = () => boot(); renderAll(); return; // Never fall back to a different campaign.
+  }
+  backend = cap ? 'shared' : via === 'mqtt' ? 'mqtt' : FB_URL || 'mqtt';
+  if(inMastery()) via = transportOf(backend);
+  if(seed && seed.backend !== backend) seed = null;
+  if(inMastery() && cap){ cached = loadLiveCache(wire + '|shared'); S = cached; }
+  else if(inMastery() && !cached){ cached = loadLiveCache(fallbackKey); S = cached; }
+  db = cap ? (inMastery() ? {doc:path => cap.doc(path.replace('game/', 'game-' + wire + '/'))} : cap) :
+    (backend === 'mqtt' ? createMqttDb(wire, cached, fallbackKey) : createFirebaseDb(FB_URL, wire, cached, fallbackKey));
+
   loadTimer = setTimeout(() => { if(!S){ mode = 'slow'; renderAll(); } }, 4000);
   let lastShared = null;
   const unsub = db.doc('game/state').onSnapshot(snap => {
@@ -1574,19 +1781,66 @@ async function boot(){
     const st = snap.exists ? snap.data() : null;
     if(cap){
       NET.status = 'live'; NET.transport = 'Claude Shared DB';
-      if(st && isBetterState(lastShared, st)) return;
+      if(st && (isBetterState(lastShared, st) || (sawSavedRoom && isBetterState(S, st)))) return;
       if(st) lastShared = st;
     }
-    if(st && (st.v || 1) < GAME_V){ mode = 'incompatible'; renderAll(); return; }
+    if(snap.exists) sawSavedRoom = true;
+    if(snap.exists && (!validSave(st) || !matchesRules(st))){ mode = 'incompatible'; seed = null; renderAll(); return; }
+    if(st && inMastery()){
+      seed = null;
+      if(cap){ if(isBetterState(cached, st)){ mode = 'connecting'; renderAll(); return; } saveLiveCache(wire + '|shared', st); }
+    }
     if(NET.status === 'live') mode = 'live';
     const first = !S;
     // Silence isn't proof a room is empty. A starting map is only a local preview
     // until an actual player order; never publish cache/newGame just for connecting.
-    if(st) S = clone(st); else if(!S) S = newGame(Date.now());
-    if(first) seen = Date.now(); else announce();
+    if(st) S = clone(st); else if(!S && !inMastery()) S = newGame(Date.now());
+    if(first || st?.origin === TAB) seen = Date.now(); else announce();
     renderAll();
   }, () => { if(id === bootId){ mode = 'error'; NET.status = 'off'; renderAll(); } });
   if(cap && typeof unsub === 'function') NET.destroy = unsub;
+}
+// A version check in a NEW client cannot stop a pre-deployment browser from writing
+// old combat results to a public relay. Use an explicit, isolated continuation instead.
+// Source read and target initialization are separate: opening an invite NEVER seeds a room.
+function switchRules(next, prepared = null){
+  via = next && backend ? transportOf(backend) : ''; rules = next; tab = 'tech'; ui.researchBranch = 'mastery'; sel = M = PWASK = null;
+  history.replaceState(null, '', roomUrl()); return boot(prepared);
+}
+async function prepareMastery(){
+  if(busy || rules || mode !== 'live' || !officerIn(S, me)) return;
+  const store = db, who = {...me}; busy = true;
+  try{
+    const snap = await store.doc('game/state').get();
+    if(store !== db || mode !== 'live' || who.name !== me.name || who.ph !== me.ph) return;
+    const src = snap.exists ? snap.data() : null;
+    if(snap.exists ? (!validSave(src) || !matchesRules(src) || isBetterState(S, src)) : (sawSavedRoom || loadLiveCache(ROOM) || store.canInitialize === false)) throw Error('Wait for the latest shared Classic save before continuing.');
+    const state = src || newGame(Date.now()); // Only a confirmed empty Classic can supply a fresh board.
+    if(state.win || !officerIn(state, who)) throw Error('Only an active leader or chief can start a mastery room.');
+    await switchRules(MASTERY_RULES, {state:clone(state), backend, who});
+  }catch(e){ toast(e.message, 'bad'); }
+  finally{ busy = false; renderAll(); }
+}
+async function startMastery(){
+  if(busy || !inMastery() || !seed || S || sawSavedRoom || mode !== 'live') return;
+  const store = db, prepared = seed; busy = true; renderPanel();
+  try{
+    const {ref, remote} = await lockedState(store);
+    requireLive(store);
+    if(remote){
+      if(!isBetterState(S, remote)) S = clone(remote);
+      seed = null; sawSavedRoom = true; return; // Another officer already started it, even if their Classic source revision was lower.
+    }
+    if(seed !== prepared || S || sawSavedRoom || !officerIn(prepared.state, me) || me.name !== prepared.who.name || me.ph !== prepared.who.ph) return;
+    if(store.canInitialize === false) throw Error('The primary relay has not confirmed an empty room. Reconnect and retry.');
+    const st = clone(prepared.state); st.ruleset = MASTERY_RULES; st.origin = TAB; st.rev = nextRevision(st.rev);
+    await ref.set(st); // Firebase uses the empty record's ETag; other stores use their room lock.
+    if(store !== db) return;
+    if(!isBetterState(S, st)) S = st;
+    seed = null; sawSavedRoom = true;
+    toast('Mastery room started. Share its invite with both factions.');
+  }catch(e){ toast(e.message, 'bad'); }
+  finally{ busy = false; renderAll(); }
 }
 let seen = 0, shown = new Set();
 function announce(){
@@ -1602,8 +1856,10 @@ const fmt = n => Math.floor(n + RESOURCE_EPS);
 function toast(msg, kind){ const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5200); while($('#toasts').children.length > 4) $('#toasts').firstChild.remove(); }
 function icon(team){ return team === 'reich' ? `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="4" y="4" width="10" height="10" transform="rotate(45 9 9)" fill="var(--reich)"/></svg>` : `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 13a7 7 0 0 1 14 0z" fill="var(--dawn)"/><rect x="1" y="14" width="16" height="1.6" fill="var(--dawn)"/></svg>`; }
 // Prices are fixed until the next game update; available balances change every clock tick.
-function priceAttrs(cost, n = 1, cp = 0){
-  return 'data-price' + RK.filter(r => cost[r]).map(r => ` data-${r}="${cost[r] * n}"`).join('') + (cp ? ` data-cp="${cp}"` : '');
+const displayedQuote = d => Object.fromEntries(RK.filter(r => d[r] != null).map(r => [r, Number(d[r])]));
+const priceText = cost => RK.filter(r => cost[r]).map(r => `${cost[r]} ${r}`).join(' · ');
+function priceAttrs(cost, cp = 0){
+  return 'data-price' + RK.filter(r => cost[r]).map(r => ` data-${r}="${cost[r]}"`).join('') + (cp ? ` data-cp="${cp}"` : '');
 }
 function costHtml(cost){
   return `<span class="cost">${RK.filter(r => cost[r]).map(r => `<span ${priceAttrs({[r]:cost[r]})}>${cost[r]} ${r}</span>`).join(' ')}</span>`;
@@ -1612,17 +1868,21 @@ function troopStatsHtml(s, team, u){
   const stat = k => Number(trainedStat(s, team, u, k).toFixed(2));
   return `<span class="cost" title="Per unit, including doctrine and mastery; before situational bonuses">ATK ${stat('atk')} · DEF ${stat('def')}</span>`;
 }
-function recruitButtons(u, unlocked, cost, have){
-  const max = UNITS[u].max;
-  return (max === 1 ? [1] : [1, 5]).map(n => `<button class="btn sm" data-act="recruit" data-u="${u}" data-n="${n}" ${unlocked && (!max || have + n <= max) ? priceAttrs(cost, n, 1) : 'disabled'}>+${n}</button>`).join('');
+function recruitButtons(team, u, unlocked, each, have){
+  const max = UNITS[u].max, bulkDiscount = talentFor(u).discount && masteryRank(S.teams[team], u, 'talent') > 0;
+  return (max === 1 ? [1] : [1, 5]).map(n => {
+    const cost = n === 1 ? each : recruitCost(S, team, u, n), label = priceText(cost);
+    return `<button class="btn sm" data-act="recruit" data-u="${u}" data-n="${n}" title="${label} + 1 command point" aria-label="Recruit ${n} ${esc(UNITS[u].n)} for ${label} and 1 command point" ${unlocked && (!max || have + n <= max) ? priceAttrs(cost, 1) : 'disabled'}>+${n}${n > 1 && bulkDiscount ? ` <small>(${label})</small>` : ''}</button>`;
+  }).join('');
 }
 function refreshPrices(view, root = document){
   const team = myTeam() || 'reich', T = view.teams[team];
+  const paused = busy || classicWithRanks(S) || (inMastery() && db?.hasLiveState === false) || (mode !== 'live' && (inMastery() || mode !== 'local'));
   root.querySelectorAll('[data-price]').forEach(el => {
     const enough = afford(view, team, el.dataset);
     // Only otherwise-eligible buttons carry a price; never unlock a role/tech/cap restriction.
     if(el.tagName === 'BUTTON'){
-      const disabled = !enough || T.cp < Number(el.dataset.cp || 0) || busy || (mode !== 'live' && mode !== 'local');
+      const disabled = !enough || T.cp < Number(el.dataset.cp || 0) || paused;
       if(el.disabled !== disabled) el.disabled = disabled;
     } else el.classList.toggle('no', !enough);
   });
@@ -1636,16 +1896,16 @@ function refreshPrices(view, root = document){
 function projectedEconomy(){
   // tick only writes teams and t. Never advance or publish the room state just to paint the UI.
   const view = {teams:clone(S.teams), terr:S.terr, t:S.t};
-  tick(view, Date.now()); return view;
+  if(!S.win) tick(view, Date.now()); return view;
 }
 function roomPillHtml(){
   const n = onlineList().length;
   const cls = NET.status === 'live' ? 'live' : (NET.status === 'connecting' ? 'conn' : 'off');
   const lbl = NET.status === 'live' ? `Live · ${n} online` : (NET.status === 'connecting' ? (S ? 'Syncing…' : 'Connecting…') : 'Offline');
-  return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)}"><span class="sdot ${cls}"></span><span>${lbl}</span></button>`;
+  return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)}"><span class="sdot ${cls}"></span><span>${inMastery() ? 'Mastery' : 'Classic'} · ${lbl}</span></button>`;
 }
 function renderHud(){
-  if(!S){ $('#banner').innerHTML = ''; $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `${roomPillHtml()}<span class="mut sm">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'incompatible' ? 'Incompatible save format.' : mode === 'slow' ? 'Still connecting…' : 'Connecting…'}</span>`; return; }
+  if(!S){ $('#banner').innerHTML = ''; $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `${roomPillHtml()}<span class="mut sm">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'incompatible' ? 'Incompatible save format.' : mode === 'slow' ? 'Still connecting…' : inMastery() && mode === 'live' ? 'Awaiting mastery session' : 'Connecting…'}</span>`; return; }
   const t = myTeam(), team = t || 'reich', P = projectedEconomy(), inc = income(S, team);
   refreshPrices(P);
   document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#c9c3ae');
@@ -1653,7 +1913,7 @@ function renderHud(){
   $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${countOf(S, 'reich')} lands</b></span><span style="color:var(--dawn)"><b>${countOf(S, 'dawn')} lands · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / TOTAL_VP * 100}%;background:var(--reich)"></i><i style="width:${vn / TOTAL_VP * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / TOTAL_VP * 100}%;background:var(--dawn)"></i></div>`;
   const pl = authed() ? S.players[me.name] : null;
   $('#me').innerHTML = roomPillHtml() + (pl ? `<div class="who"><b>${esc(me.name)}</b><small>${esc(pl.title)} · ${ROLES[pl.role]}</small></div>${icon(pl.team)}<button class="btn sm" data-act="switch">Switch</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`);
-  const T = P.teams[team], rate = r => '+' + inc[r].toFixed(1) + '/min';
+  const T = P.teams[team], rate = r => S.win ? 'War ended' : '+' + inc[r].toFixed(1) + '/min';
   $('#hud').innerHTML = (t ? '' : `<div class="hudcell"><span class="k">Spectating</span></div>`) + RK.map(r => `<div class="hudcell"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
     `<div class="hudcell cp"><span class="k">Command</span><span class="v">${Math.floor(T.cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${T.cp / CPMAX * 100}%"></i></span></div>` +
     (busy ? `<div class="hudcell"><span class="k">Sending orders…</span></div>` : '');
@@ -1661,12 +1921,13 @@ function renderHud(){
   if(S.win) b = `<div class="banner win" style="color:${tcol(S.win.team)}">${TEAMS[S.win.team].name} wins. <span style="font-family:var(--body);font-size:14px;text-transform:none;letter-spacing:0;color:var(--ink)">${esc(S.win.why)}</span></div>`;
   else {
     const parts = [];
+    if(classicWithRanks(S)) parts.push('This Classic save contains mastery ranks. Orders are paused here; continue from Research → Troop mastery to keep your ranks.');
     if(S.dom){ const left = Math.max(0, DOM_MS - (Date.now() - S.dom.since)); parts.push(`<span style="color:${tcol(S.dom.team)}">${TEAMS[S.dom.team].name} holds ${Math.round(vpOf(S, S.dom.team) / TOTAL_VP * 100)}% of the world. Victory in ${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')} unless it is pushed below ${Math.round(DOM_SHARE * 100)}%.</span>`); }
     const cf = ceasefire(S, Date.now()); if(cf) parts.push(`Ceasefire in force for ${Math.ceil((cf.until - Date.now()) / 60000)} more minutes.`);
-    if(mode === 'connecting') parts.push('Syncing the latest room state. Orders will unlock when sync finishes.');
+    if(mode === 'connecting' || (inMastery() && mode === 'live' && db?.hasLiveState === false)) parts.push('Syncing the latest room state. Orders will unlock when sync finishes.');
     if(mode === 'incompatible') parts.push('Incompatible save format. The live room has not been changed.');
-    if(mode === 'local') parts.push('Offline: moves are local only while the room reconnects. <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
-    if(mode === 'error') parts.push('Lost contact with the war room. <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
+    if(mode === 'local') parts.push((inMastery() ? 'Offline: mastery room orders are paused until live sync.' : 'Offline: moves are local only while the room reconnects.') + ' <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
+    if(mode === 'error') parts.push((via === 'shared' ? esc(NET.transport) : 'Lost contact with the war room.') + ' <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
     if(parts.length) b = `<div class="banner ${mode === 'local' || mode === 'error' ? 'warn' : ''}">${parts.join(' · ')}</div>`;
   }
   $('#banner').innerHTML = b;
@@ -1704,7 +1965,7 @@ function renderMap(){
   const links = LINKS.map(l => { const A_ = TD[l.a], B_ = TD[l.b], oa = S.terr[l.a].o, ob = S.terr[l.b].o; const front = oa !== ob && oa !== 'neutral' && ob !== 'neutral'; const hot = sel && (l.a === sel || l.b === sel);
     return `<line x1="${A_.x}" y1="${A_.y}" x2="${B_.x}" y2="${B_.y}" stroke="${front ? '#ff7a5c' : hot ? '#e6e3d8' : '#3b4a44'}" stroke-width="${front ? 2.4 : hot ? 1.8 : 1}" ${l.sea ? 'stroke-dasharray="3 5"' : ''} opacity="${front || hot ? .95 : .7}"/>`; }).join('');
   const sels = sel ? ADJ[sel].map(n => n.id) : [];
-  const nodes = TIDS.map(id => { const D = TD[id], t = S.terr[id], r = D.fcap ? 20 : (D.cap ? 16 : 13), ex = visible(S, viewer, id); const n = total(t.u); const label = ex ? n : (n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0');
+  const nodes = PROVINCES.map(id => { const D = TD[id], t = S.terr[id], r = D.fcap ? 20 : (D.cap ? 16 : 13), ex = visible(S, viewer, id); const n = total(t.u); const label = ex ? n : (n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0');
     const fill = tcol(t.o), isSel = sel === id, near = sels.includes(id);
     const strokeCol = D.fcap ? '#fff' : (D.cap ? '#d9c98e' : '#0c0f0e');
     const strokeW = D.fcap ? 2.8 : (D.cap ? 2 : 1.5);
@@ -1746,13 +2007,13 @@ const REG_LIST = ['all','Americas','Europe','Africa','Middle East','Asia','Ocean
 function nationDirectory(){
   const q = (ui.natQ || '').trim().toLowerCase();
   const r = ui.natReg || 'all';
-  const rows = TIDS.filter(id => {
+  const rows = PROVINCES.filter(id => {
     const D = TD[id];
     if(r !== 'all' && D.reg !== r) return false;
     if(q && !D.name.toLowerCase().includes(q) && !id.toLowerCase().includes(q) && !D.reg.toLowerCase().includes(q)) return false;
     return true;
   }).sort((a, b) => (TD[b].fcap ? 2 : TD[b].cap ? 1 : 0) - (TD[a].fcap ? 2 : TD[a].cap ? 1 : 0) || TD[a].name.localeCompare(TD[b].name));
-  const tabs = REG_LIST.map(k => `<button class="${r === k ? 'on' : ''}" data-act="setreg" data-r="${k}">${k === 'all' ? `All (${TIDS.length})` : k}</button>`).join('');
+  const tabs = REG_LIST.map(k => `<button class="${r === k ? 'on' : ''}" data-act="setreg" data-r="${k}">${k === 'all' ? `All (${PROVINCES.length})` : k}</button>`).join('');
   const chips = rows.slice(0, 120).map(id => {
     const D = TD[id], t = S.terr[id];
     const badge = D.fcap ? '⚑ ' : (D.cap ? '◆ ' : '');
@@ -1785,11 +2046,11 @@ function panelOrders(){
         if(!sub.length) return '';
         let lastSub = '';
         return `<div class="divhdr">${DIVS[d]} Division · ${divSub(team, d)}</div>` + sub.map(u => {
-          const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u);
+          const U = UNITS[u], ok = hasTech(S, team, U.req), cost = recruitCost(S, team, u);
           const lock = ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`;
           const have = U.max ? TIDS.reduce((a, i) => a + (S.terr[i].o === team ? (S.terr[i].u[u] || 0) : 0), 0) : 0;
           const subHdr = (U.sub && U.sub !== lastSub) ? (lastSub = U.sub, `<div class="mut sm" style="margin-top:6px;font-weight:600;color:var(--ink);opacity:.75">${esc(U.sub)}</div>`) : '';
-          return subHdr + `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costHtml(cost)} <span class="cost">each</span> ${troopStatsHtml(S, team, u)}</div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0">${recruitButtons(u, ok, cost, have)}</div></div>`;
+          return subHdr + `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costHtml(cost)} <span class="cost">each</span> ${troopStatsHtml(S, team, u)}</div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0">${recruitButtons(team, u, ok, cost, have)}</div></div>`;
         }).join('');
       }).join('');
       h += `<div class="card"><h3>Recruit here · 1 command point</h3>${divBarHtml('div', curDiv, team)}${rows}</div>`;
@@ -1798,7 +2059,7 @@ function panelOrders(){
     if(can(role, 'move')) ord += `<button class="btn pri" data-act="open" data-m="move">Move units</button><button class="btn pri" data-act="open" data-m="attack">Attack from here</button>`;
     if(can(role, 'fort')){
       const cost = fortCost(t.f);
-      ord += `<button class="btn" data-act="fort" ${t.f >= 3 ? 'disabled' : priceAttrs(cost, 1, 1)}>Fortify ${t.f < 3 ? `(${cost.steel}S)` : '(max)'}</button>`;
+      ord += `<button class="btn" data-act="fort" data-rank="${t.f + 1}" ${t.f >= 3 ? 'disabled' : priceAttrs(cost, 1)}>Fortify ${t.f < 3 ? `(${cost.steel}S)` : '(max)'}</button>`;
     }
     ord += '</div>';
     if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}">${STANCES[k]}</button>`).join('')}</div>`;
@@ -1812,7 +2073,10 @@ function panelOrders(){
     if(can(role, 'honey') && t.o !== 'neutral') a += `<button class="btn" data-act="honey">Honeytrap · 3cp 20G</button>`;
     if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage">Sabotage · 3cp 25G</button>`;
     if(can(role, 'decap') && t.o !== 'neutral' && S.teams[team].tech.intel >= 4) a += `<button class="btn" data-act="decap">Decapitate · 4cp 60G</button>`;
-    if(can(role, 'annex') && t.o === 'neutral') a += `<button class="btn" data-act="annex">Annex by treaty · ${annexCost(S, team, total(t.u))}G</button>`;
+    if(can(role, 'annex') && t.o === 'neutral'){
+      const gold = annexCost(S, team, total(t.u));
+      a += `<button class="btn" data-act="annex" ${priceAttrs({gold}, 2)}>Annex by treaty · ${gold}G</button>`;
+    }
     a += '</div>';
     if(!srcs.length) a += `<div class="sm mut" style="margin-top:8px">No friendly troops border this territory. Move an army up first.</div>`;
     h += `<div class="card"><h3>Operations</h3>${a}</div>`;
@@ -1842,14 +2106,14 @@ function panelTroops(){
     if(!sub.length) return '';
     let lastSub = '';
     return `<div class="card"><h3>${DIVS[d]} Division · ${divSub(team, d)}</h3>` + sub.map(u => {
-      const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u), have = counts[u] || 0;
+      const U = UNITS[u], ok = hasTech(S, team, U.req), cost = recruitCost(S, team, u), have = counts[u] || 0;
       const subHdr = (U.sub && U.sub !== lastSub) ? (lastSub = U.sub, `<div class="divhdr" style="margin-top:8px">${esc(U.sub)}</div>`) : '';
       return subHdr + `<div style="padding:7px 0;border-bottom:1px solid var(--line)">
         <div class="row sb"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`}</div><span class="mono sm">Deployed: <b>${have}</b>${U.max ? `/${U.max}` : ''}</span></div>
         <div class="sm mut" style="margin:3px 0">${esc(U.desc)}</div>
         ${U.abil ? `<div class="abil">Special Ability: ${esc(U.abil)}</div>` : ''}
         <button class="btn sm" data-act="showmastery" data-u="${u}" aria-label="Research abilities for ${esc(U.n)}">Research abilities</button>
-        <div class="row sb" style="margin-top:4px"><div>${costHtml(cost)} <span class="cost">each</span> ${troopStatsHtml(S, team, u)}</div>${canRec ? `<div class="row">${recruitButtons(u, ok, cost, have)}</div>` : ''}</div>
+        <div class="row sb" style="margin-top:4px"><div>${costHtml(cost)} <span class="cost">each</span> ${troopStatsHtml(S, team, u)}</div>${canRec ? `<div class="row">${recruitButtons(team, u, ok, cost, have)}</div>` : ''}</div>
       </div>`;
     }).join('') + `</div>`;
   }).join('');
@@ -1868,7 +2132,7 @@ function masteryPanel(team, canResearch){
     return `<option value="${id}" ${id === u ? 'selected' : ''}>${esc(UNITS[id].n)}${locked ? ' · locked' : ranks ? ` · ${ranks}/${cap}` : ''}</option>`;
   };
   const options = divsFor(team).filter(d => d !== 'all').map(d => `<optgroup label="${DIVS[d]}">${roster.filter(id => UNITS[id].div === d).map(option).join('')}</optgroup>`).join('');
-  const note = S.win ? 'The war has ended; research is closed.' : canResearch ? 'Attack and Defense unlock the role talent.' : 'Only your leader and chiefs of staff can buy ranks.';
+  const note = !inMastery() ? 'Preview only in Classic.' : S.win ? 'The war has ended; research is closed.' : canResearch ? 'Attack and Defense unlock the role talent.' : 'Only your leader and chiefs of staff can buy ranks.';
   const dossier = `<section class="card mastery-dossier"><label><span class="research-kicker">Formation dossier · ${TEAMS[team].short}</span>
     <select data-chg="masteryunit" id="mastery-unit" aria-label="Choose a troop formation">${options}</select></label>
     <div class="row sb">${troopStatsHtml(S, team, u)}<span class="mastery-rank">${totalRanks(u)}/${cap} ranks</span></div>
@@ -1878,12 +2142,14 @@ function masteryPanel(team, canResearch){
     const bonus = n => { const v = skill.step * n; return (v > 0 ? '+' : '') + v + '%'; };
     const reason = maxed ? '' : masteryRequirement(S, team, u, k, next);
     const cost = maxed ? null : masteryCost(S, team, u, next);
+    const n = U.max === 1 ? 1 : 5;
+    const bulk = skill.discount && !maxed ? `<div class="sm">${n} recruit${n === 1 ? '' : 's'}: ${priceText(recruitCost(S, team, u, n))} → ${priceText(recruitCost(S, team, u, n, next))}</div>` : '';
     const pips = Array.from({length:MASTERY_MAX}, (_, i) => `<i class="pip ${i < level ? 'on' : ''}"></i>`).join('');
     return `<article class="card mastery-card${k === 'talent' ? ' mastery-talent' : ''}">
       <div class="row sb"><span class="research-kicker">${k === 'talent' ? 'Role talent' : 'Core ability'}</span><span class="mastery-rank">Rank ${level}/${MASTERY_MAX}</span></div>
       <div class="row sb"><h3>${skill.name}</h3><span aria-hidden="true">${pips}</span></div>
       <div class="mastery-gain">${bonus(level)}${maxed ? '' : ` → <b>${bonus(next)}</b>`} ${skill.stat}</div>
-      <div class="sm mut">${skill.desc}</div>
+      <div class="sm mut">${skill.desc}</div>${bulk}
       ${reason ? `<div class="sm">${esc(reason)}</div>` : ''}
       ${maxed ? '<b class="abil">Mastered</b>' : `<div class="row sb">${costHtml(cost)}<button class="btn sm" data-act="mastery" data-u="${u}" data-skill="${k}" data-rank="${next}" aria-label="Research ${skill.name} rank ${next} for ${esc(U.n)}" ${canResearch && !reason ? priceAttrs(cost) : 'disabled'}>Research rank ${next}</button></div>`}
     </article>`;
@@ -1892,10 +2158,15 @@ function masteryPanel(team, canResearch){
 function panelTech(){
   const team = myTeam() || 'reich', T = S.teams[team]; const can_ = can(myRole(), 'research') && myTeam() && !S.win;
   const nav = `<div class="research-nav"><span class="research-kicker">${TEAMS[team].short} / Research bureau</span><div class="seg" role="group" aria-label="Research branches">${[['doctrine','Faction doctrines'],['mastery','Troop mastery']].map(([key, label]) => `<button data-act="researchbranch" data-k="${key}" class="${ui.researchBranch === key ? 'on' : ''}" aria-pressed="${ui.researchBranch === key}">${label}</button>`).join('')}</div></div>`;
-  if(ui.researchBranch === 'mastery') return nav + masteryPanel(team, can_);
+  if(ui.researchBranch === 'mastery'){
+    const session = inMastery() ? `<div class="sm mut">Mastery room · <button class="btn sm" data-act="room">Invite players</button></div>` :
+      `<div class="card sm"><h3>Play with troop mastery</h3>Continue from a snapshot of Classic in a separate room. Your map, officers and resources come with you. Later Classic moves stay in Classic, so have both factions use the new invite.
+      <div class="row" style="margin-top:6px">${can_ ? `<button class="btn pri sm" data-act="preparemastery" ${mode === 'live' && !busy ? '' : 'disabled'}>Continue from Classic</button>` : ''}<button class="btn sm" data-act="joinmastery">Join mastery room</button></div></div>`;
+    return nav + session + masteryPanel(team, can_ && inMastery());
+  }
   return nav + `<div class="sm mut">Research costs gold, steel and oil, and applies instantly. Leaders and chiefs of staff can buy it.</div><div class="card sm"><b style="color:${TEAMS[team].css}">${TEAMS[team].name}:</b> ${TEAMS[team].flavor}</div>` + TKEYS.map(k => {
     const L = T.tech[k], nx = L + 1, cost = researchCost(S, team, nx);
-    return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ ? priceAttrs(cost) : 'disabled'} data-act="research" data-k="${k}">Level ${nx} ${costHtml(cost)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
+    return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ ? priceAttrs(cost) : 'disabled'} data-act="research" data-k="${k}" data-rank="${nx}">Level ${nx} ${costHtml(cost)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
 }
 function panelDip(){
   const team = myTeam(), role = myRole(), ok = team && can(role, 'dip') && !S.win, now = Date.now(), cf = ceasefire(S, now);
@@ -1915,7 +2186,7 @@ function panelCouncil(){
       return `<div class="row sb" style="padding:3px 0"><span><b>${esc(n)}</b> <span class="mut sm">${esc(p.title)}</span></span><span class="mut sm">${ROLES[p.role]}</span></div>`; }).join('') + '</div>';
   });
   h += `<div class="card"><h3>Enlist someone new</h3><div class="row"><input type="text" id="enl" placeholder="Name" style="flex:1;min-width:100px"><input type="text" id="enlpw" placeholder="Choose a password" style="flex:1;min-width:100px"><select id="enlt"><option value="reich">Reich</option><option value="dawn">Black Dawn</option></select><button class="btn pri sm" data-act="enlist">Enlist</button></div></div>`;
-  if(lead) h += `<div class="card"><h3>Reset</h3><div class="sm mut">Start a fresh war. Everyone keeps their post.</div><button class="btn danger sm" style="margin-top:8px" data-act="reset">${ui.confirmReset ? 'Press again to confirm' : 'Reset the map'}</button></div>`;
+  if(lead) h += `<div class="card"><h3>Reset</h3><div class="sm mut">Start a fresh war. Everyone keeps their post.</div><button class="btn danger sm" style="margin-top:8px" data-act="reset">${ui.confirmReset === S ? 'Press again to confirm' : 'Reset the map'}</button></div>`;
   return h;
 }
 function panelLog(){ const t = myTeam(); const rows = S.log.filter(l => l.vis === 'all' || l.vis === t).slice(0, 50).map(l => `<div style="border-left-color:${l.kind === 'battle' ? tcol(l.by) : l.kind === 'win' ? 'var(--ok)' : 'var(--line)'}"><small>${new Date(l.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>${esc(l.msg)}</div>`).join(''); return `<div class="log">${rows}</div>`; }
@@ -1930,7 +2201,14 @@ function panelRules(){
   <div class="card sm"><h3>Roles</h3><b>Leader</b>: everything. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
 }
 function renderPanel(refreshBudget = true){
-  if(!S){ $('#panel').innerHTML = `<div class="card">${mode === 'error' ? 'The war room could not be reached. Check your connection and sign-in, then reload.' : mode === 'slow' ? 'Still waiting on the war room. If this persists, the page may not have access to its data.' : mode === 'incompatible' ? 'This room uses an older save format. Its saved game has not been changed.' : 'Connecting to the war room…'}</div>`; return; }
+  if(!S && rules){
+    const ready = mode === 'live' && inMastery();
+    const empty = ready && db?.canInitialize !== false;
+    const text = ready && !empty ? 'An empty mastery room has not been confirmed on the primary relay. Reconnect to check again.' : ready ? (seed ? `Start from the shared Classic snapshot at revision ${seed.state.rev}. This does not change Classic. After starting, share the Mastery invite with both factions.` : 'No saved mastery session here yet. A leader or chief can start one from Research in Classic.') :
+      mode === 'error' && via === 'shared' ? NET.transport : mode === 'incompatible' ? 'These room rules or this save are not supported. No progress has been changed.' : 'Waiting for the live mastery room. No local or cached board will be published.';
+    $('#panel').innerHTML = `<section class="card sm"><h3>Mastery room · ${esc(ROOM)}</h3><p>${text}</p><div class="row">${empty && seed ? `<button class="btn pri sm" data-act="startmastery" ${busy ? 'disabled' : ''}>Start from revision ${seed.state.rev}</button>` : ''}<button class="btn sm" data-act="classicroom">Back to Classic</button><button class="btn sm" data-act="reconnect">Reconnect</button></div></section>`; return;
+  }
+  if(!S){ $('#panel').innerHTML = `<div class="card">${mode === 'error' ? 'The war room could not be reached. Check your connection and sign-in, then reload.' : mode === 'slow' ? 'Still waiting on the war room. If this persists, the page may not have access to its data.' : mode === 'incompatible' ? 'This room uses an incompatible or unreadable save. Its saved game has not been changed.' : 'Connecting to the war room…'}</div>`; return; }
   const sc = $('#panel').scrollTop; const el = document.activeElement; if(el && el.matches && el.matches('input[type=text],input[type=number]') && $('#panel').contains(el)) return;
   $('#panel').innerHTML = {orders:panelOrders, troops:panelTroops, tech:panelTech, dip:panelDip, council:panelCouncil, log:panelLog, rules:panelRules}[tab](); $('#panel').scrollTop = sc;
   if(refreshBudget) refreshPrices(projectedEconomy(), $('#panel'));
@@ -1943,7 +2221,8 @@ function roomUrl(r = ROOM, fb = FB_URL){
   const u = new URL(location.href);
   u.search = '';
   if(r && r !== 'utsab1433-1939') u.searchParams.set('room', r);
-  if(fb) u.searchParams.set('fb', fb);
+  if(fb && (!rules || via === 'firebase')) u.searchParams.set('fb', fb);
+  if(rules){ u.searchParams.set('rules', rules); if(via) u.searchParams.set('via', via); }
   return u.toString();
 }
 function renderModal(refreshBudget = true){
@@ -1951,7 +2230,7 @@ function renderModal(refreshBudget = true){
     const peers = onlineList();
     const peerHtml = peers.map(p => `<span class="chip"><span class="dot" style="background:${p.team ? tcol(p.team) : 'var(--mute)'}"></span>${esc(p.name)}${p.self ? ' (you)' : ''}</span>`).join('');
     $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="War Room">
-      <h2>War Room · ${esc(ROOM)}</h2>
+      <h2>${inMastery() ? 'Mastery' : 'Classic'} War Room · ${esc(ROOM)}</h2>${inMastery() ? '<div class="sm mut">Use this invite for mastery games. Classic is separate. <button class="btn sm" data-act="classicroom">Back to Classic</button></div>' : ''}
       <div class="sm mut">Status: <b style="color:${NET.status === 'live' ? 'var(--ok)' : NET.status === 'connecting' ? 'var(--dawn)' : 'var(--bad)'}">${esc(NET.transport)}</b>${S ? ` · Revision #${S.rev || 1}` : ''}</div>
       <div class="card sm"><h3>Online now (${peers.length})</h3><div class="pres">${peerHtml}</div></div>
       <div class="card sm"><h3>Invite friends</h3><div class="row"><input type="text" readonly id="roomlink" value="${esc(roomUrl())}" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn pri sm" data-act="copyroom">Copy link</button></div><div class="mut sm" style="margin-top:6px">Share this link so everyone joins the same live war room (100% free real-time sync).</div></div>
@@ -1959,7 +2238,8 @@ function renderModal(refreshBudget = true){
       <details class="card sm"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
         <div class="mut sm" style="margin:6px 0">Public MQTT relays are free and instant, though brokers can occasionally restart. Your browser auto-caches the war locally, or you can paste a free Firebase Realtime Database URL below for 24/7 cloud storage.</div>
         <div class="row" style="margin-bottom:8px"><input type="text" id="fbin" value="${esc(FB_URL)}" placeholder="https://your-app-default-rtdb.firebaseio.com" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn sm" data-act="savefb">Use</button>${FB_URL ? '<button class="btn sm" data-act="clearfb">Clear</button>' : ''}</div>
-        <div class="row"><button class="btn sm" data-act="exportstate" ${S ? '' : 'disabled'}>Export save JSON</button><button class="btn sm" data-act="importstate" ${mode === 'live' ? '' : 'disabled'}>Import save JSON</button><button class="btn sm" data-act="reconnect">Reconnect</button></div>
+        <div class="row"><button class="btn sm" data-act="exportstate" ${S ? '' : 'disabled'}>Export save JSON</button><button class="btn sm" data-act="importstate" ${S && myRole() === 'leader' && mode === 'live' && !classicWithRanks(S) ? '' : 'disabled'}>Import save JSON</button><button class="btn sm" data-act="reconnect">Reconnect</button></div>
+        <div class="mut sm">A leader can restore a newer backup of this campaign with matching rules. Import never rolls a live room back.</div>
       </details>
       <div class="row"><button class="btn pri" data-act="closem">Done</button></div>
     </div></div>`;
@@ -1979,7 +2259,14 @@ function renderModal(refreshBudget = true){
     $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Choose your post"><h2>Choose your post</h2><div class="sm mut">Pick your name, then enter the password for that post. Each post has its own password. New to the group? Enlist in the Council tab after joining, or watch as a spectator.</div><h3 style="color:var(--reich)">The Reich</h3><div class="pick">${col('reich')}</div><h3 style="color:var(--dawn)">Black Dawn</h3><div class="pick">${col('dawn')}</div><div class="row"><button class="btn" data-act="spectate">Just watch</button><button class="btn" data-act="room">Room: ${esc(ROOM)}</button>${S.players[me.name] ? '<button class="btn" data-act="closem">Cancel</button>' : ''}</div></div></div>`; return;
   }
   if(!M || M === 'join'){ $('#modal').innerHTML = ''; return; }
-  const to = M.to, from = M.from; const srcs = M.mode === 'attack' ? (to ? ADJ[to].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0).map(n => n.id) : []) : (from ? ADJ[from].filter(n => S.terr[n.id].o === team).map(n => n.id) : []);
+  const to = M.to, from = M.from;
+  if(S.win || !can(myRole(), M.mode) || (from && S.terr[from].o !== team) || (to && (M.mode === 'attack' ? S.terr[to].o === team : S.terr[to].o !== team))){ closeModal(); return; }
+  // A teammate can move/recruit/fight while the picker is open. Never preview or send absent units.
+  if(from) for(const u of Object.keys(M.grp)){
+    const available = S.terr[from].u[u] || 0;
+    if(!available) delete M.grp[u]; else M.grp[u] = Math.min(M.grp[u], available);
+  }
+  const srcs = M.mode === 'attack' ? (to ? ADJ[to].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0).map(n => n.id) : []) : (from ? ADJ[from].filter(n => S.terr[n.id].o === team).map(n => n.id) : []);
   let h = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Orders"><h2>${M.mode === 'attack' ? 'Attack' : 'Move units'}</h2>`;
   if(M.mode === 'attack'){
     if(!to){ const targets = ADJ[from].filter(n => S.terr[n.id].o !== team); h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a target.</div><div class="pick">${targets.length ? targets.map(n => `<button data-act="mto" data-id="${n.id}"><b>${esc(TD[n.id].name)}</b><span class="mut sm">${S.terr[n.id].o === 'neutral' ? 'Neutral' : TEAMS[S.terr[n.id].o].name}${n.sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No enemy borders.</span>'}</div>`; }
@@ -2016,7 +2303,7 @@ function renderAll(){
 /* --- events --- */
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if(!el) return; const d = el.dataset, a = d.act;
-  if(a === 'sel'){ if(drag.moved) return; sel = d.id; if(tab !== 'orders' && tab !== 'log') tab = 'orders'; renderAll(); return; }
+  if(a === 'sel'){ if(!drag.moved) selectTerritory(d.id); return; }
   if(a === 'goto'){ sel = d.id; if(tab !== 'orders' && tab !== 'log') tab = 'orders'; focusTerr(d.id); renderAll(); return; }
   if(a === 'clearsel'){ sel = null; renderAll(); return; }
   if(a === 'setreg'){ ui.natReg = d.r; renderPanel(); return; }
@@ -2037,7 +2324,11 @@ document.addEventListener('click', e => {
   if(a === 'setdiv'){ ui[d.kind || 'div'] = d.d; renderPanel(); return; }
   if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
   if(a === 'zoomreset'){ setRegion('world'); return; }
-  if(a === 'switch'){ M = 'join'; renderModal(); return; }
+  if(a === 'preparemastery') return prepareMastery();
+  if(a === 'startmastery') return startMastery();
+  if(a === 'joinmastery' && !busy) return switchRules(MASTERY_RULES);
+  if(a === 'classicroom' && !busy) return switchRules('');
+  if(a === 'switch'){ ui.confirmReset = null; M = 'join'; renderModal(); return; }
   if(a === 'room'){ M = 'room'; renderModal(); return; }
   if(a === 'copyroom'){
     const u = roomUrl();
@@ -2048,47 +2339,55 @@ document.addEventListener('click', e => {
   if(a === 'joinroom'){
     const nr = sanitizeRoom($('#roomin').value);
     if(nr === ROOM) return closeModal();
-    ROOM = nr; history.replaceState(null, '', roomUrl()); M = null; boot(); return;
+    rules = via = ''; ROOM = nr; history.replaceState(null, '', roomUrl()); M = null; boot(); return;
   }
   if(a === 'newroom'){
-    ROOM = 'war-' + Math.random().toString(36).slice(2, 7);
+    rules = via = ''; ROOM = 'war-' + Math.random().toString(36).slice(2, 7);
     history.replaceState(null, '', roomUrl()); M = null; boot(); return;
   }
   if(a === 'savefb'){
     const u = cleanFbUrl($('#fbin').value);
     if(!/^https:\/\/.+\.firebaseio\.com$/i.test(u) && !/^https:\/\/.+\.firebasedatabase\.app$/i.test(u)) return toast('Enter a valid https://...firebaseio.com or .firebasedatabase.app URL.', 'bad');
-    FB_URL = u; try{ localStorage.setItem('eot-fb:' + ROOM, FB_URL); }catch(_){}
+    FB_URL = u; if(inMastery()) via = 'firebase'; try{ localStorage.setItem('eot-fb:' + ROOM, FB_URL); }catch(_){}
     history.replaceState(null, '', roomUrl()); M = null; boot(); return;
   }
   if(a === 'clearfb'){
-    FB_URL = ''; try{ localStorage.removeItem('eot-fb:' + ROOM); }catch(_){}
+    FB_URL = ''; if(inMastery()) via = 'mqtt'; try{ localStorage.removeItem('eot-fb:' + ROOM); }catch(_){}
     history.replaceState(null, '', roomUrl()); M = null; boot(); return;
   }
   if(a === 'reconnect'){ if(NET.reconnect) NET.reconnect(); toast('Reconnecting to war room…'); return; }
   if(a === 'exportstate'){
     if(!S) return;
     const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
-    const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob); a2.download = `eot-${ROOM}-rev${S.rev || 1}.json`; a2.click(); setTimeout(() => URL.revokeObjectURL(a2.href), 1000);
+    const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob); a2.download = `eot-${ROOM}-${rules || 'classic'}-rev${S.rev}.json`; a2.click(); setTimeout(() => URL.revokeObjectURL(a2.href), 1000);
     return;
   }
   if(a === 'importstate'){
-    if(!db || mode !== 'live') return toast('Wait for live sync before importing a save.');
-    const store = db, displayed = S;
+    if(!S || !db || mode !== 'live' || myRole() !== 'leader' || classicWithRanks(S)) return toast('Only a leader in a writable live room can import a save.');
+    const store = db, displayed = S, who = {...me};
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
     inp.onchange = async () => {
       const f = inp.files && inp.files[0]; if(!f) return;
+      let importing = false;
       try{
         const imp = JSON.parse(await f.text());
-        if(!imp || !imp.terr || !imp.teams || !imp.players || (imp.v || 1) < GAME_V) return toast('Invalid or incompatible save file.', 'bad');
-        if(store !== db || mode !== 'live') return;
-        const ref = store.doc('game/state'), snap = await ref.get();
-        if(store !== db || mode !== 'live' || (snap.exists && (snap.data().v || 1) < GAME_V)) return;
-        if(isBetterState(S, displayed) || (snap.exists && isBetterState(snap.data(), displayed))) throw new Error('The room changed. Review its latest revision before importing.');
-        imp.rev = Math.max((S && S.rev) || 0, imp.rev || 0) + 1; imp.origin = TAB;
+        if(!validSave(imp) || !matchesRules(imp) || classicWithRanks(imp)) return toast('Invalid save, or the save belongs to different room rules.', 'bad');
+        if(store !== db || mode !== 'live' || busy) return;
+        importing = busy = true;
+        const {ref, remote} = await lockedState(store);
+        requireLive(store);
+        const current = remote || displayed;
+        if(!remote && (inMastery() || sawSavedRoom || loadLiveCache(ROOM) || store.canInitialize === false)) throw Error('Empty room not confirmed.');
+        if(me.name !== who.name || me.ph !== who.ph || !validSave(current) || !matchesRules(current) || classicWithRanks(current) || !officerIn(current, who) || current.players[who.name].role !== 'leader') throw Error('Room or permissions changed.');
+        if(remote && isBetterState(remote, S)) S = clone(remote);
+        if(isBetterState(S, displayed) || (remote && isBetterState(displayed, remote))) throw Error('The room changed. Review its latest revision before importing.');
+        if(remote && (imp.created !== remote.created || imp.rev <= remote.rev)) throw Error('Use a newer backup of this campaign. Existing progress was not changed.');
+        imp.rev = nextRevision(imp.rev); imp.origin = TAB;
         await ref.set(imp);
         if(store !== db || isBetterState(S, imp)) return;
-        S = imp; M = null; renderAll(); toast('Save imported and synced to the war room.', 'win');
+        sawSavedRoom = true; S = imp; M = null; toast('Save imported and synced to the war room.', 'win');
       }catch(err){ toast('Could not import save: ' + (err.message || err), 'bad'); }
+      finally{ if(importing){ busy = false; renderAll(); } }
     };
     inp.click(); return;
   }
@@ -2114,19 +2413,23 @@ document.addEventListener('click', e => {
   if(a === 'step'){ const u = d.u, have = S.terr[M.from].u[u] || 0; let v = M.grp[u] || 0; v = d.d === 'max' ? have : Math.max(0, Math.min(have, v + +d.d)); if(v) M.grp[u] = v; else delete M.grp[u]; renderModal(); return; }
   if(a === 'tactic'){ M.tactic = d.k; renderModal(); return; }
   if(a === 'confirm'){ act(M.mode, {from:M.from, to:M.to, grp:clone(M.grp), tactic:M.tactic}); return; }
-  if(a === 'recruit') return act('recruit', {tid:sel, unit:d.u, n:+d.n});
-  if(a === 'fort') return act('fort', {tid:sel});
+  if(a === 'recruit') return act('recruit', {tid:sel, unit:d.u, n:+d.n, quote:displayedQuote(d)});
+  if(a === 'fort') return act('fort', {tid:sel, rank:+d.rank, quote:displayedQuote(d)});
   if(a === 'stance') return act('stance', {tid:sel, st:d.k});
-  if(a === 'research') return act('research', {k:d.k});
-  if(a === 'mastery') return act('mastery', {unit:d.u, skill:d.skill, rank:Number(d.rank)});
-  if(a === 'spy' || a === 'honey' || a === 'sabotage' || a === 'decap' || a === 'annex') return act(a, {tid:sel});
+  if(a === 'research') return act('research', {k:d.k, rank:+d.rank, quote:displayedQuote(d)});
+  if(a === 'mastery') return act('mastery', {unit:d.u, skill:d.skill, rank:Number(d.rank), quote:displayedQuote(d)});
+  if(a === 'annex') return act(a, {tid:sel, quote:displayedQuote(d)});
+  if(a === 'spy' || a === 'honey' || a === 'sabotage' || a === 'decap') return act(a, {tid:sel});
   if(a === 'duty') return act('contribute', {kind:d.k});
   if(a === 'propose'){ if(d.type === 'ceasefire') return act('propose', {type:'ceasefire', mins:+d.mins}); return act('propose', {type:'trade', give:{r:ui.trade.give, n:+ui.trade.gn}, get:{r:ui.trade.get, n:+ui.trade.wn}}); }
   if(a === 'answer') return act('answer', {id:+d.id, accept:!!d.accept, cancel:!!d.cancel});
   if(a === 'breakpact') return act('breakpact');
   if(a === 'remove') return act('remove', {name:d.n});
   if(a === 'enlist'){ const n = $('#enl').value.trim(), t = $('#enlt').value, pw = $('#enlpw').value; if(!n || pw.length < 6) return toast('Enter a name and a password of at least 6 characters.', 'bad'); return pwHash(n, pw).then(h => act('enlist', {name:n, team:t, pw:h}).then(() => { if(S.players[n] && S.players[n].pw === h && (!S.players[me.name] || !authed())){ me.name = n; me.ph = h; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} NET.announce(); renderAll(); } })); }
-  if(a === 'reset'){ if(!ui.confirmReset){ ui.confirmReset = true; renderPanel(); return; } ui.confirmReset = false; return act('reset'); }
+  if(a === 'reset'){
+    if(ui.confirmReset !== S){ ui.confirmReset = S; renderPanel(); return; }
+    ui.confirmReset = null; return act('reset', {rev:S.rev, origin:S.origin, created:S.created});
+  }
 });
 document.addEventListener('input', e => {
   if(e.target && e.target.id === 'natq'){
@@ -2150,7 +2453,8 @@ document.addEventListener('change', e => {
   if(k === 'give' || k === 'get') ui.trade[k] = el.value; else if(k === 'gn' || k === 'wn') ui.trade[k] = +el.value;
   else if(k === 'role') act('setrole', {name:el.dataset.n, role:el.value}); else if(k === 'title') act('setrole', {name:el.dataset.n, title:el.value});
 });
-document.addEventListener('keydown', e => { if((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.node')){ e.preventDefault(); sel = e.target.dataset.id; renderAll(); } if(e.key === 'Escape' && M && M !== 'join'){ closeModal(); renderAll(); } });
+function selectTerritory(id){ sel = id; if(tab !== 'log') tab = 'orders'; renderAll(); }
+document.addEventListener('keydown', e => { if((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.node')){ e.preventDefault(); selectTerritory(e.target.dataset.id); svg.querySelector(`.node[data-id="${sel}"]`)?.focus(); } if(e.key === 'Escape' && M && M !== 'join'){ closeModal(); renderAll(); } });
 /* pan / zoom */
 const drag = {moved:false}; const ptrs = new Map(); let last = null, pinch0 = 0;
 svg.addEventListener('pointerdown', e => { ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); drag.moved = false; last = {x:e.clientX, y:e.clientY}; if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); } });
@@ -2172,7 +2476,7 @@ setInterval(() => { if(S && tab === 'council') { const el = document.activeEleme
 buildBase(); setVB(); renderMapnav();
 if(window.claude && window.claude.hot && window.claude.hot.snapshot){ try{ window.claude.hot.snapshot(() => ({sel, tab})); }catch(e){} }
 boot();
-window.__eot = {get S(){return S;}, act, A, TD, ADJ, LINKS, tick, newGame, checkWin};
+window.__eot = {get S(){return S;}, act, A, TD, ADJ, LINKS, tick, newGame, checkWin, recruitCost, researchCost, masteryCost};
 })();
 </script>
 
