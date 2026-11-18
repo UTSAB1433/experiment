@@ -25,9 +25,16 @@ h1,h2,h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.06e
 .scorerow b{font-weight:500}
 .bar{display:flex;height:8px;border-radius:2px;overflow:hidden;background:var(--panel2);margin-top:4px}
 .bar i{display:block;height:100%}
-.me{display:flex;align-items:center;gap:8px;font-size:13px}
+.me{display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
 .me .who{display:flex;flex-direction:column;line-height:1.2;text-align:right}
 .me .who small{color:var(--mute);font-size:11px}
+.roompill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px}
+.sdot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;background:var(--mute)}
+.sdot.live{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.sdot.conn{background:var(--dawn);animation:pulse 1.4s infinite}
+.sdot.off{background:var(--bad)}
+.pres{display:flex;flex-wrap:wrap;gap:6px}
+.pres .chip{cursor:default}
 .btn{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;min-height:32px}
 .btn:hover:not(:disabled){border-color:var(--acc)}
 .btn:focus-visible,.tab:focus-visible,.node:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
@@ -402,7 +409,7 @@ function startUnits(t){
 }
 const GAME_V = 3;
 function newGame(now){
-  const s = {v:GAME_V, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
+  const s = {v:GAME_V, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
   TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.cap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
   s.teams.reich = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:0, arm:1, air:1, nav:0, intel:0, ind:0}};
   s.teams.dawn = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:1, arm:0, air:0, nav:0, intel:1, ind:0}};
@@ -613,9 +620,297 @@ A.enlist = (s, c, p) => { const n = String(p.name || '').trim().slice(0, 30); if
 A.reset = (s, c) => { const players = s.players; const fresh = newGame(c.now); Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players}); return {ok:'The map is reset.', reset:true}; };
 A.noop = () => ({});
 
-/* ============================ STORE ============================ */
+/* ============================ STORE & REAL-TIME MULTIPLAYER ============================ */
 let db = null, S = null, mode = 'connecting', busy = false, loadTimer = null;
-const TAB = Math.random().toString(36).slice(2);
+const TAB = Math.random().toString(36).slice(2, 10);
+const sanitizeRoom = r => String(r || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'utsab1433-1939';
+const QSP = new URLSearchParams(location.search);
+let ROOM = sanitizeRoom(QSP.get('room'));
+const cleanFbUrl = u => String(u || '').trim().replace(/\/+$/, '');
+let FB_URL = cleanFbUrl(QSP.get('fb') || (() => { try{ return localStorage.getItem('eot-fb:' + ROOM); }catch(e){ return ''; } })());
+const NET = { status:'connecting', transport:'Starting…', brokerIdx:0, peers:new Map(), reconnect:null, announce:()=>{}, destroy:null };
+const onlineList = () => {
+  const now = Date.now(), out = [{tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), self:true}];
+  NET.peers.forEach((p, k) => { if(k !== TAB && now - p.ts < 42000) out.push(p); else if(now - p.ts >= 42000) NET.peers.delete(k); });
+  return out;
+};
+const te_ = new TextEncoder(), td_ = new TextDecoder();
+function encVarLen(n){ const o = []; do{ let b = n % 128; n = Math.floor(n / 128); if(n > 0) b |= 128; o.push(b); }while(n > 0); return o; }
+function encStr(s){ const b = te_.encode(s), o = new Uint8Array(2 + b.length); o[0] = (b.length >> 8) & 255; o[1] = b.length & 255; o.set(b, 2); return o; }
+function buildPkt(hdr, ...parts){
+  const len = parts.reduce((a, p) => a + p.length, 0), vl = encVarLen(len), o = new Uint8Array(1 + vl.length + len);
+  o[0] = hdr; o.set(vl, 1); let off = 1 + vl.length; for(const p of parts){ o.set(p, off); off += p.length; } return o;
+}
+function isBetterState(inc, cur){
+  if(!inc || typeof inc !== 'object' || !inc.terr || !inc.teams) return false;
+  if(!cur) return true;
+  if((inc.v || 1) !== (cur.v || 1)) return (inc.v || 1) > (cur.v || 1);
+  const ir = inc.rev || 1, cr = cur.rev || 1;
+  if(ir !== cr) return ir > cr;
+  if(inc.created !== cur.created) return (inc.created || 0) < (cur.created || 0);
+  return String(inc.origin || '') < String(cur.origin || '');
+}
+function loadLiveCache(room){
+  try{ const raw = localStorage.getItem('eot-live-state:' + room); if(!raw) return null; const p = JSON.parse(raw); return (p && p.terr && p.teams && (p.v || 1) >= GAME_V) ? p : null; }catch(e){ return null; }
+}
+function saveLiveCache(room, st){
+  try{ localStorage.setItem('eot-live-state:' + room, JSON.stringify(st)); }catch(e){}
+}
+function createMqttDb(room){
+  const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+  const PFX = 'lands-eot/v1/' + room + '/';
+  let ws = null, rxBuf = new Uint8Array(0), pid = 1, kaTimer = null, reconnTimer = null, initTimer = null, offlineTimer = null, dead = false;
+  let latest = null, activeLock = null, hasRemoteState = false, onSnap = null, onErr = null, ready = false;
+  let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + room); }catch(e){}
+  const sendRaw = arr => { if(ws && ws.readyState === 1) ws.send(arr); };
+  const pubMqtt = (sub, obj, retain = false) => {
+    const txt = JSON.stringify(obj);
+    if(ws && ws.readyState === 1 && ready) sendRaw(buildPkt(0x30 | (retain ? 1 : 0), encStr(PFX + sub), te_.encode(txt)));
+    if(bc) try{ bc.postMessage({sub, obj}); }catch(e){}
+  };
+  const emitSnap = st => { if(onSnap) onSnap({exists:!!st, data:() => st}); };
+  const handleState = (st, fromRemote) => {
+    if(!st || typeof st !== 'object' || !st.terr || !st.teams) return;
+    if(fromRemote) hasRemoteState = true;
+    if(initTimer){ clearTimeout(initTimer); initTimer = null; }
+    if(isBetterState(st, latest)){
+      latest = clone(st);
+      saveLiveCache(room, latest);
+      emitSnap(latest);
+    }
+  };
+  const handleMsg = (sub, msg, fromRemote = true) => {
+    if(!msg || typeof msg !== 'object') return;
+    if(sub === 'state'){ handleState(msg, fromRemote); return; }
+    if(sub === 'lock'){ if(!activeLock || msg.ts >= activeLock.ts || activeLock.until < Date.now()) activeLock = msg; return; }
+    if(sub === 'sync'){
+      if(msg.type === 'req' && msg.from !== TAB && latest) pubMqtt('sync', {type:'res', from:TAB, to:msg.from, state:latest}, false);
+      else if(msg.type === 'res' && msg.state) handleState(msg.state, fromRemote);
+      return;
+    }
+    if(sub === 'pres' && msg.tab && msg.tab !== TAB){
+      if(msg.bye) NET.peers.delete(msg.tab);
+      else NET.peers.set(msg.tab, {tab:msg.tab, name:msg.name || 'Player', team:msg.team || null, ts:Date.now()});
+      if(S) renderHud();
+    }
+  };
+  if(bc) bc.onmessage = e => { if(e && e.data) handleMsg(e.data.sub, e.data.obj, false); };
+  const announcePres = (bye = false) => {
+    const p = {tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), ts:Date.now(), bye};
+    pubMqtt('pres', p, false);
+  };
+  NET.announce = () => announcePres(false);
+  const presTimer = setInterval(() => { if(!dead && ready) announcePres(false); }, 15000);
+  const onUnload = () => announcePres(true);
+  window.addEventListener('beforeunload', onUnload);
+
+  function finishInit(){
+    if(initTimer){ clearTimeout(initTimer); initTimer = null; }
+    if(!latest){
+      const cached = loadLiveCache(room);
+      if(cached){
+        latest = cached;
+        pubMqtt('state', latest, true);
+        emitSnap(latest);
+      } else {
+        emitSnap(null);
+      }
+    }
+  }
+  function parseIncoming(chunk){
+    const next = new Uint8Array(rxBuf.length + chunk.length);
+    next.set(rxBuf, 0); next.set(chunk, rxBuf.length); rxBuf = next;
+    while(rxBuf.length >= 2){
+      let mul = 1, rem = 0, i = 1, b, ok = true;
+      do{ if(i >= rxBuf.length){ ok = false; break; } b = rxBuf[i++]; rem += (b & 127) * mul; mul *= 128; }while(b & 128);
+      if(!ok || rxBuf.length < i + rem) break;
+      const hdr = rxBuf[0], body = rxBuf.subarray(i, i + rem); rxBuf = rxBuf.subarray(i + rem);
+      const type = hdr >> 4;
+      if(type === 2){
+        if(body[1] === 0){
+          ready = true;
+          const sid = pid++; if(pid > 65000) pid = 1;
+          sendRaw(buildPkt(0x82, new Uint8Array([(sid >> 8) & 255, sid & 255]), encStr(PFX + '#'), new Uint8Array([0])));
+          if(offlineTimer){ clearTimeout(offlineTimer); offlineTimer = null; }
+          NET.status = 'live';
+          NET.transport = 'MQTT (' + new URL(BROKERS[NET.brokerIdx % BROKERS.length]).host + ')';
+          mode = 'live';
+          if(latest) pubMqtt('sync', {type:'res', from:TAB, state:latest}, false);
+          pubMqtt('sync', {type:'req', from:TAB}, false);
+          announcePres(false);
+          if(!hasRemoteState && !initTimer) initTimer = setTimeout(finishInit, 1200);
+          renderHud();
+        } else if(ws) ws.close();
+      } else if(type === 3){
+        const qos = (hdr >> 1) & 3;
+        const tlen = (body[0] << 8) | body[1];
+        const topic = td_.decode(body.subarray(2, 2 + tlen));
+        let off = 2 + tlen;
+        if(qos > 0){ const mpid = (body[off] << 8) | body[off + 1]; off += 2; sendRaw(new Uint8Array([0x40, 2, (mpid >> 8) & 255, mpid & 255])); }
+        if(topic.startsWith(PFX)){
+          const sub = topic.slice(PFX.length);
+          try{ handleMsg(sub, JSON.parse(td_.decode(body.subarray(off))), true); }catch(e){}
+        }
+      }
+    }
+  }
+  function connect(idx){
+    if(dead) return;
+    NET.brokerIdx = idx % BROKERS.length;
+    const url = BROKERS[NET.brokerIdx];
+    ready = false; rxBuf = new Uint8Array(0);
+    if(kaTimer){ clearInterval(kaTimer); kaTimer = null; }
+    if(ws){ try{ ws.onclose = ws.onerror = ws.onmessage = null; ws.close(); }catch(e){} }
+    NET.status = 'connecting'; NET.transport = 'Connecting to ' + new URL(url).host + '…';
+    if(S) renderHud();
+    let opened = false;
+    const dialTimer = setTimeout(() => { if(!ready && ws){ try{ ws.close(); }catch(e){} } }, 4500);
+    try{
+      ws = new WebSocket(url, 'mqtt');
+      ws.binaryType = 'arraybuffer';
+      ws.onopen = () => {
+        opened = true;
+        const cid = 'eot-' + TAB + '-' + Math.random().toString(36).slice(2, 6);
+        sendRaw(buildPkt(0x10, new Uint8Array([0,4,77,81,84,84,4,2,0,25]), encStr(cid)));
+        kaTimer = setInterval(() => sendRaw(new Uint8Array([0xC0, 0])), 20000);
+      };
+      ws.onmessage = e => { if(e.data instanceof ArrayBuffer) parseIncoming(new Uint8Array(e.data)); };
+      const fail = () => {
+        clearTimeout(dialTimer);
+        if(kaTimer){ clearInterval(kaTimer); kaTimer = null; }
+        ready = false;
+        if(dead) return;
+        NET.status = S ? 'off' : 'connecting';
+        NET.transport = 'Reconnecting…';
+        if(S) mode = 'local';
+        if(S) renderHud();
+        clearTimeout(reconnTimer);
+        reconnTimer = setTimeout(() => connect(NET.brokerIdx + (opened ? 0 : 1)), opened ? 1500 : 800);
+      };
+      ws.onerror = () => { if(!ready) fail(); };
+      ws.onclose = fail;
+    }catch(e){
+      clearTimeout(dialTimer);
+      reconnTimer = setTimeout(() => connect(NET.brokerIdx + 1), 1500);
+    }
+  }
+  NET.reconnect = () => connect(NET.brokerIdx + 1);
+  NET.destroy = () => {
+    dead = true; clearInterval(presTimer); clearInterval(kaTimer); clearTimeout(reconnTimer); clearTimeout(initTimer); clearTimeout(offlineTimer);
+    window.removeEventListener('beforeunload', onUnload);
+    if(ws) try{ ws.close(); }catch(e){}
+    if(bc) try{ bc.close(); }catch(e){}
+  };
+  return {
+    doc(path){
+      if(path === 'game/lock') return {
+        async acquire({holder, ttlMs}){
+          const now = Date.now();
+          if(activeLock && activeLock.holder !== holder && activeLock.until > now) return {acquired:false};
+          const claim = {holder, until:now + (ttlMs || 1500), ts:now};
+          activeLock = claim;
+          pubMqtt('lock', claim, false);
+          if(ready) await sleep(70);
+          if(activeLock && activeLock.holder !== holder && activeLock.until > Date.now()) return {acquired:false};
+          return {acquired:true};
+        }
+      };
+      return {
+        async get(){ return {exists:!!latest, data:() => latest}; },
+        async set(data){
+          latest = clone(data);
+          saveLiveCache(room, latest);
+          pubMqtt('state', latest, true);
+        },
+        onSnapshot(cb, errCb){
+          onSnap = cb; onErr = errCb;
+          const cached = loadLiveCache(room);
+          if(cached){ latest = cached; }
+          offlineTimer = setTimeout(() => {
+            if(!ready && !S){
+              NET.status = 'off'; NET.transport = 'Offline (local mode — retrying)';
+              mode = 'local';
+              emitSnap(latest || null);
+            }
+          }, 7000);
+          connect(0);
+        }
+      };
+    }
+  };
+}
+function createFirebaseDb(fbBase, room){
+  const base = fbBase + '/eot-rooms/' + encodeURIComponent(room);
+  let latest = null, onSnap = null, es = null, pollTimer = null, dead = false;
+  let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + room); }catch(e){}
+  if(bc) bc.onmessage = e => { if(e && e.data && e.data.sub === 'state' && isBetterState(e.data.obj, latest)){ latest = clone(e.data.obj); saveLiveCache(room, latest); if(onSnap) onSnap({exists:true, data:() => latest}); } };
+  const emit = st => {
+    if(st && st.terr && st.teams){
+      if(isBetterState(st, latest)){ latest = clone(st); saveLiveCache(room, latest); if(onSnap) onSnap({exists:true, data:() => latest}); }
+    } else if(!latest && onSnap) onSnap({exists:false, data:() => null});
+  };
+  NET.reconnect = () => startStream();
+  NET.destroy = () => { dead = true; clearInterval(pollTimer); if(es) es.close(); if(bc) bc.close(); };
+  function startStream(){
+    if(dead) return;
+    if(es) try{ es.close(); }catch(e){}
+    try{
+      es = new EventSource(base + '/state.json');
+      es.addEventListener('put', e => {
+        NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live';
+        try{ const d = JSON.parse(e.data); emit(d ? d.data : null); }catch(_){}
+      });
+      es.onerror = () => {
+        NET.status = 'connecting'; NET.transport = 'Polling Firebase…';
+        if(!pollTimer) pollTimer = setInterval(async () => {
+          if(dead) return;
+          try{ const r = await fetch(base + '/state.json'); if(r.ok){ NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live'; emit(await r.json()); } }catch(_){}
+        }, 4000);
+      };
+    }catch(e){ NET.status = 'off'; NET.transport = 'Firebase error'; }
+  }
+  return {
+    doc(path){
+      if(path === 'game/lock') return {
+        async acquire({holder, ttlMs}){
+          const now = Date.now();
+          try{
+            const r = await fetch(base + '/lock.json'); const cur = r.ok ? await r.json() : null;
+            if(cur && cur.holder !== holder && cur.until > now) return {acquired:false};
+            await fetch(base + '/lock.json', {method:'PUT', body:JSON.stringify({holder, until:now + (ttlMs || 1500)})});
+            return {acquired:true};
+          }catch(e){ return {acquired:true}; }
+        }
+      };
+      return {
+        async get(){
+          const r = await fetch(base + '/state.json'); const d = r.ok ? await r.json() : null;
+          if(d && d.terr) latest = d;
+          return {exists:!!(d && d.terr), data:() => d};
+        },
+        async set(data){
+          latest = clone(data); saveLiveCache(room, latest);
+          if(bc) try{ bc.postMessage({sub:'state', obj:latest}); }catch(e){}
+          const r = await fetch(base + '/state.json', {method:'PUT', body:JSON.stringify(latest)});
+          if(!r.ok) throw new Error('Firebase HTTP ' + r.status + ' (check Realtime Database rules)');
+        },
+        onSnapshot(cb){
+          onSnap = cb;
+          NET.status = 'connecting'; NET.transport = 'Connecting to Firebase…';
+          fetch(base + '/state.json').then(r => r.ok ? r.json() : null).then(d => {
+            NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live';
+            emit(d);
+            startStream();
+          }).catch(() => {
+            NET.status = 'off'; NET.transport = 'Firebase unreachable'; mode = 'local';
+            emit(loadLiveCache(room) || null);
+          });
+        }
+      };
+    }
+  };
+}
+
 let me = {name:null};
 try{ me.name = localStorage.getItem('eot-me'); me.ph = localStorage.getItem('eot-ph'); }catch(e){}
 const expectedPw = n => PWH[n] || (S && S.players[n] && S.players[n].pw) || null;
@@ -633,42 +928,48 @@ async function act(name, payload){
   busy = true; renderHud();
   try{
     let base;
-    if(db){
+    if(db && mode === 'live'){
       let got = false; for(let i = 0; i < 10 && !got; i++){ const r = await db.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(250); }
       if(!got){ toast('The table is busy. Try again.', 'bad'); return; }
       const snap = await db.doc('game/state').get(); base = snap.exists ? clone(snap.data()) : newGame(Date.now());
     } else base = clone(S);
+    const nextRev = (base.rev || 1) + 1;
     const now = Date.now(); tick(base, now);
     if(base.win && name !== 'reset'){ toast('The war is over. A leader can reset the map.', 'bad'); S = base; return; }
     const ctx = {now, name:me.name, team:pl ? pl.team : null, role:pl ? pl.role : null};
     const res = (name === 'enlist') ? A.enlist(base, {now, name:me.name}, payload) : A[name](base, ctx, payload || {});
     if(res.err){ toast(res.err, 'bad'); return; }
     if(!res.reset) checkWin(base, now);
-    if(db) await db.doc('game/state').set(base); S = base; seen = Date.now() - 1;
+    if(db && mode === 'live'){ base.rev = nextRev; base.origin = TAB; await db.doc('game/state').set(base); }
+    S = base; seen = Date.now() - 1;
     if(res.ok) toast(res.ok, res.battle === false ? 'bad' : (res.battle ? 'win' : ''));
     closeModal();
   }catch(e){ toast(e && e.code === 'not_granted' || (e && /permission|denied/i.test(e.message || '')) ? 'You can look but not play. Ask the owner for contributor access.' : ('Order failed: ' + (e && e.message || e)), 'bad'); }
   finally{ busy = false; renderAll(); }
 }
 let migrating = false;
-async function ensureGame(){ if(!db || migrating) return; migrating = true; try{ const snap = await db.doc('game/state').get(); if(snap.exists && (snap.data().v || 1) >= GAME_V) return; let got = false; for(let i = 0; i < 6 && !got; i++){ const r = await db.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(300); } const again = await db.doc('game/state').get(); if(!again.exists || (again.data().v || 1) < GAME_V) await db.doc('game/state').set(newGame(Date.now())); }catch(e){ toast('Could not start the game: ' + (e.message || e), 'bad'); } finally{ migrating = false; } }
+async function ensureGame(){ if(!db || migrating) return; migrating = true; try{ const snap = await db.doc('game/state').get(); if(snap.exists && (snap.data().v || 1) >= GAME_V) return; let got = false; for(let i = 0; i < 6 && !got; i++){ const r = await db.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(300); } const again = await db.doc('game/state').get(); if(!again.exists || (again.data().v || 1) < GAME_V){ const fresh = newGame(Date.now()); fresh.origin = TAB; await db.doc('game/state').set(fresh); S = clone(fresh); seen = Date.now(); renderAll(); } }catch(e){ toast('Could not start the game: ' + (e.message || e), 'bad'); } finally{ migrating = false; } }
 async function boot(){
+  if(NET.destroy) NET.destroy();
+  clearTimeout(loadTimer); S = null; NET.peers.clear();
   let cap = null;
   try{ if(window.claude && window.claude.use) cap = await window.claude.use('db'); }catch(e){}
   if(cap){
-    db = cap; mode = 'live';
-    loadTimer = setTimeout(() => { if(!S){ mode = 'slow'; renderAll(); } }, 10000);
-    db.doc('game/state').onSnapshot(snap => {
-      clearTimeout(loadTimer);
-      if(!snap.exists || (snap.data().v || 1) < GAME_V){ ensureGame(); return; }
-      const first = !S; S = clone(snap.data()); mode = 'live';
-      if(first) seen = Date.now(); else announce();
-      renderAll();
-    }, err => { mode = 'error'; renderAll(); });
-    renderAll();
+    db = cap; mode = 'live'; NET.status = 'live'; NET.transport = 'Claude Shared DB';
+  } else if(FB_URL){
+    db = createFirebaseDb(FB_URL, ROOM); mode = 'connecting';
   } else {
-    S = newGame(Date.now()); mode = 'local'; seen = Date.now(); renderAll();
+    db = createMqttDb(ROOM); mode = 'connecting';
   }
+  loadTimer = setTimeout(() => { if(!S){ mode = 'slow'; renderAll(); } }, 10000);
+  db.doc('game/state').onSnapshot(snap => {
+    clearTimeout(loadTimer);
+    if(!snap.exists || (snap.data().v || 1) < GAME_V){ ensureGame(); return; }
+    const first = !S; S = clone(snap.data()); if(NET.status === 'live') mode = 'live';
+    if(first) seen = Date.now(); else announce();
+    renderAll();
+  }, err => { mode = 'error'; renderAll(); });
+  renderAll();
 }
 let seen = 0, shown = new Set();
 function announce(){
@@ -687,14 +988,20 @@ function costHtml(cost, team, k = 1){ return `<span class="cost">${RK.filter(r =
 
 /* --- header / hud --- */
 function proj_(){ if(!S) return null; const c = clone({teams:S.teams, terr:S.terr, t:S.t}); const n = Date.now(); tick(c, n); return c; }
+function roomPillHtml(){
+  const n = onlineList().length;
+  const cls = NET.status === 'live' ? 'live' : (NET.status === 'connecting' ? 'conn' : 'off');
+  const lbl = NET.status === 'live' ? `Live · ${n} online` : (NET.status === 'connecting' ? 'Connecting…' : 'Offline');
+  return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)}"><span class="sdot ${cls}"></span><span>${lbl}</span></button>`;
+}
 function renderHud(){
-  if(!S){ $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `<span class="mut">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'slow' ? 'Still connecting…' : 'Connecting…'}</span>`; return; }
+  if(!S){ $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `${roomPillHtml()}<span class="mut sm">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'slow' ? 'Still connecting…' : 'Connecting…'}</span>`; return; }
   const t = myTeam(), team = t || 'reich', P = proj_(), inc = income(S, team);
   document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#c9c3ae');
   const vr = vpOf(S, 'reich'), vd = vpOf(S, 'dawn'), vn = TOTAL_VP - vr - vd;
   $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${countOf(S, 'reich')} lands</b></span><span style="color:var(--dawn)"><b>${countOf(S, 'dawn')} lands · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / TOTAL_VP * 100}%;background:var(--reich)"></i><i style="width:${vn / TOTAL_VP * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / TOTAL_VP * 100}%;background:var(--dawn)"></i></div>`;
   const pl = authed() ? S.players[me.name] : null;
-  $('#me').innerHTML = pl ? `<div class="who"><b>${esc(me.name)}</b><small>${esc(pl.title)} · ${ROLES[pl.role]}</small></div>${icon(pl.team)}<button class="btn sm" data-act="switch">Switch</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`;
+  $('#me').innerHTML = roomPillHtml() + (pl ? `<div class="who"><b>${esc(me.name)}</b><small>${esc(pl.title)} · ${ROLES[pl.role]}</small></div>${icon(pl.team)}<button class="btn sm" data-act="switch">Switch</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`);
   const T = P.teams[team], rate = r => '+' + inc[r].toFixed(1) + '/min';
   $('#hud').innerHTML = (t ? '' : `<div class="hudcell"><span class="k">Spectating</span></div>`) + RK.map(r => `<div class="hudcell"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
     `<div class="hudcell cp"><span class="k">Command</span><span class="v">${Math.floor(T.cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${T.cp / CPMAX * 100}%"></i></span></div>` +
@@ -705,8 +1012,8 @@ function renderHud(){
     const parts = [];
     if(S.dom){ const left = Math.max(0, DOM_MS - (Date.now() - S.dom.since)); parts.push(`<span style="color:${tcol(S.dom.team)}">${TEAMS[S.dom.team].name} holds ${Math.round(vpOf(S, S.dom.team) / TOTAL_VP * 100)}% of the world. Victory in ${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')} unless it is pushed below ${Math.round(DOM_SHARE * 100)}%.</span>`); }
     const cf = ceasefire(S, Date.now()); if(cf) parts.push(`Ceasefire in force for ${Math.ceil((cf.until - Date.now()) / 60000)} more minutes.`);
-    if(mode === 'local') parts.push('Sandbox mode: this copy is not shared. Open the page signed in, with contributor access, to play together.');
-    if(mode === 'error') parts.push('Lost contact with the war room.');
+    if(mode === 'local') parts.push('Offline: could not reach a live relay server — moves stay local until reconnected. <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
+    if(mode === 'error') parts.push('Lost contact with the war room. <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
     if(parts.length) b = `<div class="banner ${mode === 'local' || mode === 'error' ? 'warn' : ''}">${parts.join(' · ')}</div>`;
   }
   $('#banner').innerHTML = b;
@@ -839,8 +1146,33 @@ function renderPanel(){
 /* --- modal --- */
 function closeModal(){ M = null; $('#modal').innerHTML = ''; }
 function groupStrength(grp){ return grp; }
+function roomUrl(r = ROOM, fb = FB_URL){
+  const u = new URL(location.href);
+  u.search = '';
+  if(r && r !== 'utsab1433-1939') u.searchParams.set('room', r);
+  if(fb) u.searchParams.set('fb', fb);
+  return u.toString();
+}
 function renderModal(){
-  if(!S){ return; }
+  if(M === 'room'){
+    const peers = onlineList();
+    const peerHtml = peers.map(p => `<span class="chip"><span class="dot" style="background:${p.team ? tcol(p.team) : 'var(--mute)'}"></span>${esc(p.name)}${p.self ? ' (you)' : ''}</span>`).join('');
+    $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="War Room">
+      <h2>War Room · ${esc(ROOM)}</h2>
+      <div class="sm mut">Status: <b style="color:${NET.status === 'live' ? 'var(--ok)' : NET.status === 'connecting' ? 'var(--dawn)' : 'var(--bad)'}">${esc(NET.transport)}</b>${S ? ` · Revision #${S.rev || 1}` : ''}</div>
+      <div class="card sm"><h3>Online now (${peers.length})</h3><div class="pres">${peerHtml}</div></div>
+      <div class="card sm"><h3>Invite friends</h3><div class="row"><input type="text" readonly id="roomlink" value="${esc(roomUrl())}" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn pri sm" data-act="copyroom">Copy link</button></div><div class="mut sm" style="margin-top:6px">Share this link so everyone joins the same live war room (100% free real-time sync).</div></div>
+      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" value="${esc(ROOM)}" placeholder="room-code" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New random</button></div></div>
+      <details class="card sm"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
+        <div class="mut sm" style="margin:6px 0">Public MQTT relays are free and instant, though brokers can occasionally restart. Your browser auto-caches the war locally, or you can paste a free Firebase Realtime Database URL below for 24/7 cloud storage.</div>
+        <div class="row" style="margin-bottom:8px"><input type="text" id="fbin" value="${esc(FB_URL)}" placeholder="https://your-app-default-rtdb.firebaseio.com" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn sm" data-act="savefb">Use</button>${FB_URL ? '<button class="btn sm" data-act="clearfb">Clear</button>' : ''}</div>
+        <div class="row"><button class="btn sm" data-act="exportstate" ${S ? '' : 'disabled'}>Export save JSON</button><button class="btn sm" data-act="importstate">Import save JSON</button><button class="btn sm" data-act="reconnect">Reconnect</button></div>
+      </details>
+      <div class="row"><button class="btn pri" data-act="closem">Done</button></div>
+    </div></div>`;
+    return;
+  }
+  if(!S){ $('#modal').innerHTML = ''; return; }
   const team = myTeam();
   const spec = me.name === '__spectator';
   if(PWASK && (M === 'join' || !authed())){
@@ -851,7 +1183,7 @@ function renderModal(){
   }
   if(M === 'join' || (!spec && (!S.players[me.name] || !authed()))){
     const col = tm => Object.entries(S.players).filter(([, p]) => p.team === tm).map(([n, p]) => `<button data-act="join" data-n="${esc(n)}"><b>${esc(n)}</b><span class="mut sm">${esc(p.title)}</span></button>`).join('');
-    $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Choose your post"><h2>Choose your post</h2><div class="sm mut">Pick your name, then enter the password for that post. Each post has its own password. New to the group? Enlist in the Council tab after joining, or watch as a spectator.</div><h3 style="color:var(--reich)">The Reich</h3><div class="pick">${col('reich')}</div><h3 style="color:var(--dawn)">Black Dawn</h3><div class="pick">${col('dawn')}</div><div class="row"><button class="btn" data-act="spectate">Just watch</button>${S.players[me.name] ? '<button class="btn" data-act="closem">Cancel</button>' : ''}</div></div></div>`; return;
+    $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Choose your post"><h2>Choose your post</h2><div class="sm mut">Pick your name, then enter the password for that post. Each post has its own password. New to the group? Enlist in the Council tab after joining, or watch as a spectator.</div><h3 style="color:var(--reich)">The Reich</h3><div class="pick">${col('reich')}</div><h3 style="color:var(--dawn)">Black Dawn</h3><div class="pick">${col('dawn')}</div><div class="row"><button class="btn" data-act="spectate">Just watch</button><button class="btn" data-act="room">Room: ${esc(ROOM)}</button>${S.players[me.name] ? '<button class="btn" data-act="closem">Cancel</button>' : ''}</div></div></div>`; return;
   }
   if(!M || M === 'join'){ $('#modal').innerHTML = ''; return; }
   const to = M.to, from = M.from; const srcs = M.mode === 'attack' ? (to ? ADJ[to].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0).map(n => n.id) : []) : (from ? ADJ[from].filter(n => S.terr[n.id].o === team).map(n => n.id) : []);
@@ -886,6 +1218,53 @@ document.addEventListener('click', e => {
   if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
   if(a === 'zoomreset'){ vb = Object.assign({}, INIT); setVB(); return; }
   if(a === 'switch'){ M = 'join'; renderModal(); return; }
+  if(a === 'room'){ M = 'room'; renderModal(); return; }
+  if(a === 'copyroom'){
+    const u = roomUrl();
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(() => toast('Invite link copied.'), () => toast('Copy failed — select and copy the link manually.', 'bad'));
+    else { const el2 = $('#roomlink'); if(el2){ el2.select(); document.execCommand('copy'); toast('Invite link copied.'); } }
+    return;
+  }
+  if(a === 'joinroom'){
+    const nr = sanitizeRoom($('#roomin').value);
+    if(nr === ROOM) return closeModal();
+    ROOM = nr; history.replaceState(null, '', roomUrl()); M = null; boot(); return;
+  }
+  if(a === 'newroom'){
+    ROOM = 'war-' + Math.random().toString(36).slice(2, 7);
+    history.replaceState(null, '', roomUrl()); M = null; boot(); return;
+  }
+  if(a === 'savefb'){
+    const u = cleanFbUrl($('#fbin').value);
+    if(!/^https:\/\/.+\.firebaseio\.com$/i.test(u) && !/^https:\/\/.+\.firebasedatabase\.app$/i.test(u)) return toast('Enter a valid https://...firebaseio.com or .firebasedatabase.app URL.', 'bad');
+    FB_URL = u; try{ localStorage.setItem('eot-fb:' + ROOM, FB_URL); }catch(_){}
+    history.replaceState(null, '', roomUrl()); M = null; boot(); return;
+  }
+  if(a === 'clearfb'){
+    FB_URL = ''; try{ localStorage.removeItem('eot-fb:' + ROOM); }catch(_){}
+    history.replaceState(null, '', roomUrl()); M = null; boot(); return;
+  }
+  if(a === 'reconnect'){ if(NET.reconnect) NET.reconnect(); toast('Reconnecting to war room…'); return; }
+  if(a === 'exportstate'){
+    if(!S) return;
+    const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
+    const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob); a2.download = `eot-${ROOM}-rev${S.rev || 1}.json`; a2.click(); setTimeout(() => URL.revokeObjectURL(a2.href), 1000);
+    return;
+  }
+  if(a === 'importstate'){
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0]; if(!f) return;
+      try{
+        const imp = JSON.parse(await f.text());
+        if(!imp || !imp.terr || !imp.teams || !imp.players) return toast('Invalid save file.', 'bad');
+        imp.rev = Math.max((S && S.rev) || 0, imp.rev || 0) + 1; imp.origin = TAB;
+        if(db) await db.doc('game/state').set(imp);
+        S = imp; M = null; renderAll(); toast('Save imported and synced to the war room.', 'win');
+      }catch(err){ toast('Could not import save: ' + (err.message || err), 'bad'); }
+    };
+    inp.click(); return;
+  }
   if(a === 'join'){ PWASK = d.n; PWERR = ''; renderModal(); return; }
   if(a === 'pwback'){ PWASK = null; PWERR = ''; renderModal(); return; }
   if(a === 'pwgo'){
@@ -894,11 +1273,11 @@ document.addEventListener('click', e => {
     return pwHash(n, v).then(async h => {
       const exp = expectedPw(n);
       if(h !== exp && n === 'Titli'){ const h2 = await pwHash(atob('VGl0bGkgR29ydQ=='), v); if(h2 === exp) h = h2; }
-      if(h === exp){ me.name = n; me.ph = h; PWASK = null; PWERR = ''; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} M = null; renderAll(); }
+      if(h === exp){ me.name = n; me.ph = h; PWASK = null; PWERR = ''; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} M = null; NET.announce(); renderAll(); }
       else { await sleep(1200); PWERR = 'Wrong password.'; renderModal(); }
     }).catch(() => { PWERR = 'This browser cannot check passwords.'; renderModal(); });
   }
-  if(a === 'spectate'){ me.name = '__spectator'; PWASK = null; M = null; renderAll(); return; }
+  if(a === 'spectate'){ me.name = '__spectator'; PWASK = null; M = null; NET.announce(); renderAll(); return; }
   if(a === 'closem'){ closeModal(); renderAll(); return; }
   if(!S) return;
   if(a === 'open'){ const team = myTeam(); if(d.m === 'move') M = {mode:'move', from:sel, to:null, grp:{}, tactic:'frontal'}; else M = d.to ? {mode:'attack', from:null, to:d.to, grp:{}, tactic:'frontal'} : {mode:'attack', from:sel, to:null, grp:{}, tactic:'frontal'};
@@ -918,7 +1297,7 @@ document.addEventListener('click', e => {
   if(a === 'answer') return act('answer', {id:+d.id, accept:!!d.accept, cancel:!!d.cancel});
   if(a === 'breakpact') return act('breakpact');
   if(a === 'remove') return act('remove', {name:d.n});
-  if(a === 'enlist'){ const n = $('#enl').value.trim(), t = $('#enlt').value, pw = $('#enlpw').value; if(!n || pw.length < 6) return toast('Enter a name and a password of at least 6 characters.', 'bad'); return pwHash(n, pw).then(h => act('enlist', {name:n, team:t, pw:h}).then(() => { if(S.players[n] && S.players[n].pw === h && (!S.players[me.name] || !authed())){ me.name = n; me.ph = h; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} renderAll(); } })); }
+  if(a === 'enlist'){ const n = $('#enl').value.trim(), t = $('#enlt').value, pw = $('#enlpw').value; if(!n || pw.length < 6) return toast('Enter a name and a password of at least 6 characters.', 'bad'); return pwHash(n, pw).then(h => act('enlist', {name:n, team:t, pw:h}).then(() => { if(S.players[n] && S.players[n].pw === h && (!S.players[me.name] || !authed())){ me.name = n; me.ph = h; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} NET.announce(); renderAll(); } })); }
   if(a === 'reset'){ if(!ui.confirmReset){ ui.confirmReset = true; renderPanel(); return; } ui.confirmReset = false; return act('reset'); }
 });
 document.addEventListener('change', e => {
@@ -926,7 +1305,7 @@ document.addEventListener('change', e => {
   if(k === 'give' || k === 'get') ui.trade[k] = el.value; else if(k === 'gn' || k === 'wn') ui.trade[k] = +el.value;
   else if(k === 'role') act('setrole', {name:el.dataset.n, role:el.value}); else if(k === 'title') act('setrole', {name:el.dataset.n, title:el.value});
 });
-document.addEventListener('keydown', e => { if((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.node')){ e.preventDefault(); sel = e.target.dataset.id; renderAll(); } if(e.key === 'Escape' && M && M !== 'join'){ closeModal(); } });
+document.addEventListener('keydown', e => { if((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.node')){ e.preventDefault(); sel = e.target.dataset.id; renderAll(); } if(e.key === 'Escape' && M && M !== 'join'){ closeModal(); renderAll(); } });
 /* pan / zoom */
 const drag = {moved:false}; const ptrs = new Map(); let last = null, pinch0 = 0;
 svg.addEventListener('pointerdown', e => { ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); drag.moved = false; last = {x:e.clientX, y:e.clientY}; if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); } });
