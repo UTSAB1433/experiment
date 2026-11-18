@@ -98,6 +98,13 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 430px;
 .abil{font-size:11px;color:var(--ok);margin-top:2px}
 .tech{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
 .tech .desc{grid-column:1/-1;font-size:12px;color:var(--mute)}
+.research-nav,.mastery-dossier,.mastery-card{display:grid;gap:8px}
+.research-kicker,.mastery-rank{font:11px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--mute)}
+.mastery-dossier{border-top:2px solid var(--acc)}
+.mastery-dossier label{display:grid;gap:4px}.mastery-dossier select{width:100%}
+.mastery-card h3{color:var(--ink);margin:0;font-size:18px}.mastery-card .pip{width:8px;height:8px}
+.mastery-gain{font-family:var(--mono);font-size:12px}.mastery-gain b{color:var(--acc)}
+.mastery-talent{border-left:3px solid var(--acc)}
 .log{display:flex;flex-direction:column;gap:6px}
 .log div{font-size:13px;border-left:3px solid var(--line);padding-left:8px}
 .log small{font-family:var(--mono);color:var(--mute);font-size:11px;display:block}
@@ -435,6 +442,23 @@ const TACT = {
   flank:{n:'Flanking maneuver', units:[...REICH_UNITS.filter(u => UNITS[u].cat === 'inf'), 'bd_init', 'bd_veil', 'bd_oath', 'bd_mant', 'bd_lega', 'bd_syno'], req:['inf',2], d:'Infantry envelopment. Strong against Counter-attack.'},
   air:{n:'Air strike', units:[...REICH_UNITS.filter(u => UNITS[u].div === 'air'), 'bd_rave', 'bd_vair', 'bd_obsv', 'bd_noct', 'bd_hera'], req:['air',2], d:'Aerial forces lead. Good against Dig-in and Elastic.'}
 };
+// Mastery is per formation, unlike the faction-wide doctrine in T.tech.
+const MASTERY_MAX = 5;
+const CORE_SKILLS = {
+  atk:{name:'Attack', stat:'attack strength', step:5, desc:'Increases this formation’s power when it attacks.'},
+  def:{name:'Defense', stat:'defense strength', step:5, desc:'Increases this formation’s power when it holds a territory.'},
+  vit:{name:'Vitality', stat:'battle losses', step:-4, desc:'Reduces this formation’s expected losses in battles it survives. A captured garrison still falls.'}
+};
+const MASTERY_KEYS = [...Object.keys(CORE_SKILLS), 'talent'];
+const tacticTalent = (name, tactic) => ({name, tactic, stat:'tactic attack', step:8, desc:`Adds attack strength to this formation during ${TACT[tactic].n}.`});
+const TALENTS = {
+  inf:tacticTalent('Flank cohesion','flank'), art:tacticTalent('Barrage rhythm','barrage'),
+  arm:tacticTalent('Spearhead cohesion','blitz'), air:tacticTalent('Wing coordination','air'),
+  nav:{name:'Coastal watch', terrain:'coast', stat:'coastal defense', step:8, desc:'Adds defense to this formation while it holds a coastal province.'}
+};
+const SUPPORT_TALENT = {name:'Apprenticeship', discount:true, stat:'recruit cost', step:-5, desc:'Lowers each resource cost to recruit this specialist, before rounding. Minimum 1 per resource.'};
+const talentFor = u => TALENTS[UNITS[u].cat] || SUPPORT_TALENT;
+const masterySkill = (u, k) => k === 'talent' ? talentFor(u) : CORE_SKILLS[k];
 const MATRIX = {
   frontal:{bunker:1, elastic:1, counter:1},
   blitz:{bunker:.8, elastic:1.4, counter:1.05},
@@ -771,6 +795,23 @@ function dawnBonuses(s){
     breakMult: ((c.bd_ocov || 0) > 0 || (c.bd_hier || 0) > 0) ? 0.5 : 1
   };
 }
+// Missing mastery in a v6 save means rank zero. Reading a rank never changes a save.
+function masteryRank(side, u, k){
+  const value = side?.mastery?.[u]?.[k];
+  return Number.isInteger(value) ? Math.max(0, Math.min(MASTERY_MAX, value)) : 0;
+}
+const masteryFactor = (side, u, k) => 1 + masteryRank(side, u, k) * masterySkill(u, k).step / 100;
+function masteryRequirement(s, team, u, k, rank){
+  const unitReq = UNITS[u].req;
+  const needs = req => `Requires ${TECH[req[0]].n} level ${req[1]}.`;
+  if(!hasTech(s, team, unitReq)) return needs(unitReq);
+  if(k === 'talent'){
+    const tactic = talentFor(u).tactic;
+    if(tactic && !hasTech(s, team, TACT[tactic].req)) return needs(TACT[tactic].req);
+    if(['atk','def'].some(stat => masteryRank(s.teams[team], u, stat) < rank)) return `Requires Attack and Defense rank ${rank} for this formation.`;
+  }
+  return '';
+}
 function unitCost(s, team, u){
   const U = UNITS[u], raw = U.cost, out = {};
   let mult = 1;
@@ -779,17 +820,26 @@ function unitCost(s, team, u){
     if(U.elite) mult *= 1.10;
     else if(U.basic) mult *= (1 - b.basicDisc);
   }
+  if(talentFor(u).discount) mult *= masteryFactor(s.teams[team], u, 'talent');
   for(const r in raw) out[r] = Math.max(1, Math.round(raw[r] * mult));
   return out;
 }
 const fortCost = level => ({steel:15 * (level + 1)});
-function researchCost(s, team, nx){
-  const raw = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) raw.oil = 12 * nx;
+function discountedResearch(s, team, raw){
   if(team === 'dawn'){
     const mult = 1 - dawnBonuses(s).resDisc;
     for(const r in raw) raw[r] = Math.max(1, Math.round(raw[r] * mult));
   }
   return raw;
+}
+function researchCost(s, team, nx){
+  const raw = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) raw.oil = 12 * nx;
+  return discountedResearch(s, team, raw);
+}
+function masteryCost(s, team, u, rank){
+  const grade = UNITS[u].pwr, raw = {gold:(5 + grade) * rank, steel:(8 + grade) * rank};
+  if(rank >= 2) raw.oil = (2 + Math.ceil(grade / 2)) * rank;
+  return discountedResearch(s, team, raw);
 }
 function annexCost(s, team, g){
   const base = 30 + 4 * g;
@@ -842,6 +892,7 @@ function checkWin(s, now){
 }
 const hasTech = (s, team, req) => !req || s.teams[team].tech[req[0]] >= req[1];
 const unitMult = (s, team, u) => (!UNITS[u] || team === 'neutral') ? 1 : 1 + 0.12 * (s.teams[team].tech[UNITS[u].cat] || 0);
+const trainedStat = (s, team, u, stat) => UNITS[u][stat] * unitMult(s, team, u) * masteryFactor(s.teams[team], u, stat);
 const RESOURCE_EPS = 1e-9;
 function afford(s, team, cost, k = 1){ return RK.every(r => (cost[r] || 0) * k <= s.teams[team].res[r] + RESOURCE_EPS); }
 function pay(s, team, cost, k = 1){ RK.forEach(r => s.teams[team].res[r] -= (cost[r] || 0) * k); }
@@ -871,7 +922,8 @@ function attackPower(s, team, grp, tactic, stance, rnd, now, fromId, toId){
   const urbanAtk = toId && TD[toId] && TD[toId].terr === 'urban';
   for(const u in grp){
     const U = UNITS[u]; if(!U || !grp[u]) continue;
-    let v = grp[u] * U.atk * unitMult(s, team, u);
+    let v = grp[u] * trainedStat(s, team, u, 'atk');
+    if(talentFor(u).tactic === tactic) v *= masteryFactor(s.teams[team], u, 'talent');
     if(team === 'reich' && U.cat === 'arm') v *= 1.1; // Iron discipline: Reich armor +10%
     if(u === 'rk_mp40' && urbanAtk) v *= 1.15; // MP 40 close-quarters urban specialist
     if(u === 'rk_nebel' && tactic === 'barrage') v *= 1.10; // Nebelwerfer shock barrage
@@ -891,7 +943,8 @@ function defPower(s, id, tactic, attacker, rnd, attGrp){
   const attAir = tactic === 'air' || (attGrp ? Object.keys(attGrp).some(u => attGrp[u] > 0 && UNITS[u] && UNITS[u].div === 'air') : false);
   for(const u in t.u){
     const U = UNITS[u]; if(!U || !t.u[u]) continue;
-    let v = t.u[u] * U.def * unitMult(s, t.o, u);
+    let v = t.u[u] * trainedStat(s, t.o, u, 'def');
+    if(talentFor(u).terrain === D.terr) v *= masteryFactor(s.teams[t.o], u, 'talent');
     if(u === 'rk_mg42') v *= 1.15; // MG 34/42 suppressive fire
     if(u === 'rk_pfau' && (attArmor || D.terr === 'urban')) v *= 1.25; // Panzerfaust anti-armor & urban defense
     if(u === 'rk_flak88' && (attArmor || attAir)) v *= 1.15; // 8.8 cm FlaK dual-purpose defense
@@ -910,7 +963,15 @@ function defPower(s, id, tactic, attacker, rnd, attGrp){
   if(D.cap) sum *= 1.15;
   return sum * rnd;
 }
-function applyLoss(u, f){ const out = {}, lost = {}; for(const k in u){ const raw = u[k] * f; let l = Math.floor(raw); if(Math.random() < raw - l) l++; l = Math.min(l, u[k]); if(u[k] - l > 0) out[k] = u[k] - l; if(l) lost[k] = l; } return {out, lost}; }
+function applyLoss(units, fraction, side){
+  const out = {}, lost = {};
+  for(const u in units){
+    const raw = units[u] * fraction * masteryFactor(side, u, 'vit');
+    let n = Math.floor(raw); if(Math.random() < raw - n) n++; n = Math.min(n, units[u]);
+    if(units[u] > n) out[u] = units[u] - n; if(n) lost[u] = n;
+  }
+  return {out, lost};
+}
 function validGroup(s, src, grp){ let n = 0; for(const u in grp){ const c = grp[u]; if(c < 0 || c > (s.terr[src].u[u] || 0)) return false; n += c; } return n > 0; }
 function seaOK(s, team, grp){
   const airCnt = Object.keys(grp).reduce((a, u) => a + (grp[u] && UNITS[u] && UNITS[u].div === 'air' ? grp[u] : 0), 0);
@@ -973,6 +1034,23 @@ A.research = (s, c, p) => {
   if(!afford(s, c.team, cost)) return {err:'Not enough resources.'}; pay(s, c.team, cost); T.tech[p.k] = nx;
   log(s, c.now, 'all', `${TEAMS[c.team].name} advances in ${TECH[p.k].n}.`); return {ok:`${TECH[p.k].n} level ${nx}: ${TECH[p.k].d[nx - 1]}.`};
 };
+A.mastery = (s, c, p) => {
+  const {unit:u, skill:k, rank} = p, officer = s.players[c.name];
+  if(!officer || officer.team !== c.team || !can(officer.role, 'research')) return {err:'Only your faction’s leader and chiefs can research.'};
+  if(!Object.hasOwn(UNITS, u) || UNITS[u].team !== c.team || !MASTERY_KEYS.includes(k)) return {err:'Unknown formation or ability for your faction.'};
+  const T = s.teams[c.team], current = masteryRank(T, u, k);
+  if(current === MASTERY_MAX) return {err:'This ability is already mastered.'};
+  // Purchase the rank shown, not a more expensive one if a teammate got there first.
+  if(rank !== current + 1) return {err:'The rank changed. Check the next upgrade.'};
+  const requirement = masteryRequirement(s, c.team, u, k, rank);
+  if(requirement) return {err:requirement};
+  const cost = masteryCost(s, c.team, u, rank);
+  if(!afford(s, c.team, cost)) return {err:'Not enough resources.'};
+  pay(s, c.team, cost);
+  T.mastery ||= {}; T.mastery[u] ||= {}; T.mastery[u][k] = rank;
+  const msg = `${UNITS[u].n}: ${masterySkill(u, k).name} rank ${rank}/${MASTERY_MAX}.`;
+  log(s, c.now, c.team, msg); return {ok:msg};
+};
 A.move = (s, c, p) => {
   const a = s.terr[p.from], b = s.terr[p.to]; if(!a || !b || a.o !== c.team || b.o !== c.team) return {err:'Both territories must be yours.'};
   const ln = adjInfo(p.from, p.to); if(!ln) return {err:'Those territories are not connected.'};
@@ -1000,13 +1078,13 @@ A.attack = (s, c, p) => {
   let msg, kind = 'battle';
   const wl = Math.min(0.6, Math.max(0.05, (1 - pw) * 0.75));
   if(win){
-    const surv = applyLoss(sent, wl); d.u = surv.out; d.o = c.team; d.f = Math.max(0, d.f - 1); d.st = 'bunker';
+    const surv = applyLoss(sent, wl, s.teams[c.team]); d.u = surv.out; d.o = c.team; d.f = Math.max(0, d.f - 1); d.st = 'bunker';
     s.teams[c.team].res.gold += 5; delete s.intel[OTHER(c.team)][p.to]; delete s.intel[c.team][p.to];
     msg = `${c.name} took ${T_(p.to)} from ${dname} using ${TACT[p.tactic].n}. Lost ${total(surv.lost)} of ${before.att}; ${before.def} defenders fell.`;
     if(TD[p.to].fcap) msg += ' The faction capital has fallen.';
     else if(TD[p.to].cap) msg += ' A national capital has fallen.';
   } else {
-    const al = applyLoss(sent, Math.min(0.9, 0.4 + 0.5 * pw)); const dl = applyLoss(d.u, wl);
+    const al = applyLoss(sent, Math.min(0.9, 0.4 + 0.5 * pw), s.teams[c.team]); const dl = applyLoss(d.u, wl, s.teams[d.o]);
     d.u = dl.out; Object.keys(al.out).forEach(u => a.u[u] = (a.u[u] || 0) + al.out[u]);
     msg = `${c.name}'s ${TACT[p.tactic].n} on ${T_(p.to)} was repulsed by ${dname}. Lost ${total(al.lost)} of ${before.att}; defenders lost ${total(dl.lost)}.`;
   }
@@ -1438,7 +1516,7 @@ async function act(name, payload){
   if(mode !== 'live' && mode !== 'local'){ if(name !== 'noop') toast('Wait for the room to sync before sending orders.'); return; }
   const store = db, live = mode === 'live';
   if(name === 'noop' && live && store.hasLiveState === false) return;
-  const pl = S.players[me.name]; const needs = {contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
+  const pl = S.players[me.name]; const needs = {contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
   if(name !== 'enlist' && name !== 'noop'){
     if(!pl || !authed()) return toast('Choose your post and enter its password first.', 'bad');
     const need = needs[name]; if(need === '*' ? pl.role !== 'leader' : !can(pl.role, need)) return toast(`Your role (${ROLES[pl.role]}) cannot do that.`, 'bad');
@@ -1518,7 +1596,7 @@ function announce(){
 }
 
 /* ============================ UI ============================ */
-let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, div:'all', gdiv:'all', tdiv:'all', view:null, filter:null, natQ:'', natReg:'all', curReg:'world'};
+let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, div:'all', gdiv:'all', tdiv:'all', researchBranch:'doctrine', masteryUnit:null, view:null, filter:null, natQ:'', natReg:'all', curReg:'world'};
 const tcol = o => o === 'reich' ? 'var(--reich)' : o === 'dawn' ? 'var(--dawn)' : 'var(--neutral)';
 const fmt = n => Math.floor(n + RESOURCE_EPS);
 function toast(msg, kind){ const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5200); while($('#toasts').children.length > 4) $('#toasts').firstChild.remove(); }
@@ -1529,6 +1607,10 @@ function priceAttrs(cost, n = 1, cp = 0){
 }
 function costHtml(cost){
   return `<span class="cost">${RK.filter(r => cost[r]).map(r => `<span ${priceAttrs({[r]:cost[r]})}>${cost[r]} ${r}</span>`).join(' ')}</span>`;
+}
+function troopStatsHtml(s, team, u){
+  const stat = k => Number(trainedStat(s, team, u, k).toFixed(2));
+  return `<span class="cost" title="Per unit, including doctrine and mastery; before situational bonuses">ATK ${stat('atk')} · DEF ${stat('def')}</span>`;
 }
 function recruitButtons(u, unlocked, cost, have){
   const max = UNITS[u].max;
@@ -1707,7 +1789,7 @@ function panelOrders(){
           const lock = ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`;
           const have = U.max ? TIDS.reduce((a, i) => a + (S.terr[i].o === team ? (S.terr[i].u[u] || 0) : 0), 0) : 0;
           const subHdr = (U.sub && U.sub !== lastSub) ? (lastSub = U.sub, `<div class="mut sm" style="margin-top:6px;font-weight:600;color:var(--ink);opacity:.75">${esc(U.sub)}</div>`) : '';
-          return subHdr + `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costHtml(cost)} <span class="cost">each</span> <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0">${recruitButtons(u, ok, cost, have)}</div></div>`;
+          return subHdr + `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costHtml(cost)} <span class="cost">each</span> ${troopStatsHtml(S, team, u)}</div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0">${recruitButtons(u, ok, cost, have)}</div></div>`;
         }).join('');
       }).join('');
       h += `<div class="card"><h3>Recruit here · 1 command point</h3>${divBarHtml('div', curDiv, team)}${rows}</div>`;
@@ -1766,7 +1848,8 @@ function panelTroops(){
         <div class="row sb"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`}</div><span class="mono sm">Deployed: <b>${have}</b>${U.max ? `/${U.max}` : ''}</span></div>
         <div class="sm mut" style="margin:3px 0">${esc(U.desc)}</div>
         ${U.abil ? `<div class="abil">Special Ability: ${esc(U.abil)}</div>` : ''}
-        <div class="row sb" style="margin-top:4px"><div>${costHtml(cost)} <span class="cost">each</span> <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${canRec ? `<div class="row">${recruitButtons(u, ok, cost, have)}</div>` : ''}</div>
+        <button class="btn sm" data-act="showmastery" data-u="${u}" aria-label="Research abilities for ${esc(U.n)}">Research abilities</button>
+        <div class="row sb" style="margin-top:4px"><div>${costHtml(cost)} <span class="cost">each</span> ${troopStatsHtml(S, team, u)}</div>${canRec ? `<div class="row">${recruitButtons(u, ok, cost, have)}</div>` : ''}</div>
       </div>`;
     }).join('') + `</div>`;
   }).join('');
@@ -1776,9 +1859,41 @@ function frontList(){
   const team = myTeam() || 'reich'; const rows = LINKS.filter(l => { const a = S.terr[l.a].o, b = S.terr[l.b].o; return a !== b && a !== 'neutral' && b !== 'neutral'; }).map(l => { const mineA = S.terr[l.a].o === team; const my = mineA ? l.a : l.b, en = mineA ? l.b : l.a; return `<div class="row sb"><span class="chip" data-act="sel" data-id="${my}">${esc(TD[my].name)}</span><span class="mut">faces</span><span class="chip" data-act="sel" data-id="${en}">${esc(TD[en].name)}</span></div>`; }).join('');
   return `<div class="card"><h3>Contact line</h3>${rows || '<div class="sm mut">The two powers do not touch yet. Take or buy a path across the neutral lands.</div>'}</div>`;
 }
+function masteryPanel(team, canResearch){
+  const roster = unitsFor(team), u = roster.includes(ui.masteryUnit) ? ui.masteryUnit : roster[0], U = UNITS[u], T = S.teams[team];
+  const cap = MASTERY_MAX * MASTERY_KEYS.length;
+  const totalRanks = id => MASTERY_KEYS.reduce((n, k) => n + masteryRank(T, id, k), 0);
+  const option = id => {
+    const ranks = totalRanks(id), locked = !hasTech(S, team, UNITS[id].req);
+    return `<option value="${id}" ${id === u ? 'selected' : ''}>${esc(UNITS[id].n)}${locked ? ' · locked' : ranks ? ` · ${ranks}/${cap}` : ''}</option>`;
+  };
+  const options = divsFor(team).filter(d => d !== 'all').map(d => `<optgroup label="${DIVS[d]}">${roster.filter(id => UNITS[id].div === d).map(option).join('')}</optgroup>`).join('');
+  const note = S.win ? 'The war has ended; research is closed.' : canResearch ? 'Attack and Defense unlock the role talent.' : 'Only your leader and chiefs of staff can buy ranks.';
+  const dossier = `<section class="card mastery-dossier"><label><span class="research-kicker">Formation dossier · ${TEAMS[team].short}</span>
+    <select data-chg="masteryunit" id="mastery-unit" aria-label="Choose a troop formation">${options}</select></label>
+    <div class="row sb">${troopStatsHtml(S, team, u)}<span class="mastery-rank">${totalRanks(u)}/${cap} ranks</span></div>
+    <div class="sm mut">Ranks apply immediately to deployed and future troops of this formation only. ${note}</div></section>`;
+  return dossier + MASTERY_KEYS.map(k => {
+    const skill = masterySkill(u, k), level = masteryRank(T, u, k), next = level + 1, maxed = level === MASTERY_MAX;
+    const bonus = n => { const v = skill.step * n; return (v > 0 ? '+' : '') + v + '%'; };
+    const reason = maxed ? '' : masteryRequirement(S, team, u, k, next);
+    const cost = maxed ? null : masteryCost(S, team, u, next);
+    const pips = Array.from({length:MASTERY_MAX}, (_, i) => `<i class="pip ${i < level ? 'on' : ''}"></i>`).join('');
+    return `<article class="card mastery-card${k === 'talent' ? ' mastery-talent' : ''}">
+      <div class="row sb"><span class="research-kicker">${k === 'talent' ? 'Role talent' : 'Core ability'}</span><span class="mastery-rank">Rank ${level}/${MASTERY_MAX}</span></div>
+      <div class="row sb"><h3>${skill.name}</h3><span aria-hidden="true">${pips}</span></div>
+      <div class="mastery-gain">${bonus(level)}${maxed ? '' : ` → <b>${bonus(next)}</b>`} ${skill.stat}</div>
+      <div class="sm mut">${skill.desc}</div>
+      ${reason ? `<div class="sm">${esc(reason)}</div>` : ''}
+      ${maxed ? '<b class="abil">Mastered</b>' : `<div class="row sb">${costHtml(cost)}<button class="btn sm" data-act="mastery" data-u="${u}" data-skill="${k}" data-rank="${next}" aria-label="Research ${skill.name} rank ${next} for ${esc(U.n)}" ${canResearch && !reason ? priceAttrs(cost) : 'disabled'}>Research rank ${next}</button></div>`}
+    </article>`;
+  }).join('');
+}
 function panelTech(){
   const team = myTeam() || 'reich', T = S.teams[team]; const can_ = can(myRole(), 'research') && myTeam() && !S.win;
-  return `<div class="sm mut">Research costs gold, steel and oil, and applies instantly. Leaders and chiefs of staff can buy it.</div><div class="card sm"><b style="color:${TEAMS[team].css}">${TEAMS[team].name}:</b> ${TEAMS[team].flavor}</div>` + TKEYS.map(k => {
+  const nav = `<div class="research-nav"><span class="research-kicker">${TEAMS[team].short} / Research bureau</span><div class="seg" role="group" aria-label="Research branches">${[['doctrine','Faction doctrines'],['mastery','Troop mastery']].map(([key, label]) => `<button data-act="researchbranch" data-k="${key}" class="${ui.researchBranch === key ? 'on' : ''}" aria-pressed="${ui.researchBranch === key}">${label}</button>`).join('')}</div></div>`;
+  if(ui.researchBranch === 'mastery') return nav + masteryPanel(team, can_);
+  return nav + `<div class="sm mut">Research costs gold, steel and oil, and applies instantly. Leaders and chiefs of staff can buy it.</div><div class="card sm"><b style="color:${TEAMS[team].css}">${TEAMS[team].name}:</b> ${TEAMS[team].flavor}</div>` + TKEYS.map(k => {
     const L = T.tech[k], nx = L + 1, cost = researchCost(S, team, nx);
     return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ ? priceAttrs(cost) : 'disabled'} data-act="research" data-k="${k}">Level ${nx} ${costHtml(cost)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
 }
@@ -1808,6 +1923,7 @@ function panelRules(){
   const hdr = Object.keys(STANCES).map(k => `<th>${STANCES[k]}</th>`).join('');
   return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>Capture the enemy capital: <b>Berlin</b> or <b>Bucharest</b>. Instant victory.</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of all victory points for 45 minutes.</li><li>Or leave the enemy without land.</li></ul></div>
   <div class="card sm"><h3>Resources and time</h3>Every province you own pays its resource every minute (Industry raises it). Command points refill one per 90 seconds, up to ${CPMAX}. Moves cost 1, recruiting 1, attacks 2, spies 2.</div>
+  <div class="card sm"><h3>Troop mastery</h3>Faction doctrines unlock formations. In Research → Troop mastery, choose a formation to improve its Attack, Defense or Vitality. Its role talent needs Attack and Defense at the rank you want to buy; tactic talents also need the matching doctrine. Each ability has five ranks and only affects the selected formation.</div>
   <div class="card sm"><h3>Attacking</h3>Pick a source province that borders the target, choose units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Water crossings need a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
   <div class="card sm"><h3>Tactics beat postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div><p class="mut" style="margin:6px 0 0">A tactic multiplies only the matching units. A defender's posture is hidden until you scout. Neutral lands have a fixed hidden posture.</p></div>
   <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Bucharest); ◆ marks national capitals.</div>
@@ -1905,7 +2021,19 @@ document.addEventListener('click', e => {
   if(a === 'clearsel'){ sel = null; renderAll(); return; }
   if(a === 'setreg'){ ui.natReg = d.r; renderPanel(); return; }
   if(a === 'reg'){ setRegion(d.reg); return; }
-  if(a === 'tab'){ tab = d.k; ui.confirmReset = false; renderAll(); return; }
+  if(a === 'tab'){
+    if(d.k === 'tech' && tab !== 'tech') $('#panel').scrollTop = 0; // Keep the research branch chooser in view.
+    tab = d.k; ui.confirmReset = false; renderAll(); return;
+  }
+  if(a === 'researchbranch'){
+    if(d.k !== 'doctrine' && d.k !== 'mastery') return;
+    ui.researchBranch = d.k; $('#panel').scrollTop = 0; renderPanel();
+    $(`[data-act="researchbranch"][data-k="${d.k}"]`)?.focus({preventScroll:true}); return;
+  }
+  if(a === 'showmastery' && unitsFor(myTeam() || 'reich').includes(d.u)){
+    tab = 'tech'; ui.researchBranch = 'mastery'; ui.masteryUnit = d.u; $('#panel').scrollTop = 0; renderAll();
+    $('#mastery-unit')?.focus(); return;
+  }
   if(a === 'setdiv'){ ui[d.kind || 'div'] = d.d; renderPanel(); return; }
   if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
   if(a === 'zoomreset'){ setRegion('world'); return; }
@@ -1990,6 +2118,7 @@ document.addEventListener('click', e => {
   if(a === 'fort') return act('fort', {tid:sel});
   if(a === 'stance') return act('stance', {tid:sel, st:d.k});
   if(a === 'research') return act('research', {k:d.k});
+  if(a === 'mastery') return act('mastery', {unit:d.u, skill:d.skill, rank:Number(d.rank)});
   if(a === 'spy' || a === 'honey' || a === 'sabotage' || a === 'decap' || a === 'annex') return act(a, {tid:sel});
   if(a === 'duty') return act('contribute', {kind:d.k});
   if(a === 'propose'){ if(d.type === 'ceasefire') return act('propose', {type:'ceasefire', mins:+d.mins}); return act('propose', {type:'trade', give:{r:ui.trade.give, n:+ui.trade.gn}, get:{r:ui.trade.get, n:+ui.trade.wn}}); }
@@ -2015,6 +2144,9 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-chg]'); if(!el) return; const k = el.dataset.chg;
+  if(k === 'masteryunit' && unitsFor(myTeam() || 'reich').includes(el.value)){
+    ui.masteryUnit = el.value; renderPanel(); $('#mastery-unit').focus({preventScroll:true}); return;
+  }
   if(k === 'give' || k === 'get') ui.trade[k] = el.value; else if(k === 'gn' || k === 'wn') ui.trade[k] = +el.value;
   else if(k === 'role') act('setrole', {name:el.dataset.n, role:el.value}); else if(k === 'title') act('setrole', {name:el.dataset.n, title:el.value});
 });
