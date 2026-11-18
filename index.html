@@ -59,6 +59,8 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 430px;
 #map.drag{cursor:grabbing}
 .mapctl{position:absolute;left:10px;top:10px;display:flex;flex-direction:column;gap:4px}
 .mapctl .btn{width:34px;padding:0;font-size:18px;line-height:1;background:var(--panel)}
+.mapnav{position:absolute;left:52px;top:10px;right:10px;display:flex;gap:4px;flex-wrap:wrap;pointer-events:none}
+.mapnav .btn{pointer-events:auto;background:color-mix(in srgb,var(--panel) 88%,transparent);font-family:var(--mono);font-size:11px;padding:3px 8px;min-height:26px}
 .legend{position:absolute;left:10px;bottom:10px;display:flex;gap:10px;flex-wrap:wrap;background:color-mix(in srgb,var(--bg) 82%,transparent);padding:5px 8px;border-radius:4px;font-size:11px;font-family:var(--mono)}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}
 .side{min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
@@ -143,11 +145,20 @@ input[type=text],input[type=number],select{background:var(--panel);border:1px so
   <div id="banner"></div>
   <main>
     <section class="mapwrap">
-      <svg id="map" role="img" aria-label="Strategic map of Europe, North Africa and the Near East"></svg>
+      <svg id="map" role="img" aria-label="Strategic world map"></svg>
       <div class="mapctl">
         <button class="btn" data-act="zoom" data-d="1" aria-label="Zoom in">+</button>
         <button class="btn" data-act="zoom" data-d="-1" aria-label="Zoom out">&minus;</button>
-        <button class="btn" data-act="zoomreset" aria-label="Reset view" style="font-size:13px">&#8634;</button>
+        <button class="btn" data-act="zoomreset" aria-label="World view" style="font-size:13px">&#8634;</button>
+      </div>
+      <div class="mapnav">
+        <button class="btn" data-act="reg" data-r="world">World</button>
+        <button class="btn" data-act="reg" data-r="americas">Americas</button>
+        <button class="btn" data-act="reg" data-r="europe">Europe</button>
+        <button class="btn" data-act="reg" data-r="africa">Africa</button>
+        <button class="btn" data-act="reg" data-r="mideast">Mid East</button>
+        <button class="btn" data-act="reg" data-r="asia">Asia</button>
+        <button class="btn" data-act="reg" data-r="oceania">Oceania</button>
       </div>
       <div class="legend" id="legend"></div>
     </section>
@@ -439,108 +450,171 @@ const DOM_SHARE = 0.6, DOM_MS = 45*60000;
 const SPY_MS = 30*60000;
 
 const RAW = `
-BER|Berlin|13.4|52.5|steel|3|5|urban|reich|16|1
+BER|Berlin|13.4|52.5|steel|3|5|urban|reich|16|2
 RUH|Ruhr|7.3|51.3|steel|4|2|urban|reich|9|0
 BAV|Bavaria|11.4|48.4|man|3|1|forest|reich|8|0
-AUS|Austria|14.6|47.5|oil|2|1|mountain|reich|7|0
-BOH|Bohemia|15.2|50.2|steel|3|1|forest|reich|7|0
+AUS|Vienna|16.4|48.2|oil|2|2|mountain|reich|7|1
+BOH|Prague|14.4|50.1|steel|3|2|forest|reich|7|1
 PRU|East Prussia|20.6|54.3|man|2|1|forest|reich|7|0
-POW|Warsaw|21|52.2|man|3|3|urban|reich|9|0
+POW|Warsaw|21|52.2|man|3|3|urban|reich|9|1
 POK|Kraków|20|49.9|steel|2|1|plain|reich|6|0
 POE|Bug River|24.3|51.6|oil|2|1|forest|reich|6|0
 FRN|Normandy|-0.7|49.3|gold|2|1|coast|reich|6|0
-PAR|Paris|2.4|48.8|gold|3|3|urban|reich|8|0
+PAR|Paris|2.4|48.8|gold|3|3|urban|reich|8|1
 LOR|Lorraine|6.2|48.6|man|2|1|plain|reich|6|0
-BUC|Bucharest|25.4|44.2|man|3|5|urban|dawn|16|1
+BUC|Bucharest|25.4|44.2|man|3|5|urban|dawn|16|2
 TRA|Transylvania|22.9|46.3|steel|2|1|mountain|dawn|9|0
 PLO|Ploiești Oil|26.9|45.8|oil|4|3|plain|dawn|9|0
-MOL|Moldavia|28.2|47.6|man|1|1|forest|dawn|6|0
-HUN|Hungary|19.2|47.1|man|2|1|plain|reich|6|0
-NIG|Nigeria|8|10|oil|3|1|forest|dawn|8|0
-CHA|Chad|17|15|gold|2|1|desert|dawn|8|0
-SUD|Sudan|30|15.5|man|2|1|desert|dawn|8|0
-CON|Congo|23|6|steel|3|1|forest|dawn|8|0
-LON|London|-0.4|51.6|gold|3|4|urban|neutral|18|0
+MOL|Chișinău|28.8|47.0|man|1|1|forest|dawn|6|1
+HUN|Budapest|19.0|47.5|man|2|2|plain|reich|6|1
+LON|London|-0.4|51.6|gold|3|4|urban|neutral|18|1
 MID|Midlands|-2.3|53|steel|3|1|urban|neutral|10|0
 SCO|Scotland|-4.2|56.6|man|1|1|mountain|neutral|6|0
-IRL|Ireland|-7.7|53.2|man|1|1|plain|neutral|4|0
+IRL|Dublin|-6.3|53.3|man|1|1|plain|neutral|4|1
+ICE|Reykjavik|-21.9|64.1|gold|1|1|coast|neutral|4|1
 LOI|Loire|-0.7|47.2|man|2|1|plain|neutral|8|0
 AQU|Aquitaine|-0.6|44.2|man|1|1|plain|neutral|6|0
 PRV|Provence|5.2|43.7|gold|2|2|coast|neutral|8|0
-LOW|Low Countries|4.7|51.4|gold|3|2|urban|neutral|8|0
-SWI|Switzerland|8.2|46.8|gold|2|1|mountain|neutral|6|0
-DEN|Denmark|9.6|56|man|1|1|plain|neutral|4|0
-OSL|Oslo|9.8|60|steel|2|1|mountain|reich|6|0
+LOW|Amsterdam|5.2|52.5|gold|3|2|urban|neutral|8|1
+BRU|Brussels|4.4|50.5|steel|2|2|urban|neutral|7|1
+SWI|Bern|7.4|46.9|gold|2|2|mountain|neutral|6|1
+DEN|Copenhagen|11.5|55.8|man|1|2|plain|neutral|4|1
+OSL|Oslo|9.8|60|steel|2|2|mountain|reich|6|1
 NAR|Narvik|16.5|67.8|steel|3|2|mountain|reich|5|0
-SWE|Sweden|15.5|59.5|steel|3|1|forest|neutral|8|0
-FIN|Finland|26|63|man|1|1|forest|neutral|8|0
+SWE|Stockholm|18.1|59.3|steel|3|2|forest|neutral|8|1
+FIN|Helsinki|24.9|60.2|man|2|2|forest|neutral|8|1
 NSP|Northern Spain|-5.5|43.1|man|2|1|mountain|reich|5|0
 ZAR|Aragon|-0.9|41.6|man|2|1|plain|reich|5|0
-SPA|Madrid|-3.7|40.4|man|2|2|plain|neutral|12|0
-AND|Andalusia|-4.8|37.6|gold|2|1|plain|neutral|7|0
-GIB|Gibraltar|-5.3|36.4|steel|1|2|coast|neutral|6|0
-POR|Portugal|-8|39|gold|1|1|coast|neutral|4|0
-NIT|Northern Italy|10.8|45|steel|3|1|plain|neutral|9|0
-ROM|Rome|12.6|41.8|gold|2|3|urban|neutral|10|0
-SIT|Southern Italy|16.3|40.6|man|1|1|plain|neutral|5|0
+SPA|Madrid|-3.7|40.4|man|2|3|plain|neutral|12|1
+AND|Seville|-4.3|38.0|gold|2|1|plain|neutral|7|0
+GIB|Gibraltar|-5.4|35.9|steel|1|2|coast|neutral|6|0
+POR|Lisbon|-9.1|38.7|gold|2|2|coast|neutral|5|1
+NIT|Milan|9.2|45.5|steel|3|1|plain|neutral|9|0
+ROM|Rome|12.6|41.8|gold|2|3|urban|neutral|10|1
+SIT|Naples|16.3|40.6|man|1|1|plain|neutral|5|0
 SIC|Sicily|14|37.5|gold|1|1|coast|neutral|4|0
-YUG|Yugoslavia|20.4|44.4|steel|2|1|mountain|neutral|8|0
-GRE|Greece|22.3|39.3|gold|1|1|mountain|neutral|6|0
-BUL|Bulgaria|25|42|man|2|1|mountain|neutral|6|0
-BAL|Baltic States|24.5|57|man|1|1|forest|neutral|8|0
+YUG|Belgrade|20.4|44.4|steel|2|2|mountain|neutral|8|1
+GRE|Athens|23.7|38.0|gold|2|2|mountain|neutral|6|1
+BUL|Sofia|23.3|42.7|man|2|2|mountain|neutral|6|1
+BAL|Riga|24.1|56.9|man|2|2|forest|neutral|8|1
 LEN|Leningrad|30.3|59.9|steel|3|3|urban|neutral|16|0
-MIN|Minsk|27.6|53.6|man|2|1|forest|neutral|12|0
-KYV|Kyiv|30.5|50.4|man|3|2|plain|neutral|14|0
+MIN|Minsk|27.6|53.6|man|2|2|forest|neutral|12|1
+KYV|Kyiv|30.5|50.4|man|3|2|plain|neutral|14|1
 CRI|Crimea|34.6|45.2|gold|1|1|coast|neutral|8|0
-MOS|Moscow|37.6|55.7|steel|4|5|urban|neutral|25|0
+MOS|Moscow|37.6|55.7|steel|4|5|urban|neutral|25|1
 DON|Don Basin|39.5|48.6|steel|2|1|plain|neutral|10|0
-VOL|Volga|45|52|oil|2|2|plain|neutral|12|0
-CAU|Caucasus|44|42.5|oil|4|3|mountain|neutral|12|0
-ANK|Ankara|33|39.6|man|2|2|mountain|neutral|12|0
-LEV|Levant|36.5|34.6|gold|2|1|desert|neutral|6|0
-IRQ|Iraq|44.2|33|oil|4|2|desert|neutral|8|0
-PER|Persia|52|34|oil|3|2|desert|neutral|8|0
-ARA|Arabia|45|24|oil|3|1|desert|neutral|5|0
-MOR|Morocco|-6|32.5|gold|1|1|desert|neutral|5|0
-ALG|Algeria|3|34|oil|2|1|desert|neutral|6|0
-TUN|Tunisia|9.6|34.2|gold|1|1|coast|neutral|4|0
-LIB|Libya|17.5|29.5|oil|3|1|desert|neutral|6|0
-EGY|Egypt|30.3|27.5|gold|3|3|desert|dawn|9|0
-ETH|Ethiopia|39|9|man|2|1|mountain|dawn|7|0
-MAL|Mali|-3|15|gold|2|1|desert|neutral|5|0
-SAF|South Africa|28|-26|gold|4|3|plain|neutral|10|0
-AFG|Afghanistan|66|34|man|2|1|mountain|neutral|6|0
-TKM|Turkestan|64|40|oil|2|1|desert|neutral|5|0
-KAZ|Kazakhstan|68|48|man|1|1|plain|neutral|5|0
-XIN|Xinjiang|85|43|man|1|1|desert|neutral|4|0
-DEL|Delhi|77.2|28.6|man|3|3|urban|dawn|10|0
-BOM|Bombay|72.8|19|gold|3|2|coast|dawn|8|0
-CAL|Bengal|88.4|22.6|gold|3|2|urban|dawn|8|0
-MAD|Madras|80.2|13|man|2|1|coast|neutral|6|0
-BUR|Burma|96|21|oil|2|1|forest|neutral|5|0
+VOL|Stalingrad|44.5|48.7|oil|3|3|plain|neutral|14|0
+CAU|Tbilisi|44.8|41.7|oil|4|3|mountain|neutral|12|1
+IST|Istanbul|29.0|41.0|gold|3|2|coast|neutral|8|0
+ANK|Ankara|32.9|39.9|man|2|3|mountain|neutral|12|1
+LEV|Damascus|36.8|34.5|gold|2|2|desert|neutral|6|1
+JER|Jerusalem|35.2|31.8|gold|2|2|desert|neutral|6|1
+IRQ|Baghdad|44.4|33.3|oil|4|3|desert|neutral|8|1
+PER|Tehran|51.4|35.7|oil|3|3|desert|neutral|8|1
+ARA|Riyadh|46.7|24.7|oil|4|2|desert|neutral|6|1
+YEM|Sana'a|44.2|15.4|oil|2|1|coast|neutral|5|1
+OMA|Muscat|58.4|23.6|oil|2|2|coast|neutral|5|1
+MOR|Rabat|-6.8|34.0|gold|2|2|coast|neutral|5|1
+ALG|Algiers|3.1|36.8|oil|2|2|coast|neutral|6|1
+TUN|Tunis|10.2|36.8|gold|1|2|coast|neutral|4|1
+LIB|Tripoli|13.2|32.9|oil|3|2|coast|neutral|6|1
+EGY|Cairo|31.2|30.0|gold|3|3|desert|dawn|10|1
+SEN|Dakar|-17.4|14.7|gold|2|1|coast|neutral|5|1
+MAL|Bamako|-8.0|12.6|gold|2|1|desert|neutral|5|1
+GHA|Accra|-0.2|5.6|gold|2|1|coast|neutral|5|1
+NIG|Nigeria|7.5|9.1|oil|3|2|forest|dawn|8|1
+CHA|N'Djamena|15.0|12.1|gold|2|1|desert|dawn|8|1
+SUD|Khartoum|32.5|15.6|man|2|2|desert|dawn|8|1
+ETH|Addis Ababa|38.7|9.0|man|2|2|mountain|dawn|7|1
+CON|Kinshasa|15.3|-4.3|steel|3|2|forest|dawn|8|1
+KEN|Nairobi|36.8|-1.3|man|2|2|plain|neutral|6|1
+TAN|Dodoma|35.7|-6.2|man|2|1|plain|neutral|5|1
+ANG|Luanda|13.2|-8.8|oil|2|2|coast|neutral|6|1
+MOZ|Maputo|34.8|-19.8|man|2|1|coast|neutral|5|1
+MDG|Antananarivo|47.5|-18.9|man|2|2|coast|neutral|5|1
+SAF|Pretoria|28.2|-25.7|gold|4|3|plain|neutral|10|1
+CPT|Cape Town|18.4|-33.9|gold|3|2|coast|neutral|7|0
+AFG|Kabul|69.2|34.5|man|2|2|mountain|neutral|6|1
+TKM|Tashkent|69.2|41.3|oil|2|2|desert|neutral|5|1
+KAZ|Astana|71.4|51.1|man|2|2|plain|neutral|6|1
+OMS|Omsk|73.4|55.0|steel|2|2|plain|neutral|6|0
+NOV|Novosibirsk|82.9|55.0|steel|3|2|forest|neutral|7|0
+IRK|Irkutsk|104.3|52.3|oil|2|2|forest|neutral|6|0
+VLA|Vladivostok|131.9|43.1|steel|3|2|coast|neutral|8|0
+XIN|Xinjiang|87.6|43.8|man|1|1|desert|neutral|4|0
+KAR|Karachi|67.0|24.9|man|2|2|coast|neutral|6|0
+LAH|Islamabad|73.0|33.7|man|2|2|plain|neutral|7|1
+DEL|New Delhi|77.2|28.6|man|3|3|urban|dawn|10|1
+NEP|Kathmandu|85.3|27.7|man|1|1|mountain|neutral|4|1
+BOM|Mumbai|72.8|19.1|gold|3|2|coast|dawn|8|0
+CAL|Calcutta|88.4|22.6|gold|3|2|urban|dawn|8|0
+MAD|Chennai|80.2|13.1|man|2|1|coast|neutral|6|0
+CEY|Colombo|79.9|6.9|gold|2|1|coast|neutral|4|1
+BUR|Rangoon|96.2|16.8|oil|2|2|forest|neutral|5|1
+THA|Bangkok|100.5|13.7|man|2|2|coast|neutral|6|1
+VIE|Hanoi|105.8|21.0|man|2|2|forest|neutral|6|1
+SIN|Singapore|103.8|1.3|gold|3|3|coast|neutral|8|1
+DEI|Jakarta|106.8|-6.2|oil|3|2|forest|neutral|7|1
+BOR|Borneo|115.0|0.5|oil|2|2|forest|neutral|5|0
+PHL|Manila|121.0|14.6|gold|2|2|coast|neutral|7|1
 CAN|Canton|113.3|23.1|gold|3|2|coast|dawn|8|0
+TAI|Taipei|121.5|25.0|gold|2|2|coast|neutral|6|1
 WUH|Chongqing|106.5|29.5|man|2|2|mountain|neutral|10|0
 SHA|Shanghai|121.5|31.2|gold|3|3|urban|neutral|14|0
-PEK|Beijing|116.4|39.9|man|3|3|urban|neutral|14|0
-MAN|Manchuria|126|45|steel|3|2|plain|neutral|10|0
-MON|Mongolia|105|47|man|1|1|desert|neutral|5|0
-TOK|Tokyo|139.7|35.7|steel|4|4|urban|neutral|20|0
-SIN|Singapore|103.8|1.3|gold|3|3|coast|neutral|8|0
-DEI|East Indies|110|-7|oil|3|2|forest|neutral|6|0
-AUZ|Australia|134|-25|man|2|2|desert|neutral|8|0
-VEN|Venezuela|-66|8|oil|4|2|forest|neutral|6|0
-NEB|Brazil North|-35|-6|man|2|1|coast|neutral|6|0
-RIO|Rio|-43.2|-22.9|gold|3|2|urban|dawn|8|0
-ARG|Buenos Aires|-58.4|-34.6|man|3|2|urban|dawn|8|0
-CHI|Chile|-71|-33|steel|2|1|mountain|neutral|6|0
-BMT|Bermuda Triangle|-65|25|gold|3|1|coast|dawn|5|0`;
-const W = 3584, H = 1776;
-const proj = (lon, lat) => [(lon + 82) * 16, (71 - lat) * 16];
+PEK|Beijing|116.4|39.9|man|3|4|urban|neutral|14|1
+MON|Ulaanbaatar|106.9|47.9|man|1|2|desert|neutral|5|1
+MAN|Manchuria|126.6|45.8|steel|3|2|plain|neutral|10|0
+KOR|Seoul|127.0|37.6|steel|3|2|mountain|neutral|9|1
+OSA|Osaka|135.5|34.7|steel|3|2|urban|neutral|10|0
+TOK|Tokyo|139.7|35.7|steel|4|4|urban|neutral|20|1
+PTH|Perth|115.9|-31.9|steel|2|2|coast|neutral|6|0
+AUZ|Canberra|149.1|-35.3|man|3|3|plain|neutral|9|1
+POM|Port Moresby|147.2|-9.4|man|2|2|coast|neutral|5|1
+NZL|Wellington|174.8|-41.3|man|2|2|coast|neutral|6|1
+SUV|Suva|177.5|-18.1|gold|1|2|coast|neutral|4|1
+HNL|Honolulu|-157.8|21.3|gold|2|2|coast|neutral|5|1
+ALA|Alaska|-149.9|61.2|oil|2|1|mountain|neutral|6|0
+VAN|Vancouver|-123.1|49.3|steel|2|1|forest|neutral|6|0
+WPG|Winnipeg|-97.1|49.9|man|2|1|plain|neutral|6|0
+OTT|Ottawa|-75.7|45.4|steel|3|3|forest|neutral|10|1
+QUE|Quebec|-71.2|46.8|man|2|1|forest|neutral|6|0
+SFO|San Francisco|-122.4|37.8|gold|3|2|coast|neutral|8|0
+LAX|Los Angeles|-118.2|34.0|oil|4|3|coast|neutral|10|0
+USN|Chicago|-87.6|41.9|steel|4|2|urban|neutral|10|0
+TEX|Texas|-95.4|29.8|oil|4|2|plain|neutral|8|0
+WDC|Washington D.C.|-77.0|38.9|gold|4|4|urban|neutral|14|1
+NYC|New York|-74.0|40.7|gold|4|3|urban|neutral|12|0
+MEX|Mexico City|-99.1|19.4|man|3|3|mountain|neutral|10|1
+CUB|Havana|-82.4|23.1|gold|2|2|coast|neutral|6|1
+PAN|Panama|-79.5|9.0|gold|2|2|coast|neutral|5|1
+BMT|Bermuda Triangle|-65|25|gold|3|1|coast|dawn|5|0
+COL|Bogotá|-74.1|4.7|oil|2|2|mountain|neutral|6|1
+VEN|Caracas|-66.9|10.5|oil|4|2|forest|neutral|6|1
+PER|Lima|-77.0|-12.0|steel|2|2|mountain|neutral|6|1
+BOL|La Paz|-68.1|-16.5|steel|2|1|mountain|neutral|5|1
+NEB|Brazil North|-38.5|-12.9|man|2|1|coast|neutral|6|0
+BSB|Brasília|-47.9|-15.8|man|3|2|forest|dawn|8|1
+RIO|Rio de Janeiro|-43.2|-22.9|gold|3|2|urban|dawn|8|0
+ASU|Asunción|-57.6|-25.3|man|2|1|plain|neutral|5|1
+ARG|Buenos Aires|-58.4|-34.6|man|3|3|urban|dawn|8|1
+CHI|Santiago|-70.7|-33.4|steel|2|2|mountain|neutral|6|1`;
+const W = 5600, H = 2048;
+const proj = (lon, lat) => [(lon + 170) * 16, (73 - lat) * 16];
+const regionOf = (lon, lat) => {
+  if(lon < -154 && lat < 30) return 'Oceania';
+  if(lon < -30) return 'Americas';
+  if(lon >= 110 && lat < -8) return 'Oceania';
+  if((lon >= 34 && lon < 63 && lat >= 12 && lat <= 41) || (lon >= 31 && lon < 35 && lat >= 36 && lat <= 42)) return 'Middle East';
+  if(lat >= 35 && lon >= -25 && lon < 50) return 'Europe';
+  if(lat < 36 && lon >= -20 && lon < 34 && lat > -36) return 'Africa';
+  if(lon >= 34 && lon < 52 && lat < 12) return 'Africa';
+  return 'Asia';
+};
 const TD = {}; const TIDS = [];
 RAW.trim().split('\n').forEach(l => {
   const [id, name, lon, lat, res, amt, vp, terr, owner, g, cap] = l.split('|');
   const [x, y] = proj(+lon, +lat);
-  TD[id] = {id, name, x, y, res, amt:+amt, vp:+vp, terr, owner0:owner, g:+g, cap:cap === '1'};
+  TD[id] = {id, name, lon:+lon, lat:+lat, x, y, res, amt:+amt, vp:+vp, terr, owner0:owner, g:+g, cap:cap === '1' || cap === '2', fcap:cap === '2', reg:regionOf(+lon, +lat)};
   TIDS.push(id);
 });
 /* land polygons (lon,lat), rough on purpose */
@@ -553,28 +627,40 @@ const LAND = [
  [-10,52,-6,52,-6,54.5,-8,55.2,-10,54],
  [12.5,37.8,15.5,38.2,15,36.7],
  [32.5,45.5,33.5,46.2,35.5,45.3,36.6,45.4,35.5,44.8,34.5,44.4,33.5,44.6],
- [56,71,142,71,142,54,140,52,141,48,138,46,135,43,131,42.5,129.5,41,129,36,126.5,34.5,125.5,38,124.5,40,121.5,39,122,40.5,121,41,119,39,118,38,119,37.2,122.5,37,121,36.5,119.5,35,121,32,122,30,120,27,117,23.5,114,22.3,110.5,21,108,21.5,106.5,20,108,16,109,12,105,8.7,103,10,100.5,13,100,8,103.5,1.4,101,3,98.5,8,98.5,12,97.5,16.5,94.5,16,94,19,92,21,90.5,22.5,87,21.5,84.5,19,80,15.5,80.3,13,79.8,10.3,77.5,8,76,10,74.5,14,72.8,19,72.5,21,70.5,21,68.5,23.5,66.5,25.4,61.5,25.2,57.5,25.8,56.5,27,54,26.5,51.5,27.8,50,30,48.5,30,58,32],
+ [56,71,175,67,168,60,158,52,142,54,140,52,141,48,138,46,135,43,131,42.5,129.5,41,129,36,126.5,34.5,125.5,38,124.5,40,121.5,39,122,40.5,121,41,119,39,118,38,119,37.2,122.5,37,121,36.5,119.5,35,121,32,122,30,120,27,117,23.5,114,22.3,110.5,21,108,21.5,106.5,20,108,16,109,12,105,8.7,103,10,100.5,13,100,8,103.5,1.4,101,3,98.5,8,98.5,12,97.5,16.5,94.5,16,94,19,92,21,90.5,22.5,87,21.5,84.5,19,80,15.5,80.3,13,79.8,10.3,77.5,8,76,10,74.5,14,72.8,19,72.5,21,70.5,21,68.5,23.5,66.5,25.4,61.5,25.2,57.5,25.8,56.5,27,54,26.5,51.5,27.8,50,30,48.5,30,58,32],
  [130,31,131,33.5,135,34,137,34.5,140,35,141,38,142,40,141.5,41.5,140,40,139.5,38,136.5,36.8,132,35.5,130,33.5],
  [95,5.5,98,4,104,-1.5,106,-5.8,104,-5.5,100,-1.5,95.5,3],
  [105.5,-6.5,114.5,-7.7,114,-8.7,106,-7.8],
  [109,1.5,111,2,117,7,119,5,117.5,1,116,-3.8,111,-3.5,109,-1],
  [114,-22,122,-18,129,-14.8,132,-12,136.5,-12,136,-15,140,-17.5,142.5,-10.7,145,-15,146.5,-19,153,-26,153,-31,150,-37,146,-39,141,-38,138,-35,135,-34.7,131,-31.5,124,-33.5,115,-34.5,115,-31,113.5,-26],
- [-77,8,-72,12,-62,10.5,-52,5,-50,0,-44,-2.5,-35,-5.5,-35,-9,-39,-13,-39.5,-18,-41,-22,-48,-25.5,-48.5,-28,-53,-34,-58,-34.5,-57,-37,-62,-39,-65,-42,-63.5,-47,-68,-50,-69,-54,-73,-52,-74,-45,-73.5,-37,-71.5,-30,-70.3,-18,-76,-14,-81,-6,-80,-1,-78.5,2,-77.5,7]
+ [-77,8,-72,12,-62,10.5,-52,5,-50,0,-44,-2.5,-35,-5.5,-35,-9,-39,-13,-39.5,-18,-41,-22,-48,-25.5,-48.5,-28,-53,-34,-58,-34.5,-57,-37,-62,-39,-65,-42,-63.5,-47,-68,-50,-69,-54,-73,-52,-74,-45,-73.5,-37,-71.5,-30,-70.3,-18,-76,-14,-81,-6,-80,-1,-78.5,2,-77.5,7],
+ [-166,60,-166,66,-156,71,-135,70,-115,69,-95,68,-82,63,-78,53,-70,58,-60,52,-55,52,-62,45,-70,42,-75,36,-80,31,-80,25,-83,26,-82,30,-90,29,-97,26,-96,20,-90,21,-87,21,-88,16,-83,13,-83,9,-77,8,-80,7,-85,10,-92,14,-105,19,-110,24,-117,32,-122,37,-124,42,-124,48,-132,54,-140,59,-152,59,-160,56],
+ [-85,22,-80,23,-74,20,-77,19.8,-82,21],
+ [-24,65,-21,66.4,-14,65.5,-15,63.8,-22,63.9],
+ [-52,60,-43,60,-32,68,-20,72,-55,72,-54,66],
+ [44,-25,47,-25,50,-15,49,-12,44.5,-16],
+ [79.8,9.5,81.8,7.8,80.8,5.9,79.7,7.5],
+ [120,22,122,25,121,25.2,120.2,23],
+ [120,18.2,122.3,18.2,126.2,8,124,6,120,12],
+ [131,-2,141,-2.5,150,-10,143,-9,135,-4],
+ [166.5,-46.5,172,-43.5,178,-37.5,174,-35,172,-39,167,-45],
+ [140,41.5,145.5,44,144,45.5,140.5,43.5]
 ];
 const WATER = [
  [28,41.8,28.5,43.5,30,45.5,33,46,35,45,37.5,47,38,45.5,40,43.5,41.5,41.7,38,41,33,42,29.5,41.3],
- [47,45,50,46.5,53,45,53.5,41,54,38,51,36.8,49,38,49,40,47.5,42.5]
+ [47,45,50,46.5,53,45,53.5,41,54,38,51,36.8,49,38,49,40,47.5,42.5],
+ [-94,63,-80,63,-78,52,-85,51,-94,58]
 ];
 const CRIMEA = LAND[7];
 function inPoly(lon, lat, p){let c = false; for(let i = 0, j = p.length - 2; i < p.length; j = i, i += 2){const xi = p[i], yi = p[i+1], xj = p[j], yj = p[j+1]; if((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) c = !c;} return c;}
 function isLand(lon, lat){ if(inPoly(lon, lat, CRIMEA)) return true; if(!LAND.some(p => inPoly(lon, lat, p))) return false; return !WATER.some(p => inPoly(lon, lat, p)); }
-const unproj = (x, y) => [x / 16 - 82, 71 - y / 16];
+const unproj = (x, y) => [x / 16 - 170, 73 - y / 16];
 /* links: Gabriel graph, sea if the midpoint is water */
 const LINKS = []; const ADJ = {}; TIDS.forEach(i => ADJ[i] = []);
 (() => {
   for(let a = 0; a < TIDS.length; a++) for(let b = a + 1; b < TIDS.length; b++){
     const A = TD[TIDS[a]], B = TD[TIDS[b]];
-    const d2 = (A.x-B.x)**2 + (A.y-B.y)**2; if(d2 > 330*330) continue;
+    const d2 = (A.x-B.x)**2 + (A.y-B.y)**2; if(d2 > 360*360) continue;
     const mx = (A.x+B.x)/2, my = (A.y+B.y)/2; let ok = true;
     for(const k of TIDS){ if(k === A.id || k === B.id) continue; const C = TD[k]; if((C.x-mx)**2 + (C.y-my)**2 < d2/4){ok = false; break;} }
     if(!ok) continue;
@@ -584,10 +670,10 @@ const LINKS = []; const ADJ = {}; TIDS.forEach(i => ADJ[i] = []);
   }
   const same = (l, a, b) => (l.a === a && l.b === b) || (l.a === b && l.b === a);
   [['BER','SWE'],['GIB','ALG'],['NSP','IRL']].forEach(([a, b]) => { const i = LINKS.findIndex(l => same(l, a, b)); if(i >= 0) LINKS.splice(i, 1); });
-  [['BER','DEN'],['NEB','RIO'],['CAL','MAD']].forEach(([a, b]) => { const l = LINKS.find(l => same(l, a, b)); if(l) l.sea = false; });
-  [['BER','POW'],['BER','PRU'],['BAV','AUS'],['LOW','RUH'],['RUH','LOR'],['PAR','LOR']].forEach(([a, b]) => { if(!LINKS.some(l => same(l, a, b))) LINKS.push({a, b, sea:false}); });
-  [['VEN','NEB'],['GIB','AND'],['AND','SPA'],['NSP','ZAR']].forEach(([a, b]) => { if(!LINKS.some(l => same(l, a, b))) LINKS.push({a, b, sea:false}); });
-  [['MAL','NEB'],['SAF','ARG'],['ARA','BOM'],['SIN','DEI'],['CAN','SIN'],['MAD','SIN'],['ETH','ARA'],['AUZ','DEI'],['BMT','VEN'],['BMT','NEB'],['GIB','MOR'],['BMT','MAL']].forEach(([a, b]) => { const l = LINKS.find(l => same(l, a, b)); if(l) l.sea = true; else LINKS.push({a, b, sea:true}); });
+  [['BER','DEN'],['NEB','RIO'],['CAL','MAD'],['VAN','ALA'],['MEX','PAN'],['PAN','COL']].forEach(([a, b]) => { const l = LINKS.find(l => same(l, a, b)); if(l) l.sea = false; });
+  [['BER','POW'],['BER','PRU'],['BAV','AUS'],['LOW','RUH'],['BRU','RUH'],['BRU','LOR'],['PAR','LOR'],['LOW','BRU']].forEach(([a, b]) => { if(!LINKS.some(l => same(l, a, b))) LINKS.push({a, b, sea:false}); });
+  [['VEN','NEB'],['GIB','AND'],['AND','SPA'],['NSP','ZAR'],['WDC','NYC'],['OTT','QUE'],['SFO','LAX'],['OMS','NOV'],['NOV','IRK'],['IRK','VLA'],['MEX','TEX'],['USN','WPG']].forEach(([a, b]) => { if(!LINKS.some(l => same(l, a, b))) LINKS.push({a, b, sea:false}); });
+  [['MAL','NEB'],['SAF','ARG'],['ARA','BOM'],['SIN','DEI'],['CAN','SIN'],['MAD','SIN'],['ETH','ARA'],['AUZ','DEI'],['BMT','VEN'],['BMT','NEB'],['GIB','MOR'],['BMT','MAL'],['ICE','SCO'],['ICE','NAR'],['ICE','QUE'],['BMT','NYC'],['BMT','WDC'],['BMT','CUB'],['BMT','POR'],['CUB','MEX'],['CUB','TEX'],['CUB','VEN'],['ALA','VLA'],['SFO','TOK'],['LAX','NZL'],['AUZ','NZL'],['PTH','DEI'],['PHL','TAI'],['PHL','BOR'],['BOR','DEI'],['KOR','OSA'],['MDG','MOZ'],['POM','BOR'],['POM','AUZ'],['POM','SUV'],['SUV','NZL'],['SUV','HNL'],['HNL','SFO'],['HNL','LAX'],['HNL','TOK']].forEach(([a, b]) => { const l = LINKS.find(l => same(l, a, b)); if(l) l.sea = true; else LINKS.push({a, b, sea:true}); });
   LINKS.forEach(l => { ADJ[l.a].push({id:l.b, sea:l.sea}); ADJ[l.b].push({id:l.a, sea:l.sea}); });
 })();
 const adjInfo = (a, b) => ADJ[a].find(n => n.id === b);
@@ -629,7 +715,8 @@ function startUnits(t){
       bd_oath:Math.max(1, Math.floor(g * 0.2))
     };
     if(t.terr === 'coast') u.bd_sail = 1;
-    if(t.cap){ u.bd_mant = 2; u.bd_rave = 2; u.bd_obsv = 1; u.bd_whis = 1; u.bd_fact = 1; }
+    if(t.fcap){ u.bd_mant = 2; u.bd_rave = 2; u.bd_obsv = 1; u.bd_whis = 1; u.bd_fact = 1; }
+    else if(t.cap){ u.bd_mant = 1; u.bd_rave = 1; }
     return u;
   }
   const u = {
@@ -643,18 +730,19 @@ function startUnits(t){
     arm:Math.floor(g / 8)
   };
   if(t.terr === 'coast') u.rk_mboat = 1;
-  if(t.cap){ u.air = 3; u.rk_he111 = 1; u.rk_bf110 = 1; u.bmb = 1; }
+  if(t.fcap){ u.air = 3; u.rk_he111 = 1; u.rk_bf110 = 1; u.bmb = 1; }
+  else if(t.cap){ u.air = 1; }
   Object.keys(u).forEach(k => { if(!u[k]) delete u[k]; });
   return u;
 }
-const GAME_V = 5;
+const GAME_V = 6;
 function newGame(now){
   const s = {v:GAME_V, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
-  TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.cap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
+  TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.fcap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
   s.teams.reich = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:0, arm:1, air:1, nav:0, intel:0, ind:0}};
   s.teams.dawn = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:1, arm:0, air:0, nav:0, intel:1, ind:0}};
   ROSTER.forEach(([team, name, role, title]) => s.players[name] = {team, role, title, cd:0});
-  log(s, now, 'all', 'The war begins. Poland, Norway and Hungary have fallen, Austria is secured, and the Reich presses into France and northern Spain. The Black Dawn holds Romania, Egypt, Ethiopia, Nigeria, India, the Bermuda Triangle and the southern Americas.', 'sys');
+  log(s, now, 'all', 'The war begins across the globe. Use the region buttons (World, Americas, Europe, Africa, Mid East, Asia, Oceania) or the nation directory to reach every front.', 'sys');
   return s;
 }
 function log(s, now, vis, msg, kind, extra){ s.log.unshift(Object.assign({t:now, vis, msg, kind:kind || 'info'}, extra || {})); if(s.log.length > 80) s.log.length = 80; }
@@ -913,7 +1001,8 @@ A.attack = (s, c, p) => {
     const surv = applyLoss(sent, wl); d.u = surv.out; d.o = c.team; d.f = Math.max(0, d.f - 1); d.st = 'bunker';
     s.teams[c.team].res.gold += 5; delete s.intel[OTHER(c.team)][p.to]; delete s.intel[c.team][p.to];
     msg = `${c.name} took ${T_(p.to)} from ${dname} using ${TACT[p.tactic].n}. Lost ${total(surv.lost)} of ${before.att}; ${before.def} defenders fell.`;
-    if(TD[p.to].cap) msg += ' The capital has fallen.';
+    if(TD[p.to].fcap) msg += ' The faction capital has fallen.';
+    else if(TD[p.to].cap) msg += ' A national capital has fallen.';
   } else {
     const al = applyLoss(sent, Math.min(0.9, 0.4 + 0.5 * pw)); const dl = applyLoss(d.u, wl);
     d.u = dl.out; Object.keys(al.out).forEach(u => a.u[u] = (a.u[u] || 0) + al.out[u]);
@@ -1366,7 +1455,7 @@ function announce(){
 }
 
 /* ============================ UI ============================ */
-let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, div:'all', gdiv:'all', tdiv:'all', view:null, filter:null};
+let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, div:'all', gdiv:'all', tdiv:'all', view:null, filter:null, natQ:'', natReg:'all', curReg:'world'};
 const tcol = o => o === 'reich' ? 'var(--reich)' : o === 'dawn' ? 'var(--dawn)' : 'var(--neutral)';
 const fmt = n => Math.floor(n + 1e-6);
 function toast(msg, kind){ const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5200); while($('#toasts').children.length > 4) $('#toasts').firstChild.remove(); }
@@ -1407,17 +1496,29 @@ function renderHud(){
 }
 
 /* --- map --- */
-const INIT = {x:1118, y:90, w:820, h:700};
+const REGIONS = {
+  world:{x:0, y:0, w:W, h:H},
+  americas:{x:160, y:120, w:2120, h:1760},
+  europe:{x:2460, y:50, w:980, h:720},
+  africa:{x:2300, y:550, w:1350, h:1240},
+  mideast:{x:3080, y:440, w:950, h:650},
+  asia:{x:3640, y:160, w:1760, h:1260},
+  oceania:{x:4400, y:1100, w:1200, h:900}
+};
+const INIT = REGIONS.world;
 let vb = Object.assign({}, INIT);
 const svg = $('#map');
 function setVB(){ vb.w = Math.max(260, Math.min(W, vb.w)); vb.h = Math.min(H, vb.w * (svg.clientHeight || 600) / (svg.clientWidth || 800)); vb.x = Math.max(0, Math.min(W - vb.w, vb.x)); vb.y = Math.max(0, Math.min(H - vb.h, vb.y)); svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
-function zoomAt(f, cx, cy){ const px = vb.x + vb.w * cx, py = vb.y + vb.h * cy; const nw = Math.max(260, Math.min(W, vb.w * f)); const r = nw / vb.w; vb.x = px - (px - vb.x) * r; vb.y = py - (py - vb.y) * r; vb.w = nw; setVB(); }
+function setRegion(r){ ui.curReg = r; const box = REGIONS[r] || INIT; vb = Object.assign({}, box); setVB(); renderMapnav(); }
+function focusTerr(id){ const D = TD[id]; if(!D) return; const w = Math.min(vb.w, 1200); vb.w = w; vb.h = Math.min(H, w * (svg.clientHeight || 600) / (svg.clientWidth || 800)); vb.x = D.x - vb.w / 2; vb.y = D.y - vb.h / 2; ui.curReg = ''; setVB(); renderMapnav(); }
+function renderMapnav(){ document.querySelectorAll('.mapnav button[data-reg]').forEach(b => b.classList.toggle('on', b.dataset.reg === ui.curReg)); }
+function zoomAt(f, cx, cy){ const px = vb.x + vb.w * cx, py = vb.y + vb.h * cy; const nw = Math.max(260, Math.min(W, vb.w * f)); const r = nw / vb.w; vb.x = px - (px - vb.x) * r; vb.y = py - (py - vb.y) * r; vb.w = nw; setVB(); ui.curReg = ''; renderMapnav(); }
 const polyPts = p => { const o = []; for(let i = 0; i < p.length; i += 2){ const [x, y] = proj(p[i], p[i+1]); o.push(x.toFixed(1) + ',' + y.toFixed(1)); } return o.join(' '); };
 let baseMap = '';
 function buildBase(){
-  const grid = []; for(let lon = -80; lon <= 140; lon += 10){ const [x] = proj(lon, 0); grid.push(`<line x1="${x}" y1="0" x2="${x}" y2="${H}"/>`); } for(let lat = -30; lat <= 70; lat += 10){ const [, y] = proj(0, lat); grid.push(`<line x1="0" y1="${y}" x2="${W}" y2="${y}"/>`); }
+  const grid = []; for(let lon = -160; lon <= 180; lon += 20){ const [x] = proj(lon, 0); grid.push(`<line x1="${x}" y1="0" x2="${x}" y2="${H}"/>`); } for(let lat = -50; lat <= 70; lat += 20){ const [, y] = proj(0, lat); grid.push(`<line x1="0" y1="${y}" x2="${W}" y2="${y}"/>`); }
   baseMap = `<rect width="${W}" height="${H}" fill="var(--sea)"/><g stroke="#1b2a2e" stroke-width="1" opacity=".5">${grid.join('')}</g>` +
-    `<g fill="var(--land)" stroke="#3a4d45" stroke-width="1.2" stroke-linejoin="round">${LAND.filter((_, i) => i !== 7).map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g>` +
+    `<g fill="var(--land)" stroke="#3a4d45" stroke-width="1.2" stroke-linejoin="round">${LAND.map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g>` +
     `<g fill="var(--sea)" stroke="#2c3b35" stroke-width="1.2">${WATER.map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g><polygon points="${polyPts(CRIMEA)}" fill="var(--land)" stroke="#2c3b35" stroke-width="1.2"/>`;
 }
 function renderMap(){
@@ -1426,17 +1527,20 @@ function renderMap(){
   const links = LINKS.map(l => { const A_ = TD[l.a], B_ = TD[l.b], oa = S.terr[l.a].o, ob = S.terr[l.b].o; const front = oa !== ob && oa !== 'neutral' && ob !== 'neutral'; const hot = sel && (l.a === sel || l.b === sel);
     return `<line x1="${A_.x}" y1="${A_.y}" x2="${B_.x}" y2="${B_.y}" stroke="${front ? '#ff7a5c' : hot ? '#e6e3d8' : '#3b4a44'}" stroke-width="${front ? 2.4 : hot ? 1.8 : 1}" ${l.sea ? 'stroke-dasharray="3 5"' : ''} opacity="${front || hot ? .95 : .7}"/>`; }).join('');
   const sels = sel ? ADJ[sel].map(n => n.id) : [];
-  const nodes = TIDS.map(id => { const D = TD[id], t = S.terr[id], r = D.cap ? 19 : 14, ex = visible(S, viewer, id); const n = total(t.u); const label = ex ? n : (n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0');
+  const nodes = TIDS.map(id => { const D = TD[id], t = S.terr[id], r = D.fcap ? 20 : (D.cap ? 16 : 13), ex = visible(S, viewer, id); const n = total(t.u); const label = ex ? n : (n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0');
     const fill = tcol(t.o), isSel = sel === id, near = sels.includes(id);
-    return `<g class="node" data-act="sel" data-id="${id}" tabindex="0" role="button" aria-label="${esc(D.name)}, ${t.o}"><title>${esc(D.name)} · ${t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].short} · ${D.vp} VP</title>` +
+    const strokeCol = D.fcap ? '#fff' : (D.cap ? '#d9c98e' : '#0c0f0e');
+    const strokeW = D.fcap ? 2.8 : (D.cap ? 2 : 1.5);
+    return `<g class="node" data-act="sel" data-id="${id}" tabindex="0" role="button" aria-label="${esc(D.name)}, ${t.o}"><title>${esc(D.name)} · ${D.reg}${D.fcap ? ' · Faction Capital' : D.cap ? ' · National Capital' : ''} · ${t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].short} · ${D.vp} VP</title>` +
       (isSel ? `<circle cx="${D.x}" cy="${D.y}" r="${r + 6}" fill="none" stroke="#fff" stroke-width="2"/>` : '') + (near && !isSel ? `<circle class="tgt" cx="${D.x}" cy="${D.y}" r="${r + 5}" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="2 3"/>` : '') +
-      `<circle cx="${D.x}" cy="${D.y}" r="${r}" fill="${fill}" fill-opacity="${t.o === 'neutral' ? .75 : 1}" stroke="${D.cap ? '#fff' : '#0c0f0e'}" stroke-width="${D.cap ? 2.5 : 1.5}"/>` +
+      `<circle cx="${D.x}" cy="${D.y}" r="${r}" fill="${fill}" fill-opacity="${t.o === 'neutral' ? .75 : 1}" stroke="${strokeCol}" stroke-width="${strokeW}"/>` +
       `<text x="${D.x}" y="${D.y + 3.5}" text-anchor="middle" font-size="${String(label).length > 3 ? 8 : 10}" font-weight="500" fill="${t.o === 'dawn' ? '#16120a' : '#fff'}">${label}</text>` +
+      (D.fcap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="9" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">⚑</text>` : (D.cap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="8" fill="#d9c98e" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">◆</text>` : '')) +
       (D.vp >= 3 ? `<text x="${D.x + r - 2}" y="${D.y - r + 6}" font-size="8" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">★${D.vp}</text>` : '') +
       `<text class="nlabel" x="${D.x}" y="${D.y + r + 10}" text-anchor="middle">${esc(D.name)}</text></g>`; }).join('');
   svg.innerHTML = baseMap + `<g>${links}</g><g>${nodes}</g>`;
 }
-function renderLegend(){ $('#legend').innerHTML = `<span><i style="background:var(--reich)"></i>Reich</span><span><i style="background:var(--dawn)"></i>Black Dawn</span><span><i style="background:var(--neutral)"></i>Neutral</span><span>★ victory points</span><span>dashed = sea</span><span>~ = unscouted</span>`; }
+function renderLegend(){ $('#legend').innerHTML = `<span><i style="background:var(--reich)"></i>Reich</span><span><i style="background:var(--dawn)"></i>Black Dawn</span><span><i style="background:var(--neutral)"></i>Neutral</span><span>⚑ faction HQ</span><span>◆ capital</span><span>★ VP</span><span>dashed = sea</span><span>~ = unscouted</span>`; }
 
 /* --- panels --- */
 const TABS = [['orders','Orders'],['troops','Troops'],['tech','Research'],['dip','Diplomacy'],['council','Council'],['log','Log'],['rules','Rules']];
@@ -1462,12 +1566,36 @@ function unitsHtml(id){
   }).join('');
   return divBarHtml('gdiv', f, own) + (groups || '<div class="mut sm">No units in this division here.</div>');
 }
+const REG_LIST = ['all','Americas','Europe','Africa','Middle East','Asia','Oceania'];
+function nationDirectory(){
+  const q = (ui.natQ || '').trim().toLowerCase();
+  const r = ui.natReg || 'all';
+  const rows = TIDS.filter(id => {
+    const D = TD[id];
+    if(r !== 'all' && D.reg !== r) return false;
+    if(q && !D.name.toLowerCase().includes(q) && !id.toLowerCase().includes(q) && !D.reg.toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a, b) => (TD[b].fcap ? 2 : TD[b].cap ? 1 : 0) - (TD[a].fcap ? 2 : TD[a].cap ? 1 : 0) || TD[a].name.localeCompare(TD[b].name));
+  const tabs = REG_LIST.map(k => `<button class="${r === k ? 'on' : ''}" data-act="setreg" data-r="${k}">${k === 'all' ? `All (${TIDS.length})` : k}</button>`).join('');
+  const chips = rows.slice(0, 120).map(id => {
+    const D = TD[id], t = S.terr[id];
+    const badge = D.fcap ? '⚑ ' : (D.cap ? '◆ ' : '');
+    return `<span class="chip" data-act="goto" data-id="${id}" title="${esc(D.reg)} · ${D.vp} VP"><span class="dot" style="background:${tcol(t.o)}"></span>${badge}${esc(D.name)}</span>`;
+  }).join('');
+  return `<div class="card" id="natdir"><h3>World Nations &amp; Capitals (${rows.length})</h3>
+    <div class="row" style="margin-bottom:8px"><input type="text" id="natq" value="${esc(ui.natQ || '')}" placeholder="Search country or capital…" style="flex:1"></div>
+    <div class="divbar">${tabs}</div>
+    <div class="chips" style="max-height:260px;overflow:auto">${chips || '<span class="mut sm">No matching nations.</span>'}</div>
+    <div class="mut sm" style="margin-top:6px">Tap any nation or capital to select it and center the map on it.</div>
+  </div>`;
+}
 function panelOrders(){
-  if(!sel) return `<div class="card"><h3>Select a territory</h3><p class="sm mut" style="margin:0">Tap any province on the map. Your own lands show exact troop counts. Enemy and neutral lands show estimates until you scout them with a spy. Ownership is always visible to both sides.</p></div>` + frontList();
+  if(!sel) return `<div class="card"><h3>Select a territory</h3><p class="sm mut" style="margin:0">Tap any province or capital on the map, or pick a region button at the top-left of the map to jump across continents. Your own lands show exact troop counts; enemy and neutral lands show estimates until scouted.</p></div>` + nationDirectory() + frontList();
   const D = TD[sel], t = S.terr[sel], team = myTeam(), role = myRole(), mine = t.o === team, ex = visible(S, team || 'spectator', sel);
-  const nb = ADJ[sel].map(n => `<span class="chip" data-act="sel" data-id="${n.id}"><span class="dot" style="background:${tcol(S.terr[n.id].o)}"></span>${esc(TD[n.id].name)}${n.sea ? ' ≈' : ''}</span>`).join('');
-  let h = `<div class="card"><div class="row sb"><div class="tname">${esc(D.name)}</div><span style="color:${tcol(t.o)};font-family:var(--display);font-size:18px;letter-spacing:.06em;text-transform:uppercase">${t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].name}</span></div>
-    <div class="row sm mut" style="margin:4px 0 8px"><span>${D.terr[0].toUpperCase() + D.terr.slice(1)}</span><span>·</span><span>Produces ${D.amt} ${RES[D.res]}/min</span><span>·</span><span>${D.vp} VP</span>${D.cap ? '<span>·</span><b style="color:var(--ink)">Capital: lose it, lose the war</b>' : ''}</div>`;
+  const nb = ADJ[sel].map(n => `<span class="chip" data-act="goto" data-id="${n.id}"><span class="dot" style="background:${tcol(S.terr[n.id].o)}"></span>${esc(TD[n.id].name)}${n.sea ? ' ≈' : ''}</span>`).join('');
+  let h = `<div class="card"><div class="row sb"><div class="tname">${esc(D.name)}</div><div class="row"><button class="btn sm" data-act="goto" data-id="${sel}" title="Center map">Locate</button><button class="btn sm" data-act="clearsel">Directory</button></div></div>
+    <div class="row sb" style="margin-top:2px"><span class="mut sm">${D.reg} · ${D.terr[0].toUpperCase() + D.terr.slice(1)} · ${D.amt} ${RES[D.res]}/min · ${D.vp} VP</span><span style="color:${tcol(t.o)};font-family:var(--display);font-size:16px;letter-spacing:.06em;text-transform:uppercase">${t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].name}</span></div>
+    ${D.fcap ? '<div class="sm" style="margin-top:4px;color:var(--ink)"><b>⚑ Faction Capital:</b> lose it, lose the war.</div>' : (D.cap ? '<div class="sm mut" style="margin-top:4px"><b style="color:var(--ink)">◆ National Capital</b></div>' : '')}`;
   if(ex) h += `<div class="row sm" style="margin-bottom:8px"><span class="mut">Fort</span><span>${[1,2,3].map(i => `<span class="pip ${t.f >= i ? 'on' : ''}"></span>`).join('')}</span><span class="mut" style="margin-left:10px">Posture</span><b>${STANCES[t.st]}</b></div>`;
   h += unitsHtml(sel) + `<div class="sm mut" style="margin-top:10px">Connected to (≈ across water):</div><div class="chips" style="margin-top:4px">${nb}</div></div>`;
   if(S.win) return h;
@@ -1586,7 +1714,7 @@ function panelRules(){
   <div class="card sm"><h3>Resources and time</h3>Every province you own pays its resource every minute (Industry raises it). Command points refill one per 90 seconds, up to ${CPMAX}. Moves cost 1, recruiting 1, attacks 2, spies 2.</div>
   <div class="card sm"><h3>Attacking</h3>Pick a source province that borders the target, choose units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Water crossings need a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
   <div class="card sm"><h3>Tactics beat postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div><p class="mut" style="margin:6px 0 0">A tactic multiplies only the matching units. A defender's posture is hidden until you scout. Neutral lands have a fixed hidden posture.</p></div>
-  <div class="card sm"><h3>The map</h3>Europe, Africa, the Near East, India, China, Japan, the East Indies, Australia and South America. North America is out of play (except the Bermuda Triangle, which Black Dawn holds). Dashed lines are sea routes. Black Dawn starts spread across the world, the Reich starts compact and close to Berlin.</div>
+  <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Bucharest); ◆ marks national capitals.</div>
   <div class="card sm"><h3>Roles</h3><b>Leader</b>: everything. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
 }
 function renderPanel(){
@@ -1672,10 +1800,14 @@ function renderAll(){ renderHud(); renderTabs(); renderMap(); renderLegend(); re
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if(!el) return; const d = el.dataset, a = d.act;
   if(a === 'sel'){ if(drag.moved) return; sel = d.id; if(tab !== 'orders' && tab !== 'log') tab = 'orders'; renderAll(); return; }
+  if(a === 'goto'){ sel = d.id; if(tab !== 'orders' && tab !== 'log') tab = 'orders'; focusTerr(d.id); renderAll(); return; }
+  if(a === 'clearsel'){ sel = null; renderAll(); return; }
+  if(a === 'setreg'){ ui.natReg = d.r; renderPanel(); return; }
+  if(a === 'reg'){ setRegion(d.reg); return; }
   if(a === 'tab'){ tab = d.k; ui.confirmReset = false; renderAll(); return; }
   if(a === 'setdiv'){ ui[d.kind || 'div'] = d.d; renderPanel(); return; }
   if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
-  if(a === 'zoomreset'){ vb = Object.assign({}, INIT); setVB(); return; }
+  if(a === 'zoomreset'){ setRegion('world'); return; }
   if(a === 'switch'){ M = 'join'; renderModal(); return; }
   if(a === 'room'){ M = 'room'; renderModal(); return; }
   if(a === 'copyroom'){
@@ -1759,6 +1891,20 @@ document.addEventListener('click', e => {
   if(a === 'enlist'){ const n = $('#enl').value.trim(), t = $('#enlt').value, pw = $('#enlpw').value; if(!n || pw.length < 6) return toast('Enter a name and a password of at least 6 characters.', 'bad'); return pwHash(n, pw).then(h => act('enlist', {name:n, team:t, pw:h}).then(() => { if(S.players[n] && S.players[n].pw === h && (!S.players[me.name] || !authed())){ me.name = n; me.ph = h; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} NET.announce(); renderAll(); } })); }
   if(a === 'reset'){ if(!ui.confirmReset){ ui.confirmReset = true; renderPanel(); return; } ui.confirmReset = false; return act('reset'); }
 });
+document.addEventListener('input', e => {
+  if(e.target && e.target.id === 'natq'){
+    ui.natQ = e.target.value;
+    const dir = $('#natdir');
+    if(dir){
+      const tmp = document.createElement('div');
+      tmp.innerHTML = nationDirectory();
+      const newChips = tmp.querySelector('.chips'), oldChips = dir.querySelector('.chips');
+      const newH = tmp.querySelector('h3'), oldH = dir.querySelector('h3');
+      if(newChips && oldChips) oldChips.innerHTML = newChips.innerHTML;
+      if(newH && oldH) oldH.innerHTML = newH.innerHTML;
+    }
+  }
+});
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-chg]'); if(!el) return; const k = el.dataset.chg;
   if(k === 'give' || k === 'get') ui.trade[k] = el.value; else if(k === 'gn' || k === 'wn') ui.trade[k] = +el.value;
@@ -1783,7 +1929,7 @@ window.addEventListener('resize', setVB);
 setInterval(() => { if(!S) return; renderHud(); if(S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
 setInterval(() => { if(S && tab === 'council') { const el = document.activeElement; if(!(el && el.matches && el.matches('input,select'))) renderPanel(); } }, 5000);
 
-buildBase(); setVB(); renderAll();
+buildBase(); setVB(); renderMapnav(); renderAll();
 if(window.claude && window.claude.hot && window.claude.hot.snapshot){ try{ window.claude.hot.snapshot(() => ({sel, tab})); }catch(e){} }
 boot();
 window.__eot = {get S(){return S;}, act, A, TD, ADJ, LINKS, tick, newGame, checkWin};
