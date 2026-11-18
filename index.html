@@ -782,6 +782,7 @@ function unitCost(s, team, u){
   for(const r in raw) out[r] = Math.max(1, Math.round(raw[r] * mult));
   return out;
 }
+const fortCost = level => ({steel:15 * (level + 1)});
 function researchCost(s, team, nx){
   const raw = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) raw.oil = 12 * nx;
   if(team === 'dawn'){
@@ -841,7 +842,8 @@ function checkWin(s, now){
 }
 const hasTech = (s, team, req) => !req || s.teams[team].tech[req[0]] >= req[1];
 const unitMult = (s, team, u) => (!UNITS[u] || team === 'neutral') ? 1 : 1 + 0.12 * (s.teams[team].tech[UNITS[u].cat] || 0);
-function afford(s, team, cost, k = 1){ return RK.every(r => (cost[r] || 0) * k <= s.teams[team].res[r] + 1e-9); }
+const RESOURCE_EPS = 1e-9;
+function afford(s, team, cost, k = 1){ return RK.every(r => (cost[r] || 0) * k <= s.teams[team].res[r] + RESOURCE_EPS); }
 function pay(s, team, cost, k = 1){ RK.forEach(r => s.teams[team].res[r] -= (cost[r] || 0) * k); }
 function visible(s, viewer, id){
   const t = s.terr[id]; if(t.o === viewer) return true;
@@ -956,7 +958,7 @@ A.recruit = (s, c, p) => {
 };
 A.fort = (s, c, p) => {
   const t = s.terr[p.tid]; if(!t || t.o !== c.team) return {err:'Not your territory.'}; if(t.f >= 3) return {err:'Fortifications are at maximum.'};
-  const cost = {steel:15 * (t.f + 1)}; if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
+  const cost = fortCost(t.f); if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
   pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.f++; log(s, c.now, c.team, `${T_(p.tid)} fortified to level ${t.f}.`);
   return {ok:`Fortified ${T_(p.tid)}.`};
 };
@@ -1518,13 +1520,42 @@ function announce(){
 /* ============================ UI ============================ */
 let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, div:'all', gdiv:'all', tdiv:'all', view:null, filter:null, natQ:'', natReg:'all', curReg:'world'};
 const tcol = o => o === 'reich' ? 'var(--reich)' : o === 'dawn' ? 'var(--dawn)' : 'var(--neutral)';
-const fmt = n => Math.floor(n + 1e-6);
+const fmt = n => Math.floor(n + RESOURCE_EPS);
 function toast(msg, kind){ const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5200); while($('#toasts').children.length > 4) $('#toasts').firstChild.remove(); }
 function icon(team){ return team === 'reich' ? `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="4" y="4" width="10" height="10" transform="rotate(45 9 9)" fill="var(--reich)"/></svg>` : `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 13a7 7 0 0 1 14 0z" fill="var(--dawn)"/><rect x="1" y="14" width="16" height="1.6" fill="var(--dawn)"/></svg>`; }
-function costHtml(cost, team, k = 1){ return `<span class="cost">${RK.filter(r => cost[r]).map(r => { const need = cost[r] * k, ok = !S || !team || S.teams[team].res[r] >= need; return `<span class="${ok ? '' : 'no'}">${need} ${r === 'man' ? 'man' : r}</span>`; }).join(' ')}</span>`; }
+// Prices are fixed until the next game update; available balances change every clock tick.
+function priceAttrs(cost, n = 1, cp = 0){
+  return 'data-price' + RK.filter(r => cost[r]).map(r => ` data-${r}="${cost[r] * n}"`).join('') + (cp ? ` data-cp="${cp}"` : '');
+}
+function costHtml(cost){
+  return `<span class="cost">${RK.filter(r => cost[r]).map(r => `<span ${priceAttrs({[r]:cost[r]})}>${cost[r]} ${r}</span>`).join(' ')}</span>`;
+}
+function recruitButtons(u, unlocked, cost, have){
+  const max = UNITS[u].max;
+  return (max === 1 ? [1] : [1, 5]).map(n => `<button class="btn sm" data-act="recruit" data-u="${u}" data-n="${n}" ${unlocked && (!max || have + n <= max) ? priceAttrs(cost, n, 1) : 'disabled'}>+${n}</button>`).join('');
+}
+function refreshPrices(view, root = document){
+  const team = myTeam() || 'reich', T = view.teams[team];
+  root.querySelectorAll('[data-price]').forEach(el => {
+    const enough = afford(view, team, el.dataset);
+    // Only otherwise-eligible buttons carry a price; never unlock a role/tech/cap restriction.
+    if(el.tagName === 'BUTTON'){
+      const disabled = !enough || T.cp < Number(el.dataset.cp || 0) || busy || (mode !== 'live' && mode !== 'local');
+      if(el.disabled !== disabled) el.disabled = disabled;
+    } else el.classList.toggle('no', !enough);
+  });
+  root.querySelectorAll('[data-balance]').forEach(el => {
+    const value = String(fmt(T.res[el.dataset.balance]));
+    if(el.textContent !== value) el.textContent = value;
+  });
+}
 
 /* --- header / hud --- */
-function proj_(){ if(!S) return null; const c = clone({teams:S.teams, terr:S.terr, t:S.t}); const n = Date.now(); tick(c, n); return c; }
+function projectedEconomy(){
+  // tick only writes teams and t. Never advance or publish the room state just to paint the UI.
+  const view = {teams:clone(S.teams), terr:S.terr, t:S.t};
+  tick(view, Date.now()); return view;
+}
 function roomPillHtml(){
   const n = onlineList().length;
   const cls = NET.status === 'live' ? 'live' : (NET.status === 'connecting' ? 'conn' : 'off');
@@ -1533,7 +1564,8 @@ function roomPillHtml(){
 }
 function renderHud(){
   if(!S){ $('#banner').innerHTML = ''; $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `${roomPillHtml()}<span class="mut sm">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'incompatible' ? 'Incompatible save format.' : mode === 'slow' ? 'Still connecting…' : 'Connecting…'}</span>`; return; }
-  const t = myTeam(), team = t || 'reich', P = proj_(), inc = income(S, team);
+  const t = myTeam(), team = t || 'reich', P = projectedEconomy(), inc = income(S, team);
+  refreshPrices(P);
   document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#c9c3ae');
   const vr = vpOf(S, 'reich'), vd = vpOf(S, 'dawn'), vn = TOTAL_VP - vr - vd;
   $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${countOf(S, 'reich')} lands</b></span><span style="color:var(--dawn)"><b>${countOf(S, 'dawn')} lands · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / TOTAL_VP * 100}%;background:var(--reich)"></i><i style="width:${vn / TOTAL_VP * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / TOTAL_VP * 100}%;background:var(--dawn)"></i></div>`;
@@ -1608,7 +1640,6 @@ function renderLegend(){ $('#legend').innerHTML = `<span><i style="background:va
 /* --- panels --- */
 const TABS = [['orders','Orders'],['troops','Troops'],['tech','Research'],['dip','Diplomacy'],['council','Council'],['log','Log'],['rules','Rules']];
 function renderTabs(){ $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${n}</button>`).join(''); }
-function costRow(cost, k){ return costHtml(cost, myTeam(), k); }
 function divBarHtml(kind, cur, team){
   const list = divsFor(team);
   if(!list.includes(cur)) cur = 'all';
@@ -1674,16 +1705,19 @@ function panelOrders(){
         return `<div class="divhdr">${DIVS[d]} Division · ${divSub(team, d)}</div>` + sub.map(u => {
           const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u);
           const lock = ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`;
-          const capHit = U.max && TIDS.reduce((a, i) => a + (S.terr[i].o === team ? (S.terr[i].u[u] || 0) : 0), 0) >= U.max;
+          const have = U.max ? TIDS.reduce((a, i) => a + (S.terr[i].o === team ? (S.terr[i].u[u] || 0) : 0), 0) : 0;
           const subHdr = (U.sub && U.sub !== lastSub) ? (lastSub = U.sub, `<div class="mut sm" style="margin-top:6px;font-weight:600;color:var(--ink);opacity:.75">${esc(U.sub)}</div>`) : '';
-          return subHdr + `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costRow(cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0"><button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${U.max === 1 ? '' : `<button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div></div>`;
+          return subHdr + `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costHtml(cost)} <span class="cost">each</span> <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0">${recruitButtons(u, ok, cost, have)}</div></div>`;
         }).join('');
       }).join('');
       h += `<div class="card"><h3>Recruit here · 1 command point</h3>${divBarHtml('div', curDiv, team)}${rows}</div>`;
     }
     let ord = '<div class="row">';
     if(can(role, 'move')) ord += `<button class="btn pri" data-act="open" data-m="move">Move units</button><button class="btn pri" data-act="open" data-m="attack">Attack from here</button>`;
-    if(can(role, 'fort')) ord += `<button class="btn" data-act="fort" ${t.f >= 3 ? 'disabled' : ''}>Fortify ${t.f < 3 ? `(${15 * (t.f + 1)}S)` : '(max)'}</button>`;
+    if(can(role, 'fort')){
+      const cost = fortCost(t.f);
+      ord += `<button class="btn" data-act="fort" ${t.f >= 3 ? 'disabled' : priceAttrs(cost, 1, 1)}>Fortify ${t.f < 3 ? `(${cost.steel}S)` : '(max)'}</button>`;
+    }
     ord += '</div>';
     if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}">${STANCES[k]}</button>`).join('')}</div>`;
     if(ord.length > 30 || can(role, 'stance')) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
@@ -1727,13 +1761,12 @@ function panelTroops(){
     let lastSub = '';
     return `<div class="card"><h3>${DIVS[d]} Division · ${divSub(team, d)}</h3>` + sub.map(u => {
       const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u), have = counts[u] || 0;
-      const capHit = U.max && have >= U.max;
       const subHdr = (U.sub && U.sub !== lastSub) ? (lastSub = U.sub, `<div class="divhdr" style="margin-top:8px">${esc(U.sub)}</div>`) : '';
       return subHdr + `<div style="padding:7px 0;border-bottom:1px solid var(--line)">
         <div class="row sb"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`}</div><span class="mono sm">Deployed: <b>${have}</b>${U.max ? `/${U.max}` : ''}</span></div>
         <div class="sm mut" style="margin:3px 0">${esc(U.desc)}</div>
         ${U.abil ? `<div class="abil">Special Ability: ${esc(U.abil)}</div>` : ''}
-        <div class="row sb" style="margin-top:4px"><div>${costRow(cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${canRec ? `<div class="row"><button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${U.max === 1 ? '' : `<button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div>` : ''}</div>
+        <div class="row sb" style="margin-top:4px"><div>${costHtml(cost)} <span class="cost">each</span> <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${canRec ? `<div class="row">${recruitButtons(u, ok, cost, have)}</div>` : ''}</div>
       </div>`;
     }).join('') + `</div>`;
   }).join('');
@@ -1747,7 +1780,7 @@ function panelTech(){
   const team = myTeam() || 'reich', T = S.teams[team]; const can_ = can(myRole(), 'research') && myTeam() && !S.win;
   return `<div class="sm mut">Research costs gold, steel and oil, and applies instantly. Leaders and chiefs of staff can buy it.</div><div class="card sm"><b style="color:${TEAMS[team].css}">${TEAMS[team].name}:</b> ${TEAMS[team].flavor}</div>` + TKEYS.map(k => {
     const L = T.tech[k], nx = L + 1, cost = researchCost(S, team, nx);
-    return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ && afford(S, team, cost) ? '' : 'disabled'} data-act="research" data-k="${k}">Level ${nx} ${costHtml(cost, team)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
+    return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ ? priceAttrs(cost) : 'disabled'} data-act="research" data-k="${k}">Level ${nx} ${costHtml(cost)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
 }
 function panelDip(){
   const team = myTeam(), role = myRole(), ok = team && can(role, 'dip') && !S.win, now = Date.now(), cf = ceasefire(S, now);
@@ -1780,10 +1813,11 @@ function panelRules(){
   <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Bucharest); ◆ marks national capitals.</div>
   <div class="card sm"><h3>Roles</h3><b>Leader</b>: everything. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
 }
-function renderPanel(){
+function renderPanel(refreshBudget = true){
   if(!S){ $('#panel').innerHTML = `<div class="card">${mode === 'error' ? 'The war room could not be reached. Check your connection and sign-in, then reload.' : mode === 'slow' ? 'Still waiting on the war room. If this persists, the page may not have access to its data.' : mode === 'incompatible' ? 'This room uses an older save format. Its saved game has not been changed.' : 'Connecting to the war room…'}</div>`; return; }
   const sc = $('#panel').scrollTop; const el = document.activeElement; if(el && el.matches && el.matches('input[type=text],input[type=number]') && $('#panel').contains(el)) return;
   $('#panel').innerHTML = {orders:panelOrders, troops:panelTroops, tech:panelTech, dip:panelDip, council:panelCouncil, log:panelLog, rules:panelRules}[tab](); $('#panel').scrollTop = sc;
+  if(refreshBudget) refreshPrices(projectedEconomy(), $('#panel'));
 }
 
 /* --- modal --- */
@@ -1796,7 +1830,7 @@ function roomUrl(r = ROOM, fb = FB_URL){
   if(fb) u.searchParams.set('fb', fb);
   return u.toString();
 }
-function renderModal(){
+function renderModal(refreshBudget = true){
   if(M === 'room'){
     const peers = onlineList();
     const peerHtml = peers.map(p => `<span class="chip"><span class="dot" style="background:${p.team ? tcol(p.team) : 'var(--mute)'}"></span>${esc(p.name)}${p.self ? ' (you)' : ''}</span>`).join('');
@@ -1851,13 +1885,17 @@ function renderModal(){
       const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now(), from, to), DP = defPower(S, to, M.tactic, team, 1, grp) * (dEx ? 1 : 1), oil = fuel(S, team, grp);
       let odds = 'Scout the target (spy) for a reliable estimate.';
       if(n){ const ratio = AP / Math.max(0.01, DP); if(dEx){ odds = ratio > 1.6 ? 'Crushing advantage' : ratio > 1.15 ? 'Favorable' : ratio > 0.87 ? 'Too close to call' : ratio > 0.6 ? 'Risky' : 'Suicidal'; odds += ` (your ${AP.toFixed(0)} vs their ${DP.toFixed(0)}, ±12% luck each)`; } else { odds = `Your strength ${AP.toFixed(0)}. Enemy strength unknown. Garrison about ${total(S.terr[to].u) ? '~' + Math.max(3, Math.round(total(S.terr[to].u) / 3) * 3) : '0'} units.`; } }
-      h += `<div class="card sm"><b>${n} units</b> · fuel <b>${oil}</b> oil (have ${fmt(S.teams[team].res.oil)}) · 2 command points<br>${odds}</div>`;
+      h += `<div class="card sm"><b>${n} units</b> · fuel <b>${oil}</b> oil (have <span data-balance="oil"></span>) · 2 command points<br>${odds}</div>`;
     } else h += `<div class="card sm"><b>${n} units</b> · 1 command point</div>`;
   }
   h += `<div class="row"><button class="btn pri" data-act="confirm" ${from && to && total(M.grp) ? '' : 'disabled'}>${M.mode === 'attack' ? 'Launch attack' : 'Move'}</button><button class="btn" data-act="closem">Cancel</button></div></div></div>`;
   $('#modal').innerHTML = h;
+  if(refreshBudget) refreshPrices(projectedEconomy(), $('#modal'));
 }
-function renderAll(){ renderHud(); renderTabs(); renderMap(); renderLegend(); renderPanel(); renderModal(); }
+function renderAll(){
+  renderTabs(); renderMap(); renderLegend(); renderPanel(false); renderModal(false);
+  renderHud(); // One projected balance for the HUD and all newly rendered prices.
+}
 
 /* --- events --- */
 document.addEventListener('click', e => {
