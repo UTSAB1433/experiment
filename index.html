@@ -1,7 +1,7 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Lands at the Ends of Time</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 /* Layout concept: a war-room table. Slim command bar on top, resource strip, the map as the table, a tabbed dossier on the right. Dark only, by choice. */
 :root{
@@ -1104,7 +1104,7 @@ const QSP = new URLSearchParams(location.search);
 let ROOM = sanitizeRoom(QSP.get('room'));
 const cleanFbUrl = u => String(u || '').trim().replace(/\/+$/, '');
 let FB_URL = cleanFbUrl(QSP.get('fb') || (() => { try{ return localStorage.getItem('eot-fb:' + ROOM); }catch(e){ return ''; } })());
-const NET = { status:'connecting', transport:'Starting…', brokerIdx:0, peers:new Map(), reconnect:null, announce:()=>{}, destroy:null };
+const NET = { status:'connecting', transport:'Starting…', peers:new Map(), reconnect:null, announce:()=>{}, destroy:null };
 const onlineList = () => {
   const now = Date.now(), out = [{tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), self:true}];
   NET.peers.forEach((p, k) => { if(k !== TAB && now - p.ts < 42000) out.push(p); else if(now - p.ts >= 42000) NET.peers.delete(k); });
@@ -1127,157 +1127,179 @@ function isBetterState(inc, cur){
   return String(inc.origin || '') < String(cur.origin || '');
 }
 function loadLiveCache(room){
-  try{ const raw = localStorage.getItem('eot-live-state:' + room); if(!raw) return null; const p = JSON.parse(raw); return (p && p.terr && p.teams && (p.v || 1) >= GAME_V) ? p : null; }catch(e){ return null; }
+  try{
+    const p = JSON.parse(localStorage.getItem('eot-live-state:' + room));
+    if(!p || (p.v || 1) < GAME_V || !p.players || !p.intel || !Array.isArray(p.log) || !Array.isArray(p.props)) return null;
+    if(!['reich','dawn'].every(t => p.teams?.[t]?.res && p.teams[t].tech) || !TIDS.every(id => p.terr?.[id]?.u)) return null;
+    return p;
+  }catch(e){ return null; }
 }
 function saveLiveCache(room, st){
-  try{ localStorage.setItem('eot-live-state:' + room, JSON.stringify(st)); }catch(e){}
+  try{ if(isBetterState(st, loadLiveCache(room))) localStorage.setItem('eot-live-state:' + room, JSON.stringify(st)); }catch(e){}
 }
-function createMqttDb(room){
+function createMqttDb(room, cached){
   const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
   const PFX = 'lands-eot/v1/' + room + '/';
-  let ws = null, rxBuf = new Uint8Array(0), pid = 1, kaTimer = null, reconnTimer = null, initTimer = null, offlineTimer = null, dead = false;
-  let latest = null, activeLock = null, hasRemoteState = false, onSnap = null, onErr = null, ready = false;
+  const DIAL_MS = 2000, DISCOVERY_MS = 600, RETRY_MS = 350;
+  const clients = new Set();
+  let active = null, latest = cached, observed = null, activeLock = null, onSnap = null, dead = false;
+  let kaTimer, retryTimer, retryDelay = RETRY_MS;
   let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + room); }catch(e){}
-  const sendRaw = arr => { if(ws && ws.readyState === 1) ws.send(arr); };
+  const emitSnap = st => { if(onSnap) onSnap({exists:!!st, data:() => st}); };
+  const send = (c, pkt) => { if(c && c.ws.readyState === 1) c.ws.send(pkt); };
+  const publish = (c, sub, obj, retain = false) => send(c, buildPkt(0x30 | (retain ? 1 : 0), encStr(PFX + sub), te_.encode(JSON.stringify(obj))));
   const pubMqtt = (sub, obj, retain = false) => {
-    const txt = JSON.stringify(obj);
-    if(ws && ws.readyState === 1 && ready) sendRaw(buildPkt(0x30 | (retain ? 1 : 0), encStr(PFX + sub), te_.encode(txt)));
+    if(dead) return;
+    if(active) publish(active, sub, obj, retain);
     if(bc) try{ bc.postMessage({sub, obj}); }catch(e){}
   };
-  const emitSnap = st => { if(onSnap) onSnap({exists:!!st, data:() => st}); };
-  const handleState = (st, fromRemote) => {
-    if(!st || typeof st !== 'object' || !st.terr || !st.teams) return;
-    if(fromRemote) hasRemoteState = true;
-    if(initTimer){ clearTimeout(initTimer); initTimer = null; }
-    if(isBetterState(st, latest)){
-      latest = clone(st);
-      saveLiveCache(room, latest);
-      emitSnap(latest);
-    }
-  };
-  const handleMsg = (sub, msg, fromRemote = true) => {
+  function handleMsg(c, sub, msg){
     if(!msg || typeof msg !== 'object') return;
-    if(sub === 'state'){ handleState(msg, fromRemote); return; }
-    if(sub === 'lock'){ if(!activeLock || msg.ts >= activeLock.ts || activeLock.until < Date.now()) activeLock = msg; return; }
-    if(sub === 'sync'){
-      if(msg.type === 'req' && msg.from !== TAB && latest) pubMqtt('sync', {type:'res', from:TAB, to:msg.from, state:latest}, false);
-      else if(msg.type === 'res' && msg.state) handleState(msg.state, fromRemote);
+    if(sub === 'state' || (sub === 'sync' && msg.type === 'res')){
+      const st = sub === 'state' ? msg : msg.state;
+      if(c && isBetterState(st, c.state)) c.state = st;
+      if(c && sub === 'state' && st.terr && st.teams) c.sawState = true;
+      if(isBetterState(st, observed)) observed = st;
+      if(isBetterState(st, latest)){
+        latest = st;
+        if((st.v || 1) >= GAME_V) saveLiveCache(room, st);
+        emitSnap(st); // Show newer snapshots even while the other probes are running.
+      }
+      if(c && c.subscribed && c.sawState) finishProbe(c);
       return;
+    }
+    if(c && sub === 'sync' && msg.type === 'req' && msg.from === TAB) c.echoed = true;
+    if(c && c !== active) return;
+    if(sub === 'lock'){ if(!activeLock || msg.ts >= activeLock.ts || activeLock.until < Date.now()) activeLock = msg; }
+    if(sub === 'sync' && msg.type === 'req' && msg.from !== TAB && active && observed){
+      // Answer with a live snapshot, never an unconfirmed cache or an empty-room preview.
+      pubMqtt('sync', {type:'res', from:TAB, to:msg.from, state:observed});
     }
     if(sub === 'pres' && msg.tab && msg.tab !== TAB){
       if(msg.bye) NET.peers.delete(msg.tab);
       else NET.peers.set(msg.tab, {tab:msg.tab, name:msg.name || 'Player', team:msg.team || null, ts:Date.now()});
       if(S) renderHud();
     }
-  };
-  if(bc) bc.onmessage = e => { if(e && e.data) handleMsg(e.data.sub, e.data.obj, false); };
-  const announcePres = (bye = false) => {
-    const p = {tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), ts:Date.now(), bye};
-    pubMqtt('pres', p, false);
-  };
-  NET.announce = () => announcePres(false);
-  const presTimer = setInterval(() => { if(!dead && ready) announcePres(false); }, 15000);
+  }
+  if(bc) bc.onmessage = e => { if(!dead && e.data) handleMsg(null, e.data.sub, e.data.obj); };
+  const announcePres = (bye = false) => pubMqtt('pres', {tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), ts:Date.now(), bye});
+  NET.announce = () => announcePres();
+  const presTimer = setInterval(() => { if(active) announcePres(); }, 15000);
   const onUnload = () => announcePres(true);
   window.addEventListener('beforeunload', onUnload);
 
-  function finishInit(){
-    if(initTimer){ clearTimeout(initTimer); initTimer = null; }
-    if(!latest){
-      const cached = loadLiveCache(room);
-      if(cached){
-        latest = cached;
-        pubMqtt('state', latest, true);
-        emitSnap(latest);
-      } else {
-        emitSnap(null);
-      }
+  function discard(c){
+    clients.delete(c);
+    clearTimeout(c.timer);
+    if(c.ws){
+      c.ws.onopen = c.ws.onmessage = c.ws.onerror = c.ws.onclose = null;
+      try{ c.ws.close(); }catch(e){}
     }
   }
-  function parseIncoming(chunk){
-    const next = new Uint8Array(rxBuf.length + chunk.length);
-    next.set(rxBuf, 0); next.set(chunk, rxBuf.length); rxBuf = next;
-    while(rxBuf.length >= 2){
-      let mul = 1, rem = 0, i = 1, b, ok = true;
-      do{ if(i >= rxBuf.length){ ok = false; break; } b = rxBuf[i++]; rem += (b & 127) * mul; mul *= 128; }while(b & 128);
-      if(!ok || rxBuf.length < i + rem) break;
-      const hdr = rxBuf[0], body = rxBuf.subarray(i, i + rem); rxBuf = rxBuf.subarray(i + rem);
+  function chooseRelay(){
+    if(dead || active) return;
+    if(!clients.size){
+      NET.status = 'off'; NET.transport = 'Offline (retrying)'; mode = 'local';
+      if(!S) emitSnap(latest); else renderHud();
+      retryTimer = setTimeout(connect, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, 4000);
+      return;
+    }
+    // Public brokers are independent: the fastest handshake can have an empty or stale room.
+    // Pick the freshest responding relay, using BROKERS order for ties so players converge.
+    let best = null;
+    for(const c of clients){
+      if(!c.done) return;
+      if(!best || isBetterState(c.state, best.state)) best = c;
+    }
+    active = best;
+    for(const c of clients) if(c !== active) discard(c);
+    retryDelay = RETRY_MS;
+    NET.status = 'live'; NET.transport = 'MQTT (' + new URL(BROKERS[active.idx]).host + ')'; mode = 'live';
+    kaTimer = setInterval(() => send(active, new Uint8Array([0xC0, 0])), 20000);
+    emitSnap(active.state && (active.state.v || 1) < GAME_V ? active.state : latest);
+    announcePres();
+  }
+  function finishProbe(c){
+    if(c.done || !clients.has(c)) return;
+    c.done = true;
+    clearTimeout(c.timer);
+    chooseRelay();
+  }
+  function fail(c){
+    if(!clients.has(c)) return;
+    if(c === active){ active = null; clearInterval(kaTimer); }
+    discard(c);
+    chooseRelay();
+  }
+  function parseIncoming(c, chunk){
+    const next = new Uint8Array(c.rx.length + chunk.length);
+    next.set(c.rx); next.set(chunk, c.rx.length); c.rx = next;
+    while(clients.has(c) && c.rx.length >= 2){
+      let mul = 1, rem = 0, i = 1, b;
+      do{ if(i >= c.rx.length) return; b = c.rx[i++]; rem += (b & 127) * mul; mul *= 128; }while(b & 128);
+      if(c.rx.length < i + rem) return;
+      const hdr = c.rx[0], body = c.rx.subarray(i, i + rem); c.rx = c.rx.subarray(i + rem);
       const type = hdr >> 4;
-      if(type === 2){
-        if(body[1] === 0){
-          ready = true;
-          const sid = pid++; if(pid > 65000) pid = 1;
-          sendRaw(buildPkt(0x82, new Uint8Array([(sid >> 8) & 255, sid & 255]), encStr(PFX + '#'), new Uint8Array([0])));
-          if(offlineTimer){ clearTimeout(offlineTimer); offlineTimer = null; }
-          NET.status = 'live';
-          NET.transport = 'MQTT (' + new URL(BROKERS[NET.brokerIdx % BROKERS.length]).host + ')';
-          mode = 'live';
-          if(latest) pubMqtt('sync', {type:'res', from:TAB, state:latest}, false);
-          pubMqtt('sync', {type:'req', from:TAB}, false);
-          announcePres(false);
-          if(!hasRemoteState && !initTimer) initTimer = setTimeout(finishInit, 1200);
-          renderHud();
-        } else if(ws) ws.close();
+      if(type === 2){ // CONNACK: subscribe on this socket, not on a shared race winner.
+        if(body[1] !== 0) return fail(c);
+        send(c, buildPkt(0x82, new Uint8Array([0, 1]), encStr(PFX + '#'), new Uint8Array([0])));
+      } else if(type === 9){ // SUBACK for our one subscription, QoS 0.
+        if(body[0] !== 0 || body[1] !== 1 || body[2] !== 0) return fail(c);
+        c.subscribed = true;
+        if(mode === 'local'){ mode = NET.status = 'connecting'; NET.transport = 'Checking room revisions…'; renderHud(); }
+        clearTimeout(c.timer);
+        publish(c, 'sync', {type:'req', from:TAB});
+        if(c.sawState) finishProbe(c); else c.timer = setTimeout(() => finishProbe(c), DISCOVERY_MS);
       } else if(type === 3){
-        const qos = (hdr >> 1) & 3;
-        const tlen = (body[0] << 8) | body[1];
+        const qos = (hdr >> 1) & 3, tlen = (body[0] << 8) | body[1];
         const topic = td_.decode(body.subarray(2, 2 + tlen));
         let off = 2 + tlen;
-        if(qos > 0){ const mpid = (body[off] << 8) | body[off + 1]; off += 2; sendRaw(new Uint8Array([0x40, 2, (mpid >> 8) & 255, mpid & 255])); }
+        if(qos > 0){ send(c, new Uint8Array([0x40, 2, body[off], body[off + 1]])); off += 2; }
         if(topic.startsWith(PFX)){
-          const sub = topic.slice(PFX.length);
-          try{ handleMsg(sub, JSON.parse(td_.decode(body.subarray(off))), true); }catch(e){}
+          let msg; try{ msg = JSON.parse(td_.decode(body.subarray(off))); }catch(e){ continue; }
+          handleMsg(c, topic.slice(PFX.length), msg);
         }
       }
     }
   }
-  function connect(idx){
+  function stopRace(){
+    clearInterval(kaTimer); clearTimeout(retryTimer);
+    active = observed = null;
+    for(const c of clients) discard(c);
+  }
+  function connect(){
     if(dead) return;
-    NET.brokerIdx = idx % BROKERS.length;
-    const url = BROKERS[NET.brokerIdx];
-    ready = false; rxBuf = new Uint8Array(0);
-    if(kaTimer){ clearInterval(kaTimer); kaTimer = null; }
-    if(ws){ try{ ws.onclose = ws.onerror = ws.onmessage = null; ws.close(); }catch(e){} }
-    NET.status = 'connecting'; NET.transport = 'Connecting to ' + new URL(url).host + '…';
-    if(S) renderHud();
-    let opened = false;
-    const dialTimer = setTimeout(() => { if(!ready && ws){ try{ ws.close(); }catch(e){} } }, 4500);
-    try{
-      ws = new WebSocket(url, 'mqtt');
-      ws.binaryType = 'arraybuffer';
-      ws.onopen = () => {
-        opened = true;
-        const cid = 'eot-' + TAB + '-' + Math.random().toString(36).slice(2, 6);
-        sendRaw(buildPkt(0x10, new Uint8Array([0,4,77,81,84,84,4,2,0,25]), encStr(cid)));
-        kaTimer = setInterval(() => sendRaw(new Uint8Array([0xC0, 0])), 20000);
-      };
-      ws.onmessage = e => { if(e.data instanceof ArrayBuffer) parseIncoming(new Uint8Array(e.data)); };
-      const fail = () => {
-        clearTimeout(dialTimer);
-        if(kaTimer){ clearInterval(kaTimer); kaTimer = null; }
-        ready = false;
-        if(dead) return;
-        NET.status = S ? 'off' : 'connecting';
-        NET.transport = 'Reconnecting…';
-        if(S) mode = 'local';
-        if(S) renderHud();
-        clearTimeout(reconnTimer);
-        reconnTimer = setTimeout(() => connect(NET.brokerIdx + (opened ? 0 : 1)), opened ? 1500 : 800);
-      };
-      ws.onerror = () => { if(!ready) fail(); };
-      ws.onclose = fail;
-    }catch(e){
-      clearTimeout(dialTimer);
-      reconnTimer = setTimeout(() => connect(NET.brokerIdx + 1), 1500);
+    stopRace();
+    if(mode !== 'local'){
+      NET.status = 'connecting'; NET.transport = 'Checking live relays…'; mode = 'connecting'; renderHud();
+    }
+    pubMqtt('sync', {type:'req', from:TAB}); // Query same-room tabs too, even if every relay is down.
+    // Register the whole round first: a synchronous WebSocket failure isn't an exhausted race.
+    BROKERS.forEach((_, idx) => clients.add({idx, rx:new Uint8Array(0), state:null, done:false}));
+    for(const c of clients){
+      try{
+        const ws = c.ws = new WebSocket(BROKERS[c.idx], 'mqtt');
+        ws.binaryType = 'arraybuffer';
+        c.timer = setTimeout(() => fail(c), DIAL_MS);
+        ws.onopen = () => {
+          if(!clients.has(c)) return;
+          const cid = 'eot-' + TAB + '-' + Math.random().toString(36).slice(2, 6);
+          send(c, buildPkt(0x10, new Uint8Array([0,4,77,81,84,84,4,2,0,25]), encStr(cid)));
+        };
+        ws.onmessage = e => { if(clients.has(c) && e.data instanceof ArrayBuffer) parseIncoming(c, new Uint8Array(e.data)); };
+        ws.onerror = ws.onclose = () => fail(c);
+      }catch(e){ fail(c); }
     }
   }
-  NET.reconnect = () => connect(NET.brokerIdx + 1);
+  NET.reconnect = connect;
   NET.destroy = () => {
-    dead = true; clearInterval(presTimer); clearInterval(kaTimer); clearTimeout(reconnTimer); clearTimeout(initTimer); clearTimeout(offlineTimer);
+    dead = true; stopRace(); clearInterval(presTimer);
     window.removeEventListener('beforeunload', onUnload);
-    if(ws) try{ ws.close(); }catch(e){}
-    if(bc) try{ bc.close(); }catch(e){}
+    if(bc) bc.close();
   };
   return {
+    get hasLiveState(){ return !!observed && !isBetterState(latest, observed); },
     doc(path){
       if(path === 'game/lock') return {
         async acquire({holder, ttlMs}){
@@ -1286,101 +1308,116 @@ function createMqttDb(room){
           const claim = {holder, until:now + (ttlMs || 1500), ts:now};
           activeLock = claim;
           pubMqtt('lock', claim, false);
-          if(ready) await sleep(70);
-          if(activeLock && activeLock.holder !== holder && activeLock.until > Date.now()) return {acquired:false};
-          return {acquired:true};
+          await sleep(70);
+          return {acquired:!!active && !(activeLock.holder !== holder && activeLock.until > Date.now())};
         }
       };
       return {
-        async get(){ return {exists:!!latest, data:() => latest}; },
+        async get(){ const st = observed; return {exists:!!st, data:() => st}; },
         async set(data){
-          latest = clone(data);
+          // A timeout isn't a read barrier. For a silent room, wait for the broker to
+          // loop our post-subscription request back before accepting even a first order.
+          if(!active || active.ws.readyState !== 1 || !(active.sawState || active.echoed)) throw new Error('Wait for live sync.');
+          if(latest && (data.rev || 1) <= (latest.rev || 1)) throw new Error('The room has a newer save. Reconnect and try again.');
+          pubMqtt('state', data, true);
+          active.state = observed = latest = clone(data);
           saveLiveCache(room, latest);
-          pubMqtt('state', latest, true);
         },
-        onSnapshot(cb, errCb){
-          onSnap = cb; onErr = errCb;
-          const cached = loadLiveCache(room);
-          if(cached){ latest = cached; }
-          offlineTimer = setTimeout(() => {
-            if(!ready && !S){
-              NET.status = 'off'; NET.transport = 'Offline (local mode — retrying)';
-              mode = 'local';
-              emitSnap(latest || null);
-            }
-          }, 7000);
-          connect(0);
-        }
+        onSnapshot(cb){ onSnap = cb; connect(); }
       };
     }
   };
 }
-function createFirebaseDb(fbBase, room){
+function createFirebaseDb(fbBase, room, cached){
   const base = fbBase + '/eot-rooms/' + encodeURIComponent(room);
-  let latest = null, onSnap = null, es = null, pollTimer = null, dead = false;
+  let latest = cached, observed = null, onSnap = null, es = null, pollTimer = null, streaming = false, dead = false;
   let bc = null; try{ if(typeof BroadcastChannel !== 'undefined') bc = new BroadcastChannel('eot-bc:' + room); }catch(e){}
-  if(bc) bc.onmessage = e => { if(e && e.data && e.data.sub === 'state' && isBetterState(e.data.obj, latest)){ latest = clone(e.data.obj); saveLiveCache(room, latest); if(onSnap) onSnap({exists:true, data:() => latest}); } };
-  const emit = st => {
-    if(st && st.terr && st.teams){
-      if(isBetterState(st, latest)){ latest = clone(st); saveLiveCache(room, latest); if(onSnap) onSnap({exists:true, data:() => latest}); }
-    } else if(!latest && onSnap) onSnap({exists:false, data:() => null});
-  };
-  NET.reconnect = () => startStream();
-  NET.destroy = () => { dead = true; clearInterval(pollTimer); if(es) es.close(); if(bc) bc.close(); };
+  function emit(st, refresh = false){
+    if(dead) return;
+    if(isBetterState(st, latest)){
+      latest = st; refresh = true;
+      if((st.v || 1) >= GAME_V) saveLiveCache(room, latest);
+    }
+    if(refresh && onSnap){
+      const view = st && (st.v || 1) < GAME_V ? st : latest;
+      onSnap({exists:!!view, data:() => view});
+    }
+  }
+  if(bc) bc.onmessage = e => { if(e.data && e.data.sub === 'state') emit(e.data.obj); };
+  async function readState(withTag = false){
+    const r = await fetch(base + '/state.json', {cache:'no-store', headers:withTag ? {'X-Firebase-ETag':'true'} : {}});
+    if(!r.ok) throw new Error('Firebase HTTP ' + r.status);
+    const st = await r.json();
+    if(st !== null && (!st || !st.terr || !st.teams)) throw new Error('Invalid room snapshot.');
+    return {st, tag:withTag ? r.headers.get('etag') : null};
+  }
+  function live(st){
+    if(dead) return;
+    const refresh = mode !== 'live';
+    if(!st || isBetterState(st, observed)) observed = st;
+    NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live';
+    emit(st, refresh);
+  }
+  async function refresh(){
+    try{ const {st} = await readState(); live(st); }
+    catch(e){
+      if(dead || streaming) return;
+      NET.status = 'off'; NET.transport = 'Firebase unreachable'; mode = 'local';
+      if(!S) emit(null, true); else renderHud();
+    }
+  }
   function startStream(){
     if(dead) return;
-    if(es) try{ es.close(); }catch(e){}
+    if(es) es.close();
+    streaming = false;
+    const poll = () => { if(!pollTimer) pollTimer = setInterval(refresh, 2500); };
     try{
-      es = new EventSource(base + '/state.json');
-      es.addEventListener('put', e => {
-        NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live';
-        try{ const d = JSON.parse(e.data); emit(d ? d.data : null); }catch(_){}
+      const stream = es = new EventSource(base + '/state.json');
+      stream.addEventListener('put', e => {
+        if(dead || stream !== es) return;
+        try{ const d = JSON.parse(e.data); if(d.path !== '/') return; live(d.data); streaming = true; }catch(_){ return; }
+        clearInterval(pollTimer); pollTimer = null;
       });
-      es.onerror = () => {
-        NET.status = 'connecting'; NET.transport = 'Polling Firebase…';
-        if(!pollTimer) pollTimer = setInterval(async () => {
-          if(dead) return;
-          try{ const r = await fetch(base + '/state.json'); if(r.ok){ NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live'; emit(await r.json()); } }catch(_){}
-        }, 4000);
+      stream.onerror = () => {
+        if(dead || stream !== es) return;
+        streaming = false; NET.status = 'connecting'; NET.transport = 'Polling Firebase…'; mode = 'connecting'; renderHud(); poll();
       };
-    }catch(e){ NET.status = 'off'; NET.transport = 'Firebase error'; }
+    }catch(e){ poll(); }
   }
+  NET.reconnect = () => { refresh(); startStream(); };
+  NET.destroy = () => { dead = true; clearInterval(pollTimer); if(es) es.close(); if(bc) bc.close(); };
   return {
+    get hasLiveState(){ return !!observed && !isBetterState(latest, observed); },
     doc(path){
       if(path === 'game/lock') return {
         async acquire({holder, ttlMs}){
           const now = Date.now();
-          try{
-            const r = await fetch(base + '/lock.json'); const cur = r.ok ? await r.json() : null;
-            if(cur && cur.holder !== holder && cur.until > now) return {acquired:false};
-            await fetch(base + '/lock.json', {method:'PUT', body:JSON.stringify({holder, until:now + (ttlMs || 1500)})});
-            return {acquired:true};
-          }catch(e){ return {acquired:true}; }
+          const r = await fetch(base + '/lock.json');
+          if(!r.ok || dead) throw new Error('Could not read the room lock.');
+          const cur = await r.json();
+          if(cur && cur.holder !== holder && cur.until > now) return {acquired:false};
+          const claim = await fetch(base + '/lock.json', {method:'PUT', body:JSON.stringify({holder, until:now + (ttlMs || 1500)})});
+          return {acquired:claim.ok};
         }
       };
+      let tag; // Compare-and-set against this document handle's read, including a null room.
       return {
         async get(){
-          const r = await fetch(base + '/state.json'); const d = r.ok ? await r.json() : null;
-          if(d && d.terr) latest = d;
-          return {exists:!!(d && d.terr), data:() => d};
+          const result = await readState(true); tag = result.tag;
+          emit(result.st);
+          return {exists:!!result.st, data:() => result.st};
         },
         async set(data){
-          latest = clone(data); saveLiveCache(room, latest);
-          if(bc) try{ bc.postMessage({sub:'state', obj:latest}); }catch(e){}
-          const r = await fetch(base + '/state.json', {method:'PUT', body:JSON.stringify(latest)});
-          if(!r.ok) throw new Error('Firebase HTTP ' + r.status + ' (check Realtime Database rules)');
+          if(dead || !tag || (latest && (data.rev || 1) <= (latest.rev || 1))) throw new Error('The room changed. Please retry.');
+          const r = await fetch(base + '/state.json', {method:'PUT', headers:{'if-match':tag}, body:JSON.stringify(data)});
+          if(!r.ok) throw new Error(r.status === 412 ? 'The room changed. Please retry.' : 'Firebase HTTP ' + r.status);
+          if(dead) return;
+          live(data);
+          if(bc) try{ bc.postMessage({sub:'state', obj:data}); }catch(e){}
         },
         onSnapshot(cb){
-          onSnap = cb;
-          NET.status = 'connecting'; NET.transport = 'Connecting to Firebase…';
-          fetch(base + '/state.json').then(r => r.ok ? r.json() : null).then(d => {
-            NET.status = 'live'; NET.transport = 'Firebase RTDB'; mode = 'live';
-            emit(d);
-            startStream();
-          }).catch(() => {
-            NET.status = 'off'; NET.transport = 'Firebase unreachable'; mode = 'local';
-            emit(loadLiveCache(room) || null);
-          });
+          onSnap = cb; NET.transport = 'Connecting to Firebase…';
+          refresh(); startStream();
         }
       };
     }
@@ -1395,7 +1432,10 @@ let PWASK = null, PWERR = '';
 const myTeam = () => (S && S.players[me.name] && authed()) ? S.players[me.name].team : null;
 const myRole = () => (S && S.players[me.name] && authed()) ? S.players[me.name].role : null;
 async function act(name, payload){
-  if(busy) return; if(!S) return;
+  if(busy || !S) return;
+  if(mode !== 'live' && mode !== 'local'){ if(name !== 'noop') toast('Wait for the room to sync before sending orders.'); return; }
+  const store = db, live = mode === 'live';
+  if(name === 'noop' && live && store.hasLiveState === false) return;
   const pl = S.players[me.name]; const needs = {contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
   if(name !== 'enlist' && name !== 'noop'){
     if(!pl || !authed()) return toast('Choose your post and enter its password first.', 'bad');
@@ -1403,49 +1443,70 @@ async function act(name, payload){
   }
   busy = true; renderHud();
   try{
-    let base;
-    if(db && mode === 'live'){
-      let got = false; for(let i = 0; i < 10 && !got; i++){ const r = await db.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(250); }
+    let base, ref;
+    if(live){
+      ref = store.doc('game/state');
+      let got = false; for(let i = 0; i < 10 && !got; i++){ if(store !== db || mode !== 'live') return; const r = await store.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(250); }
       if(!got){ toast('The table is busy. Try again.', 'bad'); return; }
-      const snap = await db.doc('game/state').get(); base = snap.exists ? clone(snap.data()) : newGame(Date.now());
+      const snap = await ref.get();
+      if(store !== db || mode !== 'live') return;
+      const remote = snap.exists ? snap.data() : null;
+      if(remote && (remote.v || 1) < GAME_V) throw new Error('Incompatible saved game.');
+      if(name === 'noop' && (!remote || isBetterState(S, remote))) return;
+      if(remote && (remote.rev || 1) < (S.rev || 1)) throw new Error('The relay is behind the displayed revision. Reconnect and try again.');
+      base = clone(remote || S);
     } else base = clone(S);
     const nextRev = (base.rev || 1) + 1;
     const now = Date.now(); tick(base, now);
-    if(base.win && name !== 'reset'){ toast('The war is over. A leader can reset the map.', 'bad'); S = base; return; }
+    if(base.win && name !== 'reset'){ toast('The war is over. A leader can reset the map.', 'bad'); if(!isBetterState(S, base)) S = base; return; }
     const ctx = {now, name:me.name, team:pl ? pl.team : null, role:pl ? pl.role : null};
     const res = (name === 'enlist') ? A.enlist(base, {now, name:me.name}, payload) : A[name](base, ctx, payload || {});
     if(res.err){ toast(res.err, 'bad'); return; }
     if(!res.reset) checkWin(base, now);
-    if(db && mode === 'live'){ base.rev = nextRev; base.origin = TAB; await db.doc('game/state').set(base); }
+    if(live){
+      base.rev = nextRev; base.origin = TAB; await ref.set(base);
+      if(store !== db || isBetterState(S, base)) return;
+    }
     S = base; seen = Date.now() - 1;
     if(res.ok) toast(res.ok, res.battle === false ? 'bad' : (res.battle ? 'win' : ''));
     closeModal();
   }catch(e){ toast(e && e.code === 'not_granted' || (e && /permission|denied/i.test(e.message || '')) ? 'You can look but not play. Ask the owner for contributor access.' : ('Order failed: ' + (e && e.message || e)), 'bad'); }
   finally{ busy = false; renderAll(); }
 }
-let migrating = false;
-async function ensureGame(){ if(!db || migrating) return; migrating = true; try{ const snap = await db.doc('game/state').get(); if(snap.exists && (snap.data().v || 1) >= GAME_V) return; let got = false; for(let i = 0; i < 6 && !got; i++){ const r = await db.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(300); } const again = await db.doc('game/state').get(); if(!again.exists || (again.data().v || 1) < GAME_V){ const fresh = newGame(Date.now()); fresh.origin = TAB; await db.doc('game/state').set(fresh); S = clone(fresh); seen = Date.now(); renderAll(); } }catch(e){ toast('Could not start the game: ' + (e.message || e), 'bad'); } finally{ migrating = false; } }
+let bootId = 0;
 async function boot(){
+  const id = ++bootId;
   if(NET.destroy) NET.destroy();
-  clearTimeout(loadTimer); S = null; NET.peers.clear();
+  clearTimeout(loadTimer); NET.peers.clear(); db = NET.destroy = NET.reconnect = null; NET.announce = () => {};
+  mode = NET.status = 'connecting'; NET.transport = 'Syncing room…';
+  let cached = loadLiveCache(ROOM);
+  S = cached; seen = Date.now(); // Read-only first paint, before any network await.
+  try{ renderAll(); }catch(e){ if(!cached) throw e; S = cached = null; renderAll(); }
   let cap = null;
   try{ if(window.claude && window.claude.use) cap = await window.claude.use('db'); }catch(e){}
-  if(cap){
-    db = cap; mode = 'live'; NET.status = 'live'; NET.transport = 'Claude Shared DB';
-  } else if(FB_URL){
-    db = createFirebaseDb(FB_URL, ROOM); mode = 'connecting';
-  } else {
-    db = createMqttDb(ROOM); mode = 'connecting';
-  }
-  loadTimer = setTimeout(() => { if(!S){ mode = 'slow'; renderAll(); } }, 10000);
-  db.doc('game/state').onSnapshot(snap => {
+  if(id !== bootId) return;
+  db = cap || (FB_URL ? createFirebaseDb(FB_URL, ROOM, cached) : createMqttDb(ROOM, cached));
+  loadTimer = setTimeout(() => { if(!S){ mode = 'slow'; renderAll(); } }, 4000);
+  let lastShared = null;
+  const unsub = db.doc('game/state').onSnapshot(snap => {
+    if(id !== bootId) return;
     clearTimeout(loadTimer);
-    if(!snap.exists || (snap.data().v || 1) < GAME_V){ ensureGame(); return; }
-    const first = !S; S = clone(snap.data()); if(NET.status === 'live') mode = 'live';
+    const st = snap.exists ? snap.data() : null;
+    if(cap){
+      NET.status = 'live'; NET.transport = 'Claude Shared DB';
+      if(st && isBetterState(lastShared, st)) return;
+      if(st) lastShared = st;
+    }
+    if(st && (st.v || 1) < GAME_V){ mode = 'incompatible'; renderAll(); return; }
+    if(NET.status === 'live') mode = 'live';
+    const first = !S;
+    // Silence isn't proof a room is empty. A starting map is only a local preview
+    // until an actual player order; never publish cache/newGame just for connecting.
+    if(st) S = clone(st); else if(!S) S = newGame(Date.now());
     if(first) seen = Date.now(); else announce();
     renderAll();
-  }, err => { mode = 'error'; renderAll(); });
-  renderAll();
+  }, () => { if(id === bootId){ mode = 'error'; NET.status = 'off'; renderAll(); } });
+  if(cap && typeof unsub === 'function') NET.destroy = unsub;
 }
 let seen = 0, shown = new Set();
 function announce(){
@@ -1467,11 +1528,11 @@ function proj_(){ if(!S) return null; const c = clone({teams:S.teams, terr:S.ter
 function roomPillHtml(){
   const n = onlineList().length;
   const cls = NET.status === 'live' ? 'live' : (NET.status === 'connecting' ? 'conn' : 'off');
-  const lbl = NET.status === 'live' ? `Live · ${n} online` : (NET.status === 'connecting' ? 'Connecting…' : 'Offline');
+  const lbl = NET.status === 'live' ? `Live · ${n} online` : (NET.status === 'connecting' ? (S ? 'Syncing…' : 'Connecting…') : 'Offline');
   return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)}"><span class="sdot ${cls}"></span><span>${lbl}</span></button>`;
 }
 function renderHud(){
-  if(!S){ $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `${roomPillHtml()}<span class="mut sm">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'slow' ? 'Still connecting…' : 'Connecting…'}</span>`; return; }
+  if(!S){ $('#banner').innerHTML = ''; $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `${roomPillHtml()}<span class="mut sm">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'incompatible' ? 'Incompatible save format.' : mode === 'slow' ? 'Still connecting…' : 'Connecting…'}</span>`; return; }
   const t = myTeam(), team = t || 'reich', P = proj_(), inc = income(S, team);
   document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#c9c3ae');
   const vr = vpOf(S, 'reich'), vd = vpOf(S, 'dawn'), vn = TOTAL_VP - vr - vd;
@@ -1488,7 +1549,9 @@ function renderHud(){
     const parts = [];
     if(S.dom){ const left = Math.max(0, DOM_MS - (Date.now() - S.dom.since)); parts.push(`<span style="color:${tcol(S.dom.team)}">${TEAMS[S.dom.team].name} holds ${Math.round(vpOf(S, S.dom.team) / TOTAL_VP * 100)}% of the world. Victory in ${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')} unless it is pushed below ${Math.round(DOM_SHARE * 100)}%.</span>`); }
     const cf = ceasefire(S, Date.now()); if(cf) parts.push(`Ceasefire in force for ${Math.ceil((cf.until - Date.now()) / 60000)} more minutes.`);
-    if(mode === 'local') parts.push('Offline: could not reach a live relay server — moves stay local until reconnected. <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
+    if(mode === 'connecting') parts.push('Syncing the latest room state. Orders will unlock when sync finishes.');
+    if(mode === 'incompatible') parts.push('Incompatible save format. The live room has not been changed.');
+    if(mode === 'local') parts.push('Offline: moves are local only while the room reconnects. <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
     if(mode === 'error') parts.push('Lost contact with the war room. <button class="btn sm" style="margin-left:6px" data-act="reconnect">Retry</button>');
     if(parts.length) b = `<div class="banner ${mode === 'local' || mode === 'error' ? 'warn' : ''}">${parts.join(' · ')}</div>`;
   }
@@ -1718,7 +1781,7 @@ function panelRules(){
   <div class="card sm"><h3>Roles</h3><b>Leader</b>: everything. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
 }
 function renderPanel(){
-  if(!S){ $('#panel').innerHTML = `<div class="card">${mode === 'error' ? 'The war room could not be reached. Check your connection and sign-in, then reload.' : mode === 'slow' ? 'Still waiting on the war room. If this persists, the page may not have access to its data.' : 'Connecting to the war room…'}</div>`; return; }
+  if(!S){ $('#panel').innerHTML = `<div class="card">${mode === 'error' ? 'The war room could not be reached. Check your connection and sign-in, then reload.' : mode === 'slow' ? 'Still waiting on the war room. If this persists, the page may not have access to its data.' : mode === 'incompatible' ? 'This room uses an older save format. Its saved game has not been changed.' : 'Connecting to the war room…'}</div>`; return; }
   const sc = $('#panel').scrollTop; const el = document.activeElement; if(el && el.matches && el.matches('input[type=text],input[type=number]') && $('#panel').contains(el)) return;
   $('#panel').innerHTML = {orders:panelOrders, troops:panelTroops, tech:panelTech, dip:panelDip, council:panelCouncil, log:panelLog, rules:panelRules}[tab](); $('#panel').scrollTop = sc;
 }
@@ -1746,7 +1809,7 @@ function renderModal(){
       <details class="card sm"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
         <div class="mut sm" style="margin:6px 0">Public MQTT relays are free and instant, though brokers can occasionally restart. Your browser auto-caches the war locally, or you can paste a free Firebase Realtime Database URL below for 24/7 cloud storage.</div>
         <div class="row" style="margin-bottom:8px"><input type="text" id="fbin" value="${esc(FB_URL)}" placeholder="https://your-app-default-rtdb.firebaseio.com" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn sm" data-act="savefb">Use</button>${FB_URL ? '<button class="btn sm" data-act="clearfb">Clear</button>' : ''}</div>
-        <div class="row"><button class="btn sm" data-act="exportstate" ${S ? '' : 'disabled'}>Export save JSON</button><button class="btn sm" data-act="importstate">Import save JSON</button><button class="btn sm" data-act="reconnect">Reconnect</button></div>
+        <div class="row"><button class="btn sm" data-act="exportstate" ${S ? '' : 'disabled'}>Export save JSON</button><button class="btn sm" data-act="importstate" ${mode === 'live' ? '' : 'disabled'}>Import save JSON</button><button class="btn sm" data-act="reconnect">Reconnect</button></div>
       </details>
       <div class="row"><button class="btn pri" data-act="closem">Done</button></div>
     </div></div>`;
@@ -1843,14 +1906,21 @@ document.addEventListener('click', e => {
     return;
   }
   if(a === 'importstate'){
+    if(!db || mode !== 'live') return toast('Wait for live sync before importing a save.');
+    const store = db, displayed = S;
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
     inp.onchange = async () => {
       const f = inp.files && inp.files[0]; if(!f) return;
       try{
         const imp = JSON.parse(await f.text());
-        if(!imp || !imp.terr || !imp.teams || !imp.players) return toast('Invalid save file.', 'bad');
+        if(!imp || !imp.terr || !imp.teams || !imp.players || (imp.v || 1) < GAME_V) return toast('Invalid or incompatible save file.', 'bad');
+        if(store !== db || mode !== 'live') return;
+        const ref = store.doc('game/state'), snap = await ref.get();
+        if(store !== db || mode !== 'live' || (snap.exists && (snap.data().v || 1) < GAME_V)) return;
+        if(isBetterState(S, displayed) || (snap.exists && isBetterState(snap.data(), displayed))) throw new Error('The room changed. Review its latest revision before importing.');
         imp.rev = Math.max((S && S.rev) || 0, imp.rev || 0) + 1; imp.origin = TAB;
-        if(db) await db.doc('game/state').set(imp);
+        await ref.set(imp);
+        if(store !== db || isBetterState(S, imp)) return;
         S = imp; M = null; renderAll(); toast('Save imported and synced to the war room.', 'win');
       }catch(err){ toast('Could not import save: ' + (err.message || err), 'bad'); }
     };
@@ -1926,10 +1996,10 @@ svg.addEventListener('wheel', e => { e.preventDefault(); const r = svg.getBoundi
 window.addEventListener('resize', setVB);
 
 /* clock: live resource display and delayed domination check */
-setInterval(() => { if(!S) return; renderHud(); if(S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
+setInterval(() => { if(!S) return; renderHud(); if(mode === 'live' && S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
 setInterval(() => { if(S && tab === 'council') { const el = document.activeElement; if(!(el && el.matches && el.matches('input,select'))) renderPanel(); } }, 5000);
 
-buildBase(); setVB(); renderMapnav(); renderAll();
+buildBase(); setVB(); renderMapnav();
 if(window.claude && window.claude.hot && window.claude.hot.snapshot){ try{ window.claude.hot.snapshot(() => ({sel, tab})); }catch(e){} }
 boot();
 window.__eot = {get S(){return S;}, act, A, TD, ADJ, LINKS, tick, newGame, checkWin};
