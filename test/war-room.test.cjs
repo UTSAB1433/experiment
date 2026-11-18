@@ -28,10 +28,11 @@ function publications(socket){
     return {topic:b.toString('utf8', i + 2, end), data:JSON.parse(b.toString('utf8', end)), retain:!!(b[0] & 1)};
   });
 }
-function launch({cached, fb, fetch, claude, WebSocket, timers} = {}){
+function launch({cached, identity, fb, fetch, claude, WebSocket, timers} = {}){
   const sockets = [], channels = [], nodes = new Map(), events = new Map();
   const storage = new Map(cached === undefined ? [] : [[key, typeof cached === 'string' ? cached : JSON.stringify(cached)]]);
-  function element(){ return {innerHTML:'', children:[], classList:{toggle(){}}, style:{setProperty(){}}, setAttribute(){}, addEventListener(){}, appendChild(el){ this.children.push(el); }, remove(){}, contains(){ return false; }}; }
+  if(identity){ storage.set('eot-me', identity.name); storage.set('eot-ph', identity.ph); }
+  function element(){ return {querySelectorAll:() => [], innerHTML:'', children:[], classList:{toggle(){}}, style:{setProperty(){}}, setAttribute(){}, addEventListener(){}, appendChild(el){ this.children.push(el); }, remove(){}, contains(){ return false; }}; }
   function $(s){ if(!nodes.has(s)) nodes.set(s, element()); return nodes.get(s); }
   const window = {claude, addEventListener(){}, removeEventListener(){}};
   const document = {querySelector:$, querySelectorAll:() => [], documentElement:element(), createElement:element, addEventListener:(e, f) => events.set(e, f)};
@@ -54,7 +55,7 @@ function launch({cached, fb, fetch, claude, WebSocket, timers} = {}){
     WebSocket:WebSocket || Socket, BroadcastChannel:Channel, fetch:fetch || (() => { throw Error('Unexpected fetch'); }),
     localStorage:{getItem:k => storage.get(k) ?? null, setItem:(k, v) => storage.set(k, v)},
     TextEncoder, TextDecoder, ArrayBuffer, Uint8Array, Date, setTimeout, clearTimeout, setInterval, clearInterval, ...timers});
-  return {game:window.__eot, sockets, channels, $, storage, click:act => events.get('click')({target:{closest:() => ({dataset:{act}})}})};
+  return {game:window.__eot, sockets, channels, $, storage, document, click:(act, data = {}) => events.get('click')({target:{closest:() => ({dataset:{act, ...data}})}})};
 }
 const {game:factory} = launch({timers:{setTimeout(){}, setInterval(){}}});
 function saved(rev){
@@ -242,4 +243,74 @@ test('a slow shared DB capability cannot delay warm paint or roll back a newer s
   resolveCapability({doc:() => ({onSnapshot:cb => { emit = cb; }})}); await flush();
   for(const rev of [31, 12]) emit({exists:true, data:() => saved(rev)});
   assert.equal(tab.game.S.rev, 31); assert.equal(tab.sockets.length, 0); checkReadOnly(tab);
+});
+
+// The VM DOM normally just records innerHTML. Expose the rendered panel's price tags
+// as elements so the app's real clock can change their disabled state and cost color.
+function purchaseRoom(st, team){
+  const identity = {name:'Test chief', ph:'fixture-only'};
+  st.players[identity.name] = {team, role:'chief', pw:identity.ph, title:'Test', cd:0};
+  const tab = launch({cached:st, identity}), panel = tab.$('#panel');
+  let html, elements;
+  function controls(){
+    if(html !== panel.innerHTML){
+      html = panel.innerHTML;
+      elements = Array.from(html.matchAll(/<(button|span)\b([^>]*)>/g), ([tag, type, attrs]) => ({
+        tagName:type.toUpperCase(), disabled:/\sdisabled\b/.test(tag), classList:{toggle(k, on){ this[k] = on; }},
+        dataset:Object.fromEntries(Array.from(attrs.matchAll(/\sdata-(\w+)(?:="([^"]*)")?/g), ([,k,v]) => [k, v ?? '']))
+      }));
+    }
+    return elements;
+  }
+  panel.querySelectorAll = tab.document.querySelectorAll = sel => sel === '[data-price]' ? controls().filter(el => 'price' in el.dataset) : [];
+  const [relay, b, c] = tab.sockets; relay.subscribe(); b.onerror(); c.onerror(); relay.message('state', st);
+  return {tab, controls, relay};
+}
+
+for(const team of ['reich','dawn']) test(`${team} research unlocks with passive income and charges the displayed price once`, async t => {
+  mockTime(t);
+  const st = saved(30); st.t = now;
+  const T = st.teams[team], ctx = {team, now, name:'Test chief'}, payload = {k:'ind'};
+  const upgraded = structuredClone(st), projected = structuredClone(st);
+  assert.ok(factory.A.research(upgraded, ctx, payload).ok);
+  const steel = T.res.steel - upgraded.teams[team].res.steel, gold = T.res.gold - upgraded.teams[team].res.gold;
+  factory.tick(projected, now + 1000);
+  T.res.steel = steel - 1.5 * (projected.teams[team].res.steel - T.res.steel);
+  const {tab, controls} = purchaseRoom(st, team);
+  tab.click('tab', {k:'tech'});
+  const button = () => controls().find(el => el.dataset.act === 'research' && el.dataset.k === 'ind');
+  const label = controls().find(el => el.tagName === 'SPAN' && +el.dataset.steel === steel);
+  assert.equal(button().disabled, true); assert.equal(label.classList.no, true);
+  t.mock.timers.tick(2000); // No snap, user action, or tab change.
+  assert.match(tab.$('#hud').innerHTML, new RegExp('Steel</span><span class="v">' + steel + '</span>'));
+  assert.equal(button().disabled, false); assert.equal(label.classList.no, false);
+  assert.equal(tab.game.S.t, now); assert.equal(tab.game.S.teams[team].res.steel, T.res.steel); checkReadOnly(tab);
+
+  const order = tab.game.act('research', payload); t.mock.timers.tick(75); await order;
+  const expected = structuredClone(st); factory.tick(expected, Date.now());
+  assert.equal(tab.game.S.teams[team].res.steel, expected.teams[team].res.steel - steel);
+  assert.equal(tab.game.S.teams[team].res.gold, expected.teams[team].res.gold - gold);
+  assert.equal(tab.game.S.teams[team].tech.ind, 1); assert.equal(tab.game.S.rev, 31);
+  assert.equal(tab.sockets.flatMap(publications).filter(p => p.retain).length, 1);
+  assert.equal(button().disabled, true, 'the next level is no longer affordable');
+});
+
+test('recruit buttons track full batch cost and command points, and a newer room balance still wins', async t => {
+  mockTime(t);
+  const st = saved(15); st.t = now;
+  const T = st.teams.reich, projected = structuredClone(st); factory.tick(projected, now + 1000);
+  T.cp = 0.995; T.res.man = 50 - 2.5 * (projected.teams.reich.res.man - T.res.man);
+  const {tab, controls, relay} = purchaseRoom(st, 'reich');
+  const buy = (n,u = 'inf') => controls().find(el => el.dataset.act === 'recruit' && el.dataset.u === u && +el.dataset.n === n);
+  tab.click('sel', {id:'BER'});
+  assert.equal(buy(1).disabled, true, 'needs one command point');
+  t.mock.timers.tick(1000); assert.equal(buy(1).disabled, false); assert.equal(buy(5).disabled, true);
+  tab.click('tab', {k:'troops'}); assert.equal(buy(1).disabled, false); assert.equal(buy(5).disabled, true);
+  t.mock.timers.tick(2000); assert.equal(buy(5).disabled, false); assert.equal(buy(1,'rk_maus').disabled, true, 'still tech locked');
+  const order = tab.game.act('recruit', {tid:'BER', unit:'inf', n:5});
+  const spent = structuredClone(st); spent.rev++; spent.t = Date.now(); spent.teams.reich.res.man = 0; spent.teams.reich.cp = 4;
+  relay.message('state', spent); // A teammate spent the balance while we waited for the lock.
+  t.mock.timers.tick(75); await order;
+  assert.equal(tab.game.S.rev, spent.rev); assert.equal(tab.game.S.terr.BER.u.inf, st.terr.BER.u.inf);
+  assert.equal(buy(1).disabled, true); checkReadOnly(tab);
 });
