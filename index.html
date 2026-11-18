@@ -87,6 +87,13 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 430px;
 .seg button{flex:1;background:var(--panel);border:0;padding:6px 6px;cursor:pointer;font-size:12px;border-right:1px solid var(--line)}
 .seg button:last-child{border-right:0}
 .seg button.on{background:var(--acc);color:var(--acc-ink);font-weight:600}
+.divbar{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.divbar button{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;font-family:var(--mono);color:var(--mute)}
+.divbar button.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}
+.divhdr{font-family:var(--display);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:6px 0 4px}
+.pwr{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:3px;background:var(--panel);border:1px solid var(--line);color:var(--acc);margin-left:4px;vertical-align:middle}
+.elite{border-color:color-mix(in srgb,var(--dawn) 60%,var(--line));color:var(--dawn)}
+.abil{font-size:11px;color:var(--ok);margin-top:2px}
 .tech{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
 .tech .desc{grid-column:1/-1;font-size:12px;color:var(--mute)}
 .log{display:flex;flex-direction:column;gap:6px}
@@ -163,31 +170,161 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TEAMS = {
   reich:{id:'reich', name:'The Reich', short:'Reich', css:'var(--reich)', hex:'#d9573f', leader:'Führer', flavor:'Iron discipline. Armor attacks hit 10% harder.'},
-  dawn:{id:'dawn', name:'Black Dawn', short:'Dawn', css:'var(--dawn)', hex:'#e6ac35', leader:'Prophet King', flavor:'Sacred ground. +10% defense on own land, spies against it fail more.'}
+  dawn:{id:'dawn', name:'Black Dawn', short:'Dawn', css:'var(--dawn)', hex:'#e6ac35', leader:'Prophet King', flavor:'Per tenebras, ad imperium. +20% trade, +25% diplomatic influence, +15% territorial stability, +15% research efficiency, +15% gold, +20% intel coverage; -10% conventional military strength, +10% elite recruitment cost.'}
 };
 const OTHER = t => t === 'reich' ? 'dawn' : 'reich';
 const RES = {man:'Manpower', steel:'Steel', oil:'Oil', gold:'Gold'};
 const RK = Object.keys(RES);
+const DIVS = {land:'Land', air:'Air', water:'Water', intel:'Intelligence', pol:'Politics', econ:'Economy'};
+const DIV_SUB = {
+  land:'The Oathbound Legions',
+  air:'The Aerial Order of the Black Sun',
+  water:'The Abyssal Order',
+  intel:'The Veiled Directorate',
+  pol:'The Council of Shadows',
+  econ:'The Golden Covenant'
+};
 const UNITS = {
-  inf:{atk:1, def:1.5, cost:{man:10, steel:2}, cat:'inf'},
-  art:{atk:3, def:1, cost:{man:6, steel:8}, cat:'art', req:['art',1]},
-  arm:{atk:4, def:2.5, cost:{man:8, steel:12, oil:6}, cat:'arm', req:['arm',1]},
-  air:{atk:2.5, def:3, cost:{steel:8, oil:8}, cat:'air', req:['air',1]},
-  bmb:{atk:5, def:0.5, cost:{steel:12, oil:10}, cat:'air', req:['air',2]},
-  nav:{atk:3, def:2, cost:{steel:14, oil:8, gold:2}, cat:'nav', req:['nav',1]},
-  sup:{atk:30, def:25, cost:{man:30, steel:120, oil:80, gold:40}, cat:'arm', req:['arm',4]}
+  // Reich & Neutral conventional forces
+  inf:{atk:1, def:1.5, cost:{man:10, steel:2}, cat:'inf', div:'land', pwr:1, n:'Infantry', desc:'Standard line infantry.', abil:''},
+  art:{atk:3, def:1, cost:{man:6, steel:8}, cat:'art', req:['art',1], div:'land', pwr:3, n:'Artillery', desc:'Heavy field guns.', abil:''},
+  arm:{atk:4, def:2.5, cost:{man:8, steel:12, oil:6}, cat:'arm', req:['arm',1], div:'land', pwr:4, n:'Panzers', desc:'Armored spearhead divisions.', abil:'Reich +10% armor attack'},
+  air:{atk:2.5, def:3, cost:{steel:8, oil:8}, cat:'air', req:['air',1], div:'air', pwr:3, n:'Luftwaffe Fighters', desc:'Air superiority squadrons.', abil:''},
+  bmb:{atk:5, def:0.5, cost:{steel:12, oil:10}, cat:'air', req:['air',2], div:'air', pwr:5, n:'Stuka Bombers', desc:'Dive bombers for ground support.', abil:''},
+  nav:{atk:3, def:2, cost:{steel:14, oil:8, gold:2}, cat:'nav', req:['nav',1], div:'water', pwr:3, n:'Kriegsmarine', desc:'Surface fleet & landing escort.', abil:'Sea crossings at Naval 2'},
+  sup:{atk:30, def:25, cost:{man:30, steel:120, oil:80, gold:40}, cat:'arm', req:['arm',4], div:'land', pwr:10, elite:true, max:2, n:'Panzer 1000 Ratte', desc:'Landcruiser super-heavy tank.', abil:'Max 2 per power'},
+
+  // Black Dawn — I. Land Forces (The Oathbound Legions)
+  bd_init:{team:'dawn', div:'land', pwr:1, atk:0.9, def:1.2, cost:{man:8, steel:1}, cat:'inf', req:null, basic:true, conv:true,
+    n:'Initiates', desc:'The lowest-ranking members of the Black Dawn, serving as its basic manpower and administrative reserve.',
+    abil:'Mass Recruitment: Reduces the cost of recruiting basic personnel.'},
+  bd_veil:{team:'dawn', div:'land', pwr:2, atk:1.3, def:2.2, cost:{man:10, steel:4}, cat:'inf', req:null, basic:true, conv:true,
+    n:'Veilkeepers', desc:'Territorial guardians responsible for maintaining order and protecting the organisation\'s establishments.',
+    abil:'Guardians of the Veil: Increases stability in controlled territories.'},
+  bd_oath:{team:'dawn', div:'land', pwr:4, atk:2.8, def:3.4, cost:{man:14, steel:8}, cat:'inf', req:['inf',1], basic:true, conv:true,
+    n:'Oathbound', desc:'The standard ground formations of the Black Dawn, distinguished by their discipline and loyalty.',
+    abil:'Unbreakable Oath: Receives a morale bonus in friendly territories.'},
+  bd_mant:{team:'dawn', div:'land', pwr:6, atk:4.2, def:5.5, cost:{man:16, steel:16, gold:4}, cat:'inf', req:['inf',2], elite:true,
+    n:'Black Mantles', desc:'Elite formations entrusted with protecting important institutions and high-ranking officials.',
+    abil:'Unyielding Presence: Provides additional defensive strength to friendly territories.'},
+  bd_lega:{team:'dawn', div:'land', pwr:8, atk:6.5, def:6.5, cost:{man:18, steel:22, oil:8, gold:10}, cat:'arm', req:['inf',3], elite:true, mech:true,
+    n:'Legates of the Eclipse', desc:'Prestigious military commanders responsible for coordinating and supervising the organisation\'s elite formations.',
+    abil:'Authority of the Eclipse: Increases the organisation and effectiveness of nearby friendly units.'},
+  bd_syno:{team:'dawn', div:'land', pwr:10, atk:9.5, def:10.5, cost:{man:22, steel:35, oil:15, gold:22}, cat:'inf', req:['inf',4], elite:true, mech:true,
+    n:'The Sovereign Synod', desc:'The highest military establishment of the Black Dawn, representing its supreme institutional authority.',
+    abil:'Sacred Mandate: Provides a faction-wide morale and stability bonus.'},
+
+  // Black Dawn — II. Air Forces (The Aerial Order of the Black Sun)
+  bd_rave:{team:'dawn', div:'air', pwr:1, atk:0.8, def:1.0, cost:{steel:4, oil:3}, cat:'air', req:null, conv:true,
+    n:'Raven Couriers', desc:'Aerial messengers responsible for maintaining communication between distant Black Dawn establishments.',
+    abil:'Swift Correspondence: Reduces communication delays between friendly territories.'},
+  bd_vair:{team:'dawn', div:'air', pwr:3, atk:2.0, def:2.8, cost:{steel:9, oil:7}, cat:'air', req:['air',1], conv:true, mech:true,
+    n:'Veil Airships', desc:'Light transport airships used for civilian, administrative and logistical transportation.',
+    abil:'Aerial Logistics: Increases transportation capacity.'},
+  bd_obsv:{team:'dawn', div:'air', pwr:4, atk:2.5, def:3.2, cost:{steel:10, oil:8, gold:3}, cat:'air', req:['air',1], conv:true, mech:true,
+    n:'Eclipse Observers', desc:'Specialised aerial observation units that provide valuable information about the surrounding world.',
+    abil:'Eyes Above: Improves map visibility and intelligence coverage.'},
+  bd_noct:{team:'dawn', div:'air', pwr:7, atk:5.8, def:5.0, cost:{steel:18, oil:14, gold:8}, cat:'air', req:['air',2], elite:true, mech:true,
+    n:'Nocturne-Class Airships', desc:'Large, prestigious airships representing the technological and industrial achievements of the Black Dawn.',
+    abil:'Imperial Transit: Provides a substantial transportation and logistical bonus.'},
+  bd_hera:{team:'dawn', div:'air', pwr:10, atk:9.0, def:8.0, cost:{steel:28, oil:22, gold:18}, cat:'air', req:['air',4], elite:true, mech:true,
+    n:'Heralds of the Black Sun', desc:'The supreme aerial establishment of the organisation, symbolising its technological prestige and international standing.',
+    abil:'Black Sun Ascendant: Provides faction-wide prestige and communication bonuses.'},
+
+  // Black Dawn — III. Naval Forces (The Abyssal Order)
+  bd_sail:{team:'dawn', div:'water', pwr:1, atk:0.8, def:1.1, cost:{steel:5, gold:2}, cat:'nav', req:null, conv:true,
+    n:'Black Sails', desc:'Small commercial vessels forming the foundation of the Black Dawn\'s maritime trade network.',
+    abil:'Commercial Passage: Generates additional income from basic maritime trade.'},
+  bd_merc:{team:'dawn', div:'water', pwr:3, atk:2.0, def:2.5, cost:{steel:10, oil:4, gold:4}, cat:'nav', req:['nav',1], conv:true, mech:true,
+    n:'Umbral Merchantmen', desc:'Commercial fleets responsible for maintaining international trade relationships and transporting valuable resources.',
+    abil:'International Commerce: Increases overseas trade income.'},
+  bd_tide:{team:'dawn', div:'water', pwr:5, atk:3.8, def:4.5, cost:{steel:16, oil:8, gold:6}, cat:'nav', req:['nav',2], conv:true, mech:true,
+    n:'Tidewardens', desc:'The conventional maritime establishment responsible for protecting the organisation\'s commercial interests.',
+    abil:'Guardians of the Tides: Increases maritime territorial stability.'},
+  bd_abys:{team:'dawn', div:'water', pwr:7, atk:5.5, def:6.5, cost:{steel:22, oil:12, gold:10}, cat:'nav', req:['nav',3], elite:true, mech:true,
+    n:'Abyssal Guardians', desc:'Heavy naval formations representing the Black Dawn\'s considerable maritime resources.',
+    abil:'Sovereignty of the Seas: Provides additional naval presence and maritime protection.'},
+  bd_levi:{team:'dawn', div:'water', pwr:10, atk:9.0, def:9.5, cost:{steel:34, oil:20, gold:20}, cat:'nav', req:['nav',4], elite:true, mech:true,
+    n:'The Leviathan Fleet', desc:'The legendary supreme naval establishment of the Black Dawn, feared for its immense prestige and influence over international waters.',
+    abil:'Dominion of the Abyss: Provides major maritime, trade and transportation bonuses.'},
+
+  // Black Dawn — IV. Intelligence & Information (The Veiled Directorate)
+  bd_whis:{team:'dawn', div:'intel', pwr:1, atk:0.4, def:0.8, cost:{man:4, gold:5}, cat:'intel', req:['intel',1],
+    n:'Whisperers', desc:'The basic information network of the Black Dawn, maintaining connections and gathering general information.',
+    abil:'Rumour Mill: Generates additional intelligence points.'},
+  bd_arch:{team:'dawn', div:'intel', pwr:2, atk:0.6, def:1.2, cost:{man:4, steel:4, gold:8}, cat:'intel', req:['intel',1],
+    n:'Archivists of the Veil', desc:'Custodians of the organisation\'s historical, political and administrative records.',
+    abil:'Eternal Records: Increases research efficiency.'},
+  bd_orac:{team:'dawn', div:'intel', pwr:4, atk:1.0, def:2.0, cost:{man:6, gold:14}, cat:'intel', req:['intel',2],
+    n:'Oracles', desc:'Distinguished analysts responsible for interpreting information and identifying important developments.',
+    abil:'Foresight: Provides bonuses to research and intelligence generation.'},
+  bd_keep:{team:'dawn', div:'intel', pwr:6, atk:1.5, def:3.0, cost:{man:8, steel:6, gold:20}, cat:'intel', req:['intel',3], elite:true,
+    n:'Keepers of the Veil', desc:'Senior officials overseeing the organisation\'s information institutions and intelligence archives.',
+    abil:'Hidden Knowledge: Increases intelligence coverage and reduces uncertainty about foreign territories.'},
+  bd_obsd:{team:'dawn', div:'intel', pwr:8, atk:2.0, def:4.0, cost:{man:10, steel:12, gold:28}, cat:'intel', req:['intel',3], elite:true,
+    n:'The Obsidian Directorate', desc:'The highest administrative institution of the Veiled Directorate, coordinating the Black Dawn\'s information and research establishments.',
+    abil:'Omniscient Archives: Provides a substantial faction-wide research bonus.'},
+  bd_eyes:{team:'dawn', div:'intel', pwr:10, atk:2.5, def:5.0, cost:{man:12, steel:16, gold:38}, cat:'intel', req:['intel',4], elite:true,
+    n:'The Eyes of the Black Sun', desc:'The ultimate expression of the Black Dawn\'s intelligence network, representing its ambition to maintain comprehensive knowledge of international affairs.',
+    abil:'Total Awareness: Provides the highest available intelligence and information coverage bonus.'},
+
+  // Black Dawn — V. Political & Diplomatic Apparatus (The Council of Shadows)
+  bd_wenv:{team:'dawn', div:'pol', pwr:1, atk:0.4, def:0.8, cost:{man:4, gold:6}, cat:'intel', req:null,
+    n:'Whispering Envoys', desc:'Junior diplomatic representatives responsible for establishing basic international connections.',
+    abil:'Open Channels: Slightly improves relations with neutral territories.'},
+  bd_silv:{team:'dawn', div:'pol', pwr:3, atk:0.8, def:1.5, cost:{man:5, gold:12}, cat:'intel', req:['intel',1],
+    n:'Silver Tongues', desc:'Skilled diplomats recognised for their negotiating abilities and maintenance of international relationships.',
+    abil:'Art of Persuasion: Increases diplomatic influence generation.'},
+  bd_ocov:{team:'dawn', div:'pol', pwr:5, atk:1.2, def:2.5, cost:{man:6, gold:18}, cat:'intel', req:['intel',2],
+    n:'Oracles of the Covenant', desc:'Senior diplomatic officials responsible for maintaining important international agreements and alliances.',
+    abil:'Sacred Covenant: Improves alliance stability.'},
+  bd_hleg:{team:'dawn', div:'pol', pwr:7, atk:2.0, def:3.5, cost:{man:8, steel:8, gold:26}, cat:'intel', req:['intel',3], elite:true,
+    n:'High Legates', desc:'Distinguished representatives entrusted with overseeing the Black Dawn\'s political interests in important foreign territories.',
+    abil:'Imperial Representation: Increases influence in territories with established diplomatic relationships.'},
+  bd_csha:{team:'dawn', div:'pol', pwr:9, atk:2.8, def:4.8, cost:{man:10, steel:14, gold:36}, cat:'intel', req:['intel',3], elite:true,
+    n:'The Council of Shadows', desc:'The supreme political institution of the Black Dawn, coordinating its diplomatic relationships and international political authority.',
+    abil:'Invisible Sovereignty: Provides a substantial faction-wide diplomatic influence and territorial stability bonus.'},
+  bd_hier:{team:'dawn', div:'pol', pwr:10, atk:4.0, def:7.0, cost:{man:15, steel:20, gold:60}, cat:'intel', req:['intel',4], elite:true, max:1,
+    n:'The Grand Hierophant', desc:'The highest expression of the Black Dawn\'s political and religious authority, traditionally represented by the Prophet-King.',
+    abil:'The Grand Mandate: Provides a powerful faction-wide influence bonus and improves diplomatic relations. (Max 1)',
+    limitMsg:'Only one Grand Hierophant may exist at a time.'},
+
+  // Black Dawn — VI. Economic & Industrial Apparatus (The Golden Covenant)
+  bd_fact:{team:'dawn', div:'econ', pwr:1, atk:0.3, def:0.7, cost:{man:4, steel:3, gold:6}, cat:'ind', req:null,
+    n:'Factors of the Dawn', desc:'Junior commercial representatives responsible for maintaining the organisation\'s basic economic relationships.',
+    abil:'Commercial Beginnings: Generates additional basic trade income.'},
+  bd_mpri:{team:'dawn', div:'econ', pwr:3, atk:0.6, def:1.2, cost:{man:5, steel:6, gold:14}, cat:'ind', req:['ind',1],
+    n:'Merchant Princes', desc:'Wealthy commercial establishments responsible for expanding the Black Dawn\'s international trading network.',
+    abil:'International Markets: Increases income from active trade agreements.'},
+  bd_gpat:{team:'dawn', div:'econ', pwr:5, atk:0.8, def:1.8, cost:{man:6, steel:10, gold:22}, cat:'ind', req:['ind',1],
+    n:'Golden Patrons', desc:'Financial establishments and wealthy patrons providing economic support to the organisation.',
+    abil:'Patronage: Generates additional gold over time.'},
+  bd_inds:{team:'dawn', div:'econ', pwr:7, atk:1.4, def:3.0, cost:{man:10, steel:20, oil:6, gold:24}, cat:'ind', req:['ind',2], elite:true,
+    n:'Industrial Consortiums', desc:'Large industrial institutions responsible for expanding the organisation\'s manufacturing and productive capacity.',
+    abil:'Industrial Expansion: Increases steel and industrial production.'},
+  bd_gexc:{team:'dawn', div:'econ', pwr:9, atk:1.8, def:3.8, cost:{man:10, steel:18, gold:40}, cat:'ind', req:['ind',3], elite:true,
+    n:'The Grand Exchange', desc:'The central financial institution of the Black Dawn, representing its international commercial and financial influence.',
+    abil:'Global Liquidity: Provides a substantial faction-wide gold and trade-income bonus.'},
+  bd_gsyn:{team:'dawn', div:'econ', pwr:10, atk:2.2, def:4.8, cost:{man:14, steel:28, oil:10, gold:52}, cat:'ind', req:['ind',4], elite:true,
+    n:'The Golden Synod', desc:'The supreme economic council coordinating the Black Dawn\'s financial, commercial and industrial institutions.',
+    abil:'Golden Dominion: Provides substantial bonuses to gold generation, trade income and industrial production.'}
 };
-const UORDER = ['inf','art','arm','air','bmb','nav','sup'];
-const UNAME = {
-  inf:{reich:'Infantry', dawn:'Dawn Legion'},
-  art:{reich:'Artillery', dawn:'Siege Guns'},
-  arm:{reich:'Panzers', dawn:'Obsidian Tanks'},
-  air:{reich:'Luftwaffe Fighters', dawn:'Ravens'},
-  bmb:{reich:'Stuka Bombers', dawn:'Night Bombers'},
-  nav:{reich:'Kriegsmarine', dawn:'Black Fleet'},
-  sup:{reich:'Panzer 1000 Ratte', dawn:'Eclipse Colossus'}
-};
-const uname = (u, t) => UNAME[u][t === 'dawn' ? 'dawn' : 'reich'];
+const REICH_UNITS = ['inf','art','arm','air','bmb','nav','sup'];
+const DAWN_UNITS = Object.keys(UNITS).filter(k => UNITS[k].team === 'dawn');
+const UORDER = [...REICH_UNITS, ...DAWN_UNITS];
+const unitsFor = team => team === 'dawn' ? DAWN_UNITS : REICH_UNITS;
+const divsFor = team => team === 'dawn' ? ['all','land','air','water','intel','pol','econ'] : ['all','land','air','water'];
+const uname = (u, t) => UNITS[u] ? UNITS[u].n : u;
+const DAWN_PASSIVES = [
+  ['International Trade', '+20% trade income'],
+  ['Diplomatic Influence', '+25% diplomatic influence (CP) generation'],
+  ['Territorial Stability', '+15% territorial stability & defense'],
+  ['Research Efficiency', '+15% research cost efficiency'],
+  ['Gold Generation', '+15% gold income'],
+  ['Intelligence Coverage', '+20% intelligence coverage & spy efficacy'],
+  ['Conventional Military Strength', '-10% conventional military effectiveness'],
+  ['Elite Recruitment', '+10% recruitment cost for elite formations']
+];
 const TECH = {
   inf:{n:'Infantry doctrine', d:['+12% infantry strength','Unlocks the Flanking tactic','+12% more infantry strength','+12% more (veteran cadres)']},
   art:{n:'Artillery', d:['Unlocks Artillery','Unlocks the Barrage tactic','+12% artillery strength','Barrage ignores 1 fortification level']},
@@ -200,10 +337,10 @@ const TECH = {
 const TKEYS = Object.keys(TECH);
 const TACT = {
   frontal:{n:'Frontal assault', units:[], req:null, d:'No bonus, no risk of being countered.'},
-  blitz:{n:'Blitzkrieg', units:['arm','sup'], req:['arm',2], d:'Armor spearheads. Strong against Elastic defense.'},
-  barrage:{n:'Barrage', units:['art'], req:['art',2], d:'Artillery bombardment. Strong against Dig-in.'},
-  flank:{n:'Flanking maneuver', units:['inf'], req:['inf',2], d:'Infantry envelopment. Strong against Counter-attack.'},
-  air:{n:'Air strike', units:['air','bmb'], req:['air',2], d:'Fighters and bombers lead. Good against Dig-in and Elastic.'}
+  blitz:{n:'Blitzkrieg', units:['arm','sup','bd_lega','bd_syno'], req:['arm',2], d:'Armor & Legate spearheads. Strong against Elastic defense.'},
+  barrage:{n:'Barrage', units:['art','bd_mant','bd_syno','bd_abys','bd_levi'], req:['art',2], d:'Heavy bombardment. Strong against Dig-in.'},
+  flank:{n:'Flanking maneuver', units:['inf','bd_init','bd_veil','bd_oath','bd_mant','bd_lega','bd_syno'], req:['inf',2], d:'Infantry envelopment. Strong against Counter-attack.'},
+  air:{n:'Air strike', units:['air','bmb','bd_rave','bd_vair','bd_obsv','bd_noct','bd_hera'], req:['air',2], d:'Aerial forces lead. Good against Dig-in and Elastic.'}
 };
 const MATRIX = {
   frontal:{bunker:1, elastic:1, counter:1},
@@ -403,11 +540,21 @@ function stanceOf(id){ return ['bunker','elastic','counter'][(id.charCodeAt(0) +
 function startUnits(t){
   const g = t.g, o = t.owner0;
   if(o === 'neutral') return {inf:g, arm:Math.floor(g/9)};
+  if(o === 'dawn'){
+    const u = {
+      bd_init:Math.max(2, Math.ceil(g * 0.45)),
+      bd_veil:Math.max(1, Math.floor(g * 0.25)),
+      bd_oath:Math.max(1, Math.floor(g * 0.2))
+    };
+    if(t.terr === 'coast') u.bd_sail = 1;
+    if(t.cap){ u.bd_mant = 2; u.bd_rave = 2; u.bd_obsv = 1; u.bd_whis = 1; u.bd_fact = 1; }
+    return u;
+  }
   const u = {inf:g, art:Math.floor(g/8), arm:Math.floor(g/5)};
   if(t.cap) u.air = 4;
   return u;
 }
-const GAME_V = 3;
+const GAME_V = 4;
 function newGame(now){
   const s = {v:GAME_V, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
   TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.cap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
@@ -419,16 +566,75 @@ function newGame(now){
 }
 function log(s, now, vis, msg, kind, extra){ s.log.unshift(Object.assign({t:now, vis, msg, kind:kind || 'info'}, extra || {})); if(s.log.length > 80) s.log.length = 80; }
 const total = u => Object.values(u).reduce((a, b) => a + b, 0);
+function dawnCounts(s){
+  const c = {};
+  TIDS.forEach(i => { const t = s.terr[i]; if(t.o === 'dawn') for(const u in t.u) c[u] = (c[u] || 0) + t.u[u]; });
+  return c;
+}
+function dawnBonuses(s){
+  const c = dawnCounts(s);
+  return {
+    c,
+    basicDisc: Math.min(0.25, 0.02 * (c.bd_init || 0)),
+    cdCutMs: Math.min(60000, 10000 * (c.bd_rave || 0)),
+    cpMult: 1.25 + Math.min(0.45, 0.05 * (c.bd_silv || 0) + 0.08 * (c.bd_csha || 0) + 0.15 * (c.bd_hier || 0) + 0.10 * (c.bd_hera || 0)),
+    resDisc: Math.min(0.40, 0.15 + 0.03 * (c.bd_arch || 0) + 0.04 * (c.bd_orac || 0) + 0.08 * (c.bd_obsd || 0)),
+    goldMult: 1.15 + Math.min(0.45, 0.02 * (c.bd_sail || 0) + 0.04 * (c.bd_merc || 0) + 0.08 * (c.bd_levi || 0) + 0.03 * (c.bd_fact || 0) + 0.05 * (c.bd_gexc || 0) + 0.08 * (c.bd_gsyn || 0)),
+    goldFlat: Math.min(12, 0.4 * (c.bd_fact || 0) + 1.0 * (c.bd_gpat || 0) + 1.8 * (c.bd_gexc || 0) + 2.5 * (c.bd_gsyn || 0)),
+    steelFlat: Math.min(10, 1.2 * (c.bd_inds || 0) + 2.0 * (c.bd_gsyn || 0)),
+    tradeMult: 1.20 + Math.min(0.45, 0.03 * (c.bd_sail || 0) + 0.05 * (c.bd_merc || 0) + 0.08 * (c.bd_levi || 0) + 0.03 * (c.bd_fact || 0) + 0.06 * (c.bd_mpri || 0) + 0.08 * (c.bd_gexc || 0) + 0.10 * (c.bd_gsyn || 0)),
+    intelBonus: 0.20 + Math.min(0.20, 0.03 * (c.bd_whis || 0) + 0.04 * (c.bd_orac || 0) + 0.06 * (c.bd_keep || 0) + 0.10 * (c.bd_eyes || 0)),
+    spyMs: SPY_MS * (1.20 + Math.min(0.60, 0.10 * (c.bd_orac || 0) + 0.15 * (c.bd_keep || 0) + 0.25 * (c.bd_eyes || 0))),
+    annexDisc: Math.min(0.45, 0.05 * (c.bd_wenv || 0) + 0.10 * (c.bd_hleg || 0) + 0.12 * (c.bd_csha || 0) + 0.18 * (c.bd_hier || 0)),
+    synodDef: Math.min(0.25, 0.08 * (c.bd_syno || 0) + 0.06 * (c.bd_csha || 0) + 0.08 * (c.bd_hier || 0)),
+    breakMult: ((c.bd_ocov || 0) > 0 || (c.bd_hier || 0) > 0) ? 0.5 : 1
+  };
+}
+function unitCost(s, team, u){
+  const U = UNITS[u], raw = U.cost, out = {};
+  let mult = 1;
+  if(team === 'dawn'){
+    const b = dawnBonuses(s);
+    if(U.elite) mult *= 1.10;
+    else if(U.basic) mult *= (1 - b.basicDisc);
+  }
+  for(const r in raw) out[r] = Math.max(1, Math.round(raw[r] * mult));
+  return out;
+}
+function researchCost(s, team, nx){
+  const raw = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) raw.oil = 12 * nx;
+  if(team === 'dawn'){
+    const mult = 1 - dawnBonuses(s).resDisc;
+    for(const r in raw) raw[r] = Math.max(1, Math.round(raw[r] * mult));
+  }
+  return raw;
+}
+function annexCost(s, team, g){
+  const base = 30 + 4 * g;
+  if(team === 'dawn') return Math.max(10, Math.round(base * (1 - dawnBonuses(s).annexDisc)));
+  return base;
+}
 function income(s, team){
   const T = s.teams[team], inc = Object.assign({}, BASE_INC), mult = 1 + 0.15 * T.tech.ind;
   TIDS.forEach(i => { const t = TD[i]; if(s.terr[i].o === team) inc[t.res] += t.amt * mult; });
-  if(s.teams[OTHER(team)].tech.nav >= 3) inc.gold *= 0.85;
+  if(team === 'dawn'){
+    const b = dawnBonuses(s);
+    inc.gold = inc.gold * b.goldMult + b.goldFlat;
+    inc.steel += b.steelFlat;
+  }
+  if(s.teams[OTHER(team)].tech.nav >= 3 || (OTHER(team) === 'dawn' && (dawnCounts(s).bd_levi || 0) > 0)) inc.gold *= 0.85;
   return inc;
 }
 function tick(s, now){
   let dt = (now - s.t) / 60000; if(dt <= 0) return;
   dt = Math.min(dt, 720);
-  ['reich','dawn'].forEach(t => { const inc = income(s, t), T = s.teams[t]; RK.forEach(r => T.res[r] += inc[r] * dt); T.cp = Math.min(CPMAX, T.cp + dt * CPRATE); });
+  const db = dawnBonuses(s);
+  ['reich','dawn'].forEach(t => {
+    const inc = income(s, t), T = s.teams[t];
+    RK.forEach(r => T.res[r] += inc[r] * dt);
+    const rate = CPRATE * (t === 'dawn' ? db.cpMult : 1);
+    T.cp = Math.min(CPMAX, T.cp + dt * rate);
+  });
   s.t = now;
 }
 function vpOf(s, team){ return TIDS.reduce((a, i) => a + (s.terr[i].o === team ? TD[i].vp : 0), 0); }
@@ -444,52 +650,107 @@ function checkWin(s, now){
   else s.dom = null;
 }
 const hasTech = (s, team, req) => !req || s.teams[team].tech[req[0]] >= req[1];
-const unitMult = (s, team, u) => team === 'neutral' ? 1 : 1 + 0.12 * s.teams[team].tech[UNITS[u].cat];
+const unitMult = (s, team, u) => (!UNITS[u] || team === 'neutral') ? 1 : 1 + 0.12 * (s.teams[team].tech[UNITS[u].cat] || 0);
 function afford(s, team, cost, k = 1){ return RK.every(r => (cost[r] || 0) * k <= s.teams[team].res[r] + 1e-9); }
 function pay(s, team, cost, k = 1){ RK.forEach(r => s.teams[team].res[r] -= (cost[r] || 0) * k); }
 function visible(s, viewer, id){
   const t = s.terr[id]; if(t.o === viewer) return true;
   if((((s.intel[viewer] || {})[id]) || 0) > Date.now()) return true;
   if(viewer !== 'spectator' && t.o !== 'neutral' && s.teams[viewer] && s.teams[viewer].tech.intel >= 3) return true;
+  if(viewer === 'dawn'){
+    if((dawnCounts(s).bd_eyes || 0) > 0) return true;
+    if(ADJ[id].some(n => { const nt = s.terr[n.id]; return nt.o === 'dawn' && ((nt.u.bd_obsv || 0) > 0 || (nt.u.bd_keep || 0) > 0); })) return true;
+  }
   return false;
 }
 function ceasefire(s, now){ return s.pact && s.pact.until > now ? s.pact : null; }
-const mech = u => (u.arm || 0) + (u.air || 0) + (u.bmb || 0) + (u.nav || 0) + 3 * (u.sup || 0);
-function attackPower(s, team, grp, tactic, stance, rnd, now){
+const mech = u => Object.keys(u).reduce((a, k) => {
+  const n = u[k] || 0; if(!n) return a;
+  if(k === 'sup') return a + 3 * n;
+  if(k === 'arm' || k === 'air' || k === 'bmb' || k === 'nav' || (UNITS[k] && UNITS[k].mech)) return a + n;
+  return a;
+}, 0);
+function attackPower(s, team, grp, tactic, stance, rnd, now, fromId){
   const T = TACT[tactic]; let sum = 0; const sm = stance === 'unknown' ? (MATRIX[tactic].bunker + MATRIX[tactic].elastic + MATRIX[tactic].counter) / 3 : MATRIX[tactic][stance];
-  for(const u in grp){ let v = grp[u] * UNITS[u].atk * unitMult(s, team, u); if(team === 'reich' && (u === 'arm' || u === 'sup')) v *= 1.1; if(T.units.includes(u)) v *= sm; sum += v; }
+  const hasLegate = team === 'dawn' && (grp.bd_lega || 0) > 0;
+  const fromFriendly = team === 'dawn' && fromId && s.terr[fromId] && s.terr[fromId].o === 'dawn';
+  for(const u in grp){
+    const U = UNITS[u]; if(!U || !grp[u]) continue;
+    let v = grp[u] * U.atk * unitMult(s, team, u);
+    if(team === 'reich' && (u === 'arm' || u === 'sup')) v *= 1.1;
+    if(team === 'dawn' && U.conv) v *= 0.9; // -10% conventional military effectiveness
+    if(u === 'bd_oath' && fromFriendly) v *= 1.15; // Unbreakable Oath
+    if(hasLegate && u !== 'bd_lega') v *= 1.12; // Authority of the Eclipse
+    if(T.units.includes(u)) v *= sm;
+    sum += v;
+  }
   if((s.treach[team] || 0) > now) sum *= 0.9;
   return sum * rnd;
 }
 function defPower(s, id, tactic, attacker, rnd){
   const t = s.terr[id], D = TD[id]; let sum = 0;
-  for(const u in t.u) sum += t.u[u] * UNITS[u].def * unitMult(s, t.o, u);
+  const hasLegate = t.o === 'dawn' && (t.u.bd_lega || 0) > 0;
+  for(const u in t.u){
+    const U = UNITS[u]; if(!U || !t.u[u]) continue;
+    let v = t.u[u] * U.def * unitMult(s, t.o, u);
+    if(t.o === 'dawn' && U.conv) v *= 0.9; // -10% conventional military effectiveness
+    if(u === 'bd_oath' && t.o === 'dawn') v *= 1.15; // Unbreakable Oath
+    if(hasLegate && u !== 'bd_lega') v *= 1.12; // Authority of the Eclipse
+    sum += v;
+  }
   let fort = t.f; const T = s.teams[attacker].tech;
   if(tactic === 'barrage' && T.art >= 4) fort--; if(tactic === 'air' && T.air >= 3) fort--;
-  sum *= 1 + 0.2 * Math.max(0, fort); sum *= TERRAIN[D.terr]; if(t.o === 'dawn') sum *= 1.1; if(D.cap) sum *= 1.15;
+  sum *= 1 + 0.2 * Math.max(0, fort); sum *= TERRAIN[D.terr];
+  if(t.o === 'dawn'){
+    const localStab = Math.min(0.40, 0.03 * (t.u.bd_veil || 0) + 0.04 * (t.u.bd_mant || 0) + (D.terr === 'coast' ? 0.04 * (t.u.bd_tide || 0) + 0.05 * (t.u.bd_abys || 0) : 0));
+    sum *= (1.15 + localStab + dawnBonuses(s).synodDef);
+  }
+  if(D.cap) sum *= 1.15;
   return sum * rnd;
 }
 function applyLoss(u, f){ const out = {}, lost = {}; for(const k in u){ const raw = u[k] * f; let l = Math.floor(raw); if(Math.random() < raw - l) l++; l = Math.min(l, u[k]); if(u[k] - l > 0) out[k] = u[k] - l; if(l) lost[k] = l; } return {out, lost}; }
 function validGroup(s, src, grp){ let n = 0; for(const u in grp){ const c = grp[u]; if(c < 0 || c > (s.terr[src].u[u] || 0)) return false; n += c; } return n > 0; }
-function seaOK(s, team, grp){ const air = (grp.air || 0) + (grp.bmb || 0); const only = Object.keys(grp).every(u => !grp[u] || u === 'air' || u === 'bmb'); if(only && air > 0) return true; if(s.teams[team].tech.air >= 4 && air > 0) return true; return (grp.nav || 0) > 0 && s.teams[team].tech.nav >= 2; }
-const fuel = (s, team, grp) => { const m = mech(grp); const navFree = s.teams[team].tech.nav >= 4 ? (grp.nav || 0) : 0; return Math.ceil(Math.max(0, m - navFree) / 2); };
+function seaOK(s, team, grp){
+  const airCnt = Object.keys(grp).reduce((a, u) => a + (grp[u] && UNITS[u] && UNITS[u].div === 'air' ? grp[u] : 0), 0);
+  const onlyAir = Object.keys(grp).every(u => !grp[u] || (UNITS[u] && UNITS[u].div === 'air'));
+  if(onlyAir && airCnt > 0) return true;
+  if(s.teams[team].tech.air >= 4 && airCnt > 0) return true;
+  if((grp.bd_vair || 0) > 0 || (grp.bd_noct || 0) > 0 || (grp.bd_hera || 0) > 0) return true; // Aerial Logistics / Imperial Transit
+  const navCnt = (grp.nav || 0) + (grp.bd_tide || 0) + (grp.bd_abys || 0) + (grp.bd_levi || 0);
+  if((grp.bd_levi || 0) > 0) return true;
+  return navCnt > 0 && s.teams[team].tech.nav >= 2;
+}
+const fuel = (s, team, grp) => {
+  const m = mech(grp);
+  const navUnits = (grp.nav || 0) + (grp.bd_merc || 0) + (grp.bd_tide || 0) + (grp.bd_abys || 0) + (grp.bd_levi || 0);
+  const navFree = s.teams[team].tech.nav >= 4 ? navUnits : 0;
+  const airLiftCut = Math.min(m, 2 * ((grp.bd_vair || 0) + 2 * (grp.bd_noct || 0)));
+  return Math.ceil(Math.max(0, m - navFree - Math.floor(airLiftCut * 0.5)) / 2);
+};
 
 const A = {};
 const T_ = id => TD[id].name;
 A.contribute = (s, c, p) => {
   const pl = s.players[c.name]; if(pl.cd > c.now) return {err:`Rest for ${Math.ceil((pl.cd - c.now) / 1000)}s before the next field duty.`};
   const k = {drill:['man', 6, 'drilled recruits'], scavenge:['steel', 5, 'scavenged steel'], prospect:['oil', 4, 'tapped a fuel cache']}[p.kind]; if(!k) return {err:'Unknown duty.'};
-  s.teams[c.team].res[k[0]] += k[1]; pl.cd = c.now + 3 * 60000;
+  s.teams[c.team].res[k[0]] += k[1];
+  const cut = c.team === 'dawn' ? dawnBonuses(s).cdCutMs : 0;
+  pl.cd = c.now + Math.max(60000, 3 * 60000 - cut);
   return {ok:`${c.name} ${k[2]}: +${k[1]} ${RES[k[0]]}.`};
 };
 A.recruit = (s, c, p) => {
   const t = s.terr[p.tid], U = UNITS[p.unit], n = Math.max(1, Math.min(20, p.n | 0));
   if(!t || t.o !== c.team) return {err:'You can only recruit in your own territory.'};
+  if(!U || (U.team && U.team !== c.team) || (!U.team && c.team === 'dawn')) return {err:'That formation does not belong to your faction.'};
   if(!hasTech(s, c.team, U.req)) return {err:'Research required.'};
   if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
-  if(p.unit === 'sup'){ const have = TIDS.reduce((a, i) => a + (s.terr[i].o === c.team ? (s.terr[i].u.sup || 0) : 0), 0); if(have >= 2 || n > 1) return {err:'Only 2 super-heavy tanks per power, one at a time.'}; }
-  if(!afford(s, c.team, U.cost, n)) return {err:'Not enough resources.'};
-  pay(s, c.team, U.cost, n); s.teams[c.team].cp -= 1; t.u[p.unit] = (t.u[p.unit] || 0) + n;
+  if(U.max){
+    const have = TIDS.reduce((a, i) => a + (s.terr[i].o === c.team ? (s.terr[i].u[p.unit] || 0) : 0), 0);
+    if(have + n > U.max) return {err:U.limitMsg || `Only ${U.max} ${U.n} may exist at a time.`};
+  }
+  const cost = unitCost(s, c.team, p.unit);
+  if(!afford(s, c.team, cost, n)) return {err:'Not enough resources.'};
+  pay(s, c.team, cost, n); s.teams[c.team].cp -= 1; t.u[p.unit] = (t.u[p.unit] || 0) + n;
   log(s, c.now, c.team, `${c.name} raised ${n} ${uname(p.unit, c.team)} in ${T_(p.tid)}.`);
   return {ok:`Raised ${n} ${uname(p.unit, c.team)}.`};
 };
@@ -506,7 +767,7 @@ A.stance = (s, c, p) => {
 };
 A.research = (s, c, p) => {
   const T = s.teams[c.team], lvl = T.tech[p.k]; if(lvl == null || lvl >= 4) return {err:'Already at maximum.'};
-  const nx = lvl + 1, cost = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) cost.oil = 12 * nx;
+  const nx = lvl + 1, cost = researchCost(s, c.team, nx);
   if(!afford(s, c.team, cost)) return {err:'Not enough resources.'}; pay(s, c.team, cost); T.tech[p.k] = nx;
   log(s, c.now, 'all', `${TEAMS[c.team].name} advances in ${TECH[p.k].n}.`); return {ok:`${TECH[p.k].n} level ${nx}: ${TECH[p.k].d[nx - 1]}.`};
 };
@@ -530,7 +791,7 @@ A.attack = (s, c, p) => {
   if(s.teams[c.team].cp < 2) return {err:'An attack costs 2 command points.'};
   s.teams[c.team].cp -= 2; s.teams[c.team].res.oil -= oil;
   const r1 = 0.88 + Math.random() * 0.24, r2 = 0.88 + Math.random() * 0.24;
-  const AP = attackPower(s, c.team, p.grp, p.tactic, d.st, r1, c.now), DP = defPower(s, p.to, p.tactic, c.team, r2) + 0.01;
+  const AP = attackPower(s, c.team, p.grp, p.tactic, d.st, r1, c.now, p.from), DP = defPower(s, p.to, p.tactic, c.team, r2) + 0.01;
   const win = AP > DP, pw = (win ? AP : DP) / (AP + DP);
   const before = {att:total(p.grp), def:total(d.u)}; const dname = d.o === 'neutral' ? 'neutral forces' : TEAMS[d.o].name; const prevOwner = d.o;
   const sent = clone(p.grp); for(const u in sent){ a.u[u] -= sent[u]; if(a.u[u] <= 0) delete a.u[u]; }
@@ -552,8 +813,12 @@ A.spy = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'};
   if(s.teams[c.team].cp < 2) return {err:'A spy mission costs 2 command points.'}; if(s.teams[c.team].res.gold < 10) return {err:'Needs 10 gold.'};
   s.teams[c.team].cp -= 2; s.teams[c.team].res.gold -= 10;
-  const ch = 0.55 + 0.1 * s.teams[c.team].tech.intel - (d.o === 'dawn' ? 0.15 : 0);
-  if(Math.random() < ch){ s.intel[c.team][p.tid] = c.now + SPY_MS; log(s, c.now, c.team, `Agents report from ${T_(p.tid)}. Intel valid for 30 minutes.`, 'intel'); return {ok:`Agents report from ${T_(p.tid)}: garrison and stance revealed for 30 minutes.`}; }
+  const db = dawnBonuses(s);
+  const attB = c.team === 'dawn' ? db.intelBonus : 0;
+  const defCut = d.o === 'dawn' ? (0.15 + Math.min(0.15, 0.02 * (d.u.bd_veil || 0))) : 0;
+  const ch = 0.55 + 0.1 * s.teams[c.team].tech.intel + attB - defCut;
+  const dur = c.team === 'dawn' ? db.spyMs : SPY_MS;
+  if(Math.random() < ch){ s.intel[c.team][p.tid] = c.now + dur; log(s, c.now, c.team, `Agents report from ${T_(p.tid)}. Intel valid for ${Math.round(dur / 60000)} minutes.`, 'intel'); return {ok:`Agents report from ${T_(p.tid)}: garrison and stance revealed for ${Math.round(dur / 60000)} minutes.`}; }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} spy was caught in ${T_(p.tid)}.`); return {ok:'The agent was caught. No intel.'};
 };
 A.honey = (s, c, p) => {
@@ -562,29 +827,32 @@ A.honey = (s, c, p) => {
   if(d.o === 'neutral') return {err:'A honeytrap only works on an enemy-held province.'};
   if(me.cp < 3) return {err:'A honeytrap costs 3 command points.'}; if(me.res.gold < 20) return {err:'Needs 20 gold.'};
   me.cp -= 3; me.res.gold -= 20;
-  const ch = 0.6 + 0.08 * me.tech.intel;
-  if(Math.random() < ch){ const cut = Math.min(en.cp, 2); en.cp -= cut; s.intel[c.team][p.tid] = c.now + SPY_MS; log(s, c.now, c.team, `A honeytrap in ${T_(p.tid)} compromised an enemy officer. Intel for 30 minutes; the enemy lost ${cut} command points.`, 'intel'); return {ok:`The honeytrap worked in ${T_(p.tid)}: intel for 30 minutes and the enemy loses ${cut} command points.`}; }
+  const db = dawnBonuses(s);
+  const ch = 0.6 + 0.08 * me.tech.intel + (c.team === 'dawn' ? db.intelBonus * 0.5 : 0);
+  const dur = c.team === 'dawn' ? db.spyMs : SPY_MS;
+  if(Math.random() < ch){ const cut = Math.min(en.cp, 2); en.cp -= cut; s.intel[c.team][p.tid] = c.now + dur; log(s, c.now, c.team, `A honeytrap in ${T_(p.tid)} compromised an enemy officer. Intel for ${Math.round(dur / 60000)} minutes; the enemy lost ${cut} command points.`, 'intel'); return {ok:`The honeytrap worked in ${T_(p.tid)}: intel for ${Math.round(dur / 60000)} minutes and the enemy loses ${cut} command points.`}; }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} honeytrap was exposed in ${T_(p.tid)}.`); return {ok:'The operation was exposed. No result.'};
 };
 A.sabotage = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'}; if(s.teams[c.team].tech.intel < 2) return {err:'Needs Intelligence 2.'};
   if(s.teams[c.team].cp < 3) return {err:'Sabotage costs 3 command points.'}; if(s.teams[c.team].res.gold < 25) return {err:'Needs 25 gold.'};
   s.teams[c.team].cp -= 3; s.teams[c.team].res.gold -= 25;
-  const ch = 0.45 + 0.1 * s.teams[c.team].tech.intel - (d.o === 'dawn' ? 0.1 : 0);
-  if(Math.random() < ch){ const keep = clone(d.u); const sp = keep.sup; delete keep.sup; const r = applyLoss(keep, 0.25); if(sp) r.out.sup = sp; d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info'); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
+  const defCut = d.o === 'dawn' ? (0.12 + Math.min(0.15, 0.02 * (d.u.bd_veil || 0))) : 0;
+  const ch = 0.45 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? dawnBonuses(s).intelBonus * 0.5 : 0) - defCut;
+  if(Math.random() < ch){ const keep = clone(d.u); const sp = keep.sup, hr = keep.bd_hier; delete keep.sup; delete keep.bd_hier; const r = applyLoss(keep, 0.25); if(sp) r.out.sup = sp; if(hr) r.out.bd_hier = hr; d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info'); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} saboteur was caught in ${T_(p.tid)}.`); return {ok:'The saboteur was caught.'};
 };
 A.decap = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o !== OTHER(c.team)) return {err:'Target an enemy territory.'}; if(s.teams[c.team].tech.intel < 4) return {err:'Needs Intelligence 4.'};
   if(s.teams[c.team].cp < 4) return {err:'Costs 4 command points.'}; if(s.teams[c.team].res.gold < 60) return {err:'Needs 60 gold.'};
   s.teams[c.team].cp -= 4; s.teams[c.team].res.gold -= 60;
-  if(Math.random() < 0.4 + 0.1 * s.teams[c.team].tech.intel - 0.3){ const E = s.teams[OTHER(c.team)]; E.cp = Math.max(0, E.cp - 6); d.f = 0; log(s, c.now, 'all', `Decapitation strike at ${T_(p.tid)}. ${TEAMS[OTHER(c.team)].name} command is in disarray.`, 'info'); return {ok:'The strike lands. Enemy loses 6 command points and the fort is razed.'}; }
+  if(Math.random() < 0.4 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? 0.1 : -0.3)){ const E = s.teams[OTHER(c.team)]; E.cp = Math.max(0, E.cp - 6); d.f = 0; log(s, c.now, 'all', `Decapitation strike at ${T_(p.tid)}. ${TEAMS[OTHER(c.team)].name} command is in disarray.`, 'info'); return {ok:'The strike lands. Enemy loses 6 command points and the fort is razed.'}; }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} assassination team was destroyed near ${T_(p.tid)}.`); return {ok:'The team was lost.'};
 };
 A.annex = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o !== 'neutral') return {err:'Only neutral lands can be annexed.'};
   if(!ADJ[p.tid].some(n => s.terr[n.id].o === c.team)) return {err:'You need a border with it.'}; const g = total(d.u); if(g > 12) return {err:'The garrison is too strong to buy (12 units or fewer).'};
-  const cost = 30 + 4 * g; if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(s.teams[c.team].cp < 2) return {err:'Costs 2 command points.'};
+  const cost = annexCost(s, c.team, g); if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(s.teams[c.team].cp < 2) return {err:'Costs 2 command points.'};
   s.teams[c.team].res.gold -= cost; s.teams[c.team].cp -= 2; d.o = c.team; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.`, 'dip'); return {ok:`${T_(p.tid)} joins you.`};
 };
 A.propose = (s, c, p) => {
@@ -603,12 +871,19 @@ A.answer = (s, c, p) => {
   if(!p.accept){ pr.open = false; log(s, c.now, 'all', `${TEAMS[c.team].name} rejects the ${pr.type} proposal.`, 'dip'); return {ok:'Rejected.'}; }
   if(pr.type === 'ceasefire'){ if(ceasefire(s, c.now)) return {err:'A ceasefire is already in force.'}; s.pact = {until:c.now + pr.mins * 60000, mins:pr.mins}; pr.open = false; log(s, c.now, 'all', `Ceasefire agreed for ${pr.mins / 60} hour(s).`, 'dip'); return {ok:'Ceasefire agreed.'}; }
   const me = s.teams[c.team], they = s.teams[pr.from]; if(me.res[pr.get.r] < pr.get.n) return {err:'You cannot cover your side of the trade.'}; if(they.res[pr.give.r] < pr.give.n){ pr.open = false; return {err:'They can no longer cover it.'}; }
-  they.res[pr.give.r] -= pr.give.n; me.res[pr.give.r] += pr.give.n; me.res[pr.get.r] -= pr.get.n; they.res[pr.get.r] += pr.get.n; pr.open = false;
+  const tmDawn = dawnBonuses(s).tradeMult;
+  const giveRecv = c.team === 'dawn' ? Math.round(pr.give.n * tmDawn) : pr.give.n;
+  const getRecv = pr.from === 'dawn' ? Math.round(pr.get.n * tmDawn) : pr.get.n;
+  they.res[pr.give.r] -= pr.give.n; me.res[pr.give.r] += giveRecv; me.res[pr.get.r] -= pr.get.n; they.res[pr.get.r] += getRecv; pr.open = false;
   log(s, c.now, 'all', `Trade agreed: ${pr.give.n} ${RES[pr.give.r]} for ${pr.get.n} ${RES[pr.get.r]}.`, 'dip'); return {ok:'Trade complete.'};
 };
 A.breakpact = (s, c) => {
-  if(!ceasefire(s, c.now)) return {err:'There is no ceasefire.'}; if(s.teams[c.team].res.gold < 25) return {err:'Breaking a treaty costs 25 gold.'};
-  s.teams[c.team].res.gold -= 25; s.pact = null; s.treach[c.team] = c.now + 30 * 60000; log(s, c.now, 'all', `${TEAMS[c.team].name} tears up the ceasefire. Its troops fight at -10% for 30 minutes.`, 'dip'); return {ok:'Ceasefire broken.'};
+  if(!ceasefire(s, c.now)) return {err:'There is no ceasefire.'};
+  const bMult = c.team === 'dawn' ? dawnBonuses(s).breakMult : 1;
+  const cost = Math.round(25 * bMult);
+  if(s.teams[c.team].res.gold < cost) return {err:`Breaking a treaty costs ${cost} gold.`};
+  s.teams[c.team].res.gold -= cost; s.pact = null; s.treach[c.team] = c.now + Math.round(30 * 60000 * bMult);
+  log(s, c.now, 'all', `${TEAMS[c.team].name} tears up the ceasefire. Its troops fight at -10% for ${Math.round(30 * bMult)} minutes.`, 'dip'); return {ok:'Ceasefire broken.'};
 };
 A.setrole = (s, c, p) => {
   const pl = s.players[p.name]; if(!pl || pl.team !== c.team) return {err:'Not on your side.'}; if(ROLES[p.role]) pl.role = p.role; if(typeof p.title === 'string') pl.title = p.title.slice(0, 40);
@@ -979,7 +1254,7 @@ function announce(){
 }
 
 /* ============================ UI ============================ */
-let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, view:null, filter:null};
+let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, div:'all', gdiv:'all', tdiv:'all', view:null, filter:null};
 const tcol = o => o === 'reich' ? 'var(--reich)' : o === 'dawn' ? 'var(--dawn)' : 'var(--neutral)';
 const fmt = n => Math.floor(n + 1e-6);
 function toast(msg, kind){ const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5200); while($('#toasts').children.length > 4) $('#toasts').firstChild.remove(); }
@@ -1052,14 +1327,27 @@ function renderMap(){
 function renderLegend(){ $('#legend').innerHTML = `<span><i style="background:var(--reich)"></i>Reich</span><span><i style="background:var(--dawn)"></i>Black Dawn</span><span><i style="background:var(--neutral)"></i>Neutral</span><span>★ victory points</span><span>dashed = sea</span><span>~ = unscouted</span>`; }
 
 /* --- panels --- */
-const TABS = [['orders','Orders'],['tech','Research'],['dip','Diplomacy'],['council','Council'],['log','Log'],['rules','Rules']];
+const TABS = [['orders','Orders'],['troops','Troops'],['tech','Research'],['dip','Diplomacy'],['council','Council'],['log','Log'],['rules','Rules']];
 function renderTabs(){ $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${n}</button>`).join(''); }
 function costRow(cost, k){ return costHtml(cost, myTeam(), k); }
+function divBarHtml(kind, cur, team){
+  const list = divsFor(team);
+  if(!list.includes(cur)) cur = 'all';
+  return `<div class="divbar">${list.map(d => `<button class="${cur === d ? 'on' : ''}" data-act="setdiv" data-kind="${kind}" data-d="${d}">${d === 'all' ? 'All' : DIVS[d]}</button>`).join('')}</div>`;
+}
 function unitsHtml(id){
   const t = S.terr[id], viewer = myTeam() || 'spectator', ex = visible(S, viewer, id); const n = total(t.u);
   if(!ex) return `<div class="mut sm">Garrison about <b class="mono">${n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0'}</b> units. Composition, fort and stance unknown. Send a spy or research Intelligence 3.</div>`;
-  const own = t.o === 'neutral' ? 'reich' : t.o; const items = UORDER.filter(u => t.u[u]).map(u => `<div class="unit"><span>${uname(u, own)}</span><b>${t.u[u]}</b></div>`).join('');
-  return items ? `<div class="units">${items}</div>` : '<div class="mut sm">Empty.</div>';
+  const own = t.o === 'neutral' ? 'reich' : t.o;
+  const list = divsFor(own);
+  const f = list.includes(ui.gdiv) ? ui.gdiv : 'all';
+  const present = UORDER.filter(u => t.u[u]);
+  if(!present.length) return '<div class="mut sm">Empty.</div>';
+  const groups = list.filter(d => d !== 'all' && (f === 'all' || f === d)).map(d => {
+    const items = present.filter(u => UNITS[u] && UNITS[u].div === d).map(u => `<div class="unit"><span>${uname(u, own)}</span><b>${t.u[u]}</b></div>`).join('');
+    return items ? `<div class="divhdr">${DIVS[d]} Division${own === 'dawn' ? ` · ${DIV_SUB[d]}` : ''}</div><div class="units">${items}</div>` : '';
+  }).join('');
+  return divBarHtml('gdiv', f, own) + (groups || '<div class="mut sm">No units in this division here.</div>');
 }
 function panelOrders(){
   if(!sel) return `<div class="card"><h3>Select a territory</h3><p class="sm mut" style="margin:0">Tap any province on the map. Your own lands show exact troop counts. Enemy and neutral lands show estimates until you scout them with a spy. Ownership is always visible to both sides.</p></div>` + frontList();
@@ -1072,8 +1360,21 @@ function panelOrders(){
   if(S.win) return h;
   if(!team) return h + `<div class="card sm mut">Choose your post (top right) to give orders.</div>`;
   if(mine){
-    if(can(role, 'recruit')){ const rows = UORDER.map(u => { const U = UNITS[u], ok = hasTech(S, team, U.req); const lock = ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`; const max = u === 'sup' ? 1 : 5; return `<div class="row sb" style="padding:4px 0;border-bottom:1px solid var(--line)"><div><b>${uname(u, team)}</b>${lock}<br>${costRow(U.cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div><div class="row"><button class="btn sm" ${ok ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${u === 'sup' ? '' : `<button class="btn sm" ${ok ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div></div>`; }).join('');
-      h += `<div class="card"><h3>Recruit here · 1 command point</h3>${rows}</div>`; }
+    if(can(role, 'recruit')){
+      const list = divsFor(team), curDiv = list.includes(ui.div) ? ui.div : 'all';
+      const uList = unitsFor(team).filter(u => curDiv === 'all' || UNITS[u].div === curDiv);
+      const rows = list.filter(d => d !== 'all' && (curDiv === 'all' || curDiv === d)).map(d => {
+        const sub = uList.filter(u => UNITS[u].div === d);
+        if(!sub.length) return '';
+        return `<div class="divhdr">${DIVS[d]} Division${team === 'dawn' ? ` · ${DIV_SUB[d]}` : ''}</div>` + sub.map(u => {
+          const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u);
+          const lock = ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`;
+          const capHit = U.max && TIDS.reduce((a, i) => a + (S.terr[i].o === team ? (S.terr[i].u[u] || 0) : 0), 0) >= U.max;
+          return `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costRow(cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0"><button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${U.max === 1 ? '' : `<button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div></div>`;
+        }).join('');
+      }).join('');
+      h += `<div class="card"><h3>Recruit here · 1 command point</h3>${divBarHtml('div', curDiv, team)}${rows}</div>`;
+    }
     let ord = '<div class="row">';
     if(can(role, 'move')) ord += `<button class="btn pri" data-act="open" data-m="move">Move units</button><button class="btn pri" data-act="open" data-m="attack">Attack from here</button>`;
     if(can(role, 'fort')) ord += `<button class="btn" data-act="fort" ${t.f >= 3 ? 'disabled' : ''}>Fortify ${t.f < 3 ? `(${15 * (t.f + 1)}S)` : '(max)'}</button>`;
@@ -1089,12 +1390,44 @@ function panelOrders(){
     if(can(role, 'honey') && t.o !== 'neutral') a += `<button class="btn" data-act="honey">Honeytrap · 3cp 20G</button>`;
     if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage">Sabotage · 3cp 25G</button>`;
     if(can(role, 'decap') && t.o !== 'neutral' && S.teams[team].tech.intel >= 4) a += `<button class="btn" data-act="decap">Decapitate · 4cp 60G</button>`;
-    if(can(role, 'annex') && t.o === 'neutral') a += `<button class="btn" data-act="annex">Annex by treaty · ${30 + 4 * total(t.u)}G</button>`;
+    if(can(role, 'annex') && t.o === 'neutral') a += `<button class="btn" data-act="annex">Annex by treaty · ${annexCost(S, team, total(t.u))}G</button>`;
     a += '</div>';
     if(!srcs.length) a += `<div class="sm mut" style="margin-top:8px">No friendly troops border this territory. Move an army up first.</div>`;
     h += `<div class="card"><h3>Operations</h3>${a}</div>`;
   }
   return h;
+}
+function panelTroops(){
+  const team = myTeam() || 'dawn';
+  const list = divsFor(team), curDiv = list.includes(ui.tdiv) ? ui.tdiv : 'all';
+  const counts = {};
+  TIDS.forEach(i => { const t = S.terr[i]; if(t.o === team) for(const u in t.u) counts[u] = (counts[u] || 0) + t.u[u]; });
+  const canRec = myTeam() && sel && S.terr[sel].o === team && can(myRole(), 'recruit') && !S.win;
+  let passHtml = '';
+  if(team === 'dawn'){
+    const b = dawnBonuses(S);
+    passHtml = `<div class="card sm"><h3>SECTA VATUM AURORAE NIGRAE · Faction Passives</h3>
+      <div class="sm mut" style="margin-bottom:6px">Active modifiers (including unit bonuses): Trade <b>+${Math.round((b.tradeMult - 1) * 100)}%</b> · Influence <b>+${Math.round((b.cpMult - 1) * 100)}%</b> · Stability <b>+${Math.round((0.15 + b.synodDef) * 100)}%</b> · Research <b>-${Math.round(b.resDisc * 100)}%</b> · Gold <b>+${Math.round((b.goldMult - 1) * 100)}%</b> · Intel <b>+${Math.round(b.intelBonus * 100)}%</b></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px" class="sm">${DAWN_PASSIVES.map(([k, v]) => `<div><b>${k}:</b> <span class="mut">${v}</span></div>`).join('')}</div>
+    </div>`;
+  } else {
+    passHtml = `<div class="card sm"><h3>The Reich · Faction Doctrine</h3><div class="sm mut">${TEAMS.reich.flavor}</div></div>`;
+  }
+  const sections = list.filter(d => d !== 'all' && (curDiv === 'all' || curDiv === d)).map(d => {
+    const sub = unitsFor(team).filter(u => UNITS[u].div === d);
+    if(!sub.length) return '';
+    return `<div class="card"><h3>${DIVS[d]} Division${team === 'dawn' ? ` · ${DIV_SUB[d]}` : ''}</h3>` + sub.map(u => {
+      const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u), have = counts[u] || 0;
+      const capHit = U.max && have >= U.max;
+      return `<div style="padding:7px 0;border-bottom:1px solid var(--line)">
+        <div class="row sb"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`}</div><span class="mono sm">Deployed: <b>${have}</b>${U.max ? `/${U.max}` : ''}</span></div>
+        <div class="sm mut" style="margin:3px 0">${esc(U.desc)}</div>
+        ${U.abil ? `<div class="abil">Special Ability: ${esc(U.abil)}</div>` : ''}
+        <div class="row sb" style="margin-top:4px"><div>${costRow(cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${canRec ? `<div class="row"><button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${U.max === 1 ? '' : `<button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div>` : ''}</div>
+      </div>`;
+    }).join('') + `</div>`;
+  }).join('');
+  return `<div class="card sm"><div class="row sb"><h3>Troops &amp; Divisions</h3><span class="mut sm">${canRec ? `Recruiting in ${esc(TD[sel].name)}` : 'Select one of your territories to recruit'}</span></div>${divBarHtml('tdiv', curDiv, team)}</div>${passHtml}${sections}`;
 }
 function frontList(){
   const team = myTeam() || 'reich'; const rows = LINKS.filter(l => { const a = S.terr[l.a].o, b = S.terr[l.b].o; return a !== b && a !== 'neutral' && b !== 'neutral'; }).map(l => { const mineA = S.terr[l.a].o === team; const my = mineA ? l.a : l.b, en = mineA ? l.b : l.a; return `<div class="row sb"><span class="chip" data-act="sel" data-id="${my}">${esc(TD[my].name)}</span><span class="mut">faces</span><span class="chip" data-act="sel" data-id="${en}">${esc(TD[en].name)}</span></div>`; }).join('');
@@ -1103,7 +1436,7 @@ function frontList(){
 function panelTech(){
   const team = myTeam() || 'reich', T = S.teams[team]; const can_ = can(myRole(), 'research') && myTeam() && !S.win;
   return `<div class="sm mut">Research costs gold, steel and oil, and applies instantly. Leaders and chiefs of staff can buy it.</div><div class="card sm"><b style="color:${TEAMS[team].css}">${TEAMS[team].name}:</b> ${TEAMS[team].flavor}</div>` + TKEYS.map(k => {
-    const L = T.tech[k], nx = L + 1, cost = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) cost.oil = 12 * nx;
+    const L = T.tech[k], nx = L + 1, cost = researchCost(S, team, nx);
     return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ && afford(S, team, cost) ? '' : 'disabled'} data-act="research" data-k="${k}">Level ${nx} ${costHtml(cost, team)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
 }
 function panelDip(){
@@ -1140,7 +1473,7 @@ function panelRules(){
 function renderPanel(){
   if(!S){ $('#panel').innerHTML = `<div class="card">${mode === 'error' ? 'The war room could not be reached. Check your connection and sign-in, then reload.' : mode === 'slow' ? 'Still waiting on the war room. If this persists, the page may not have access to its data.' : 'Connecting to the war room…'}</div>`; return; }
   const sc = $('#panel').scrollTop; const el = document.activeElement; if(el && el.matches && el.matches('input[type=text],input[type=number]') && $('#panel').contains(el)) return;
-  $('#panel').innerHTML = {orders:panelOrders, tech:panelTech, dip:panelDip, council:panelCouncil, log:panelLog, rules:panelRules}[tab](); $('#panel').scrollTop = sc;
+  $('#panel').innerHTML = {orders:panelOrders, troops:panelTroops, tech:panelTech, dip:panelDip, council:panelCouncil, log:panelLog, rules:panelRules}[tab](); $('#panel').scrollTop = sc;
 }
 
 /* --- modal --- */
@@ -1195,11 +1528,17 @@ function renderModal(){
   if(M.mode === 'move' && !to){ h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a friendly neighbor.</div><div class="pick">${srcs.length ? srcs.map(id => `<button data-act="mto" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(from, id).sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No friendly neighbors.</span>'}</div>`; }
   if(from && to){
     const src = S.terr[from], grp = M.grp, n = total(grp);
-    h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${adjInfo(from, to).sea ? ' · across water' : ''}</div><div>${UORDER.filter(u => src.u[u]).map(u => `<div class="stepper" style="padding:3px 0"><span>${uname(u, team)} <span class="mut sm">of ${src.u[u]}</span></span><button class="btn sm" data-act="step" data-u="${u}" data-d="-1">−</button><span class="n">${grp[u] || 0}</span><button class="btn sm" data-act="step" data-u="${u}" data-d="1">+</button><button class="btn sm" data-act="step" data-u="${u}" data-d="max">All</button></div>`).join('')}</div>`;
+    const list = divsFor(team);
+    const stepperHtml = list.filter(d => d !== 'all').map(d => {
+      const sub = UORDER.filter(u => src.u[u] && UNITS[u] && UNITS[u].div === d);
+      if(!sub.length) return '';
+      return `<div class="divhdr">${DIVS[d]} Division</div>` + sub.map(u => `<div class="stepper" style="padding:3px 0"><span>${uname(u, team)} <span class="mut sm">of ${src.u[u]}</span></span><button class="btn sm" data-act="step" data-u="${u}" data-d="-1">−</button><span class="n">${grp[u] || 0}</span><button class="btn sm" data-act="step" data-u="${u}" data-d="1">+</button><button class="btn sm" data-act="step" data-u="${u}" data-d="max">All</button></div>`).join('');
+    }).join('');
+    h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${adjInfo(from, to).sea ? ' · across water' : ''}</div><div>${stepperHtml}</div>`;
     if(M.mode === 'attack'){
       const tact = Object.keys(TACT).filter(k => hasTech(S, team, TACT[k].req)); if(!tact.includes(M.tactic)) M.tactic = 'frontal';
       h += `<div><div class="sm mut" style="margin-bottom:4px">Tactic</div><div class="pick">${Object.keys(TACT).map(k => { const has = tact.includes(k), match = !TACT[k].units.length || TACT[k].units.some(u => grp[u] > 0); return `<button ${has ? '' : 'disabled'} style="${M.tactic === k ? 'border-color:var(--acc);background:var(--panel)' : ''}${has ? '' : ';opacity:.4'}" data-act="tactic" data-k="${k}"><b>${TACT[k].n}</b><span class="mut sm">${has ? (match ? TACT[k].d : 'Needs matching units.') : 'Research ' + TECH[TACT[k].req[0]].n + ' ' + TACT[k].req[1]}</span></button>`; }).join('')}</div></div>`;
-      const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now()), DP = defPower(S, to, M.tactic, team, 1) * (dEx ? 1 : 1), oil = fuel(S, team, grp);
+      const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now(), from), DP = defPower(S, to, M.tactic, team, 1) * (dEx ? 1 : 1), oil = fuel(S, team, grp);
       let odds = 'Scout the target (spy) for a reliable estimate.';
       if(n){ const ratio = AP / Math.max(0.01, DP); if(dEx){ odds = ratio > 1.6 ? 'Crushing advantage' : ratio > 1.15 ? 'Favorable' : ratio > 0.87 ? 'Too close to call' : ratio > 0.6 ? 'Risky' : 'Suicidal'; odds += ` (your ${AP.toFixed(0)} vs their ${DP.toFixed(0)}, ±12% luck each)`; } else { odds = `Your strength ${AP.toFixed(0)}. Enemy strength unknown. Garrison about ${total(S.terr[to].u) ? '~' + Math.max(3, Math.round(total(S.terr[to].u) / 3) * 3) : '0'} units.`; } }
       h += `<div class="card sm"><b>${n} units</b> · fuel <b>${oil}</b> oil (have ${fmt(S.teams[team].res.oil)}) · 2 command points<br>${odds}</div>`;
@@ -1215,6 +1554,7 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if(!el) return; const d = el.dataset, a = d.act;
   if(a === 'sel'){ if(drag.moved) return; sel = d.id; if(tab !== 'orders' && tab !== 'log') tab = 'orders'; renderAll(); return; }
   if(a === 'tab'){ tab = d.k; ui.confirmReset = false; renderAll(); return; }
+  if(a === 'setdiv'){ ui[d.kind || 'div'] = d.d; renderPanel(); return; }
   if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
   if(a === 'zoomreset'){ vb = Object.assign({}, INIT); setVB(); return; }
   if(a === 'switch'){ M = 'join'; renderModal(); return; }
