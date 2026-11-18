@@ -1,0 +1,955 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Lands at the Ends of Time</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: a war-room table. Slim command bar on top, resource strip, the map as the table, a tabbed dossier on the right. Dark only, by choice. */
+:root{
+  --bg:#0c0f0e; --panel:#131816; --panel2:#1a211e; --line:#2a342f; --ink:#e6e3d8; --mute:#8a948c;
+  --reich:#d9573f; --dawn:#e6ac35; --neutral:#586870; --sea:#091215; --land:#1f2c26; --land2:#1d2924;
+  --ok:#72c28f; --bad:#e06a5a; --acc:#c9c3ae; --acc-ink:#0c0f0e;
+  --display:'Big Shoulders Display','Arial Narrow',Impact,sans-serif; --body:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,select,input{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;margin:0;font-weight:800;text-wrap:balance}
+.app{display:flex;flex-direction:column;height:100%;gap:10px;padding-block:10px}
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between}
+.brand h1{font-size:26px;line-height:1}
+.brand span{font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:.12em;text-transform:uppercase}
+.score{flex:1 1 320px;min-width:0;max-width:560px}
+.scorerow{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;gap:8px}
+.scorerow b{font-weight:500}
+.bar{display:flex;height:8px;border-radius:2px;overflow:hidden;background:var(--panel2);margin-top:4px}
+.bar i{display:block;height:100%}
+.me{display:flex;align-items:center;gap:8px;font-size:13px}
+.me .who{display:flex;flex-direction:column;line-height:1.2;text-align:right}
+.me .who small{color:var(--mute);font-size:11px}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;min-height:32px}
+.btn:hover:not(:disabled){border-color:var(--acc)}
+.btn:focus-visible,.tab:focus-visible,.node:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.btn.pri{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.btn.sm{padding:3px 8px;min-height:26px;font-size:12px}
+.hud{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+.hudcell{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;display:flex;align-items:baseline;gap:8px;font-family:var(--mono)}
+.hudcell .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+.hudcell .v{font-size:17px;font-weight:500}
+.hudcell .r{font-size:11px;color:var(--ok)}
+.cp{min-width:170px}
+.cpbar{flex:1;height:6px;background:var(--panel2);border-radius:2px;overflow:hidden;align-self:center;min-width:48px}
+.cpbar i{display:block;height:100%;background:var(--acc)}
+.banner{padding:8px 12px;border:1px solid var(--line);border-radius:4px;background:var(--panel);font-size:13px}
+.banner.win{border-color:var(--acc);font-family:var(--display);font-size:22px;letter-spacing:.06em;text-transform:uppercase}
+.banner.warn{border-color:var(--dawn);color:var(--dawn)}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 430px;gap:12px}
+.mapwrap{position:relative;min-height:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--sea)}
+#map{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none}
+#map.drag{cursor:grabbing}
+.mapctl{position:absolute;left:10px;top:10px;display:flex;flex-direction:column;gap:4px}
+.mapctl .btn{width:34px;padding:0;font-size:18px;line-height:1;background:var(--panel)}
+.legend{position:absolute;left:10px;bottom:10px;display:flex;gap:10px;flex-wrap:wrap;background:color-mix(in srgb,var(--bg) 82%,transparent);padding:5px 8px;border-radius:4px;font-size:11px;font-family:var(--mono)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}
+.side{min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
+.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:10px 12px;cursor:pointer;color:var(--mute);font-family:var(--display);font-size:16px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.tab.on{color:var(--ink);border-bottom-color:var(--acc)}
+.panel{padding:12px;overflow:auto;min-height:0;flex:1;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:10px;min-width:0}
+.card h3{font-size:15px;margin-bottom:6px;color:var(--mute)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.row.sb{justify-content:space-between}
+.mut{color:var(--mute)} .mono{font-family:var(--mono)} .sm{font-size:12px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}
+.tname{font-family:var(--display);font-size:26px;line-height:1.05}
+.pip{display:inline-block;width:10px;height:10px;border:1px solid var(--mute);margin-right:3px;border-radius:2px}
+.pip.on{background:var(--acc);border-color:var(--acc)}
+.units{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}
+.unit{border:1px solid var(--line);border-radius:4px;padding:5px 7px;display:flex;justify-content:space-between;gap:6px;font-size:12px}
+.unit b{font-family:var(--mono);font-weight:500}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:12px;padding:2px 8px;font-size:12px;cursor:pointer;background:var(--panel);display:inline-flex;align-items:center;gap:5px}
+.chip:hover{border-color:var(--acc)}
+.cost{font-family:var(--mono);font-size:11px;color:var(--mute)}
+.cost .no{color:var(--bad)}
+.seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{flex:1;background:var(--panel);border:0;padding:6px 6px;cursor:pointer;font-size:12px;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--acc);color:var(--acc-ink);font-weight:600}
+.tech{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
+.tech .desc{grid-column:1/-1;font-size:12px;color:var(--mute)}
+.log{display:flex;flex-direction:column;gap:6px}
+.log div{font-size:13px;border-left:3px solid var(--line);padding-left:8px}
+.log small{font-family:var(--mono);color:var(--mute);font-size:11px;display:block}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border:1px solid var(--line);padding:4px 6px;text-align:center}
+th:first-child,td:first-child{text-align:left}
+.scroll{overflow-x:auto}
+.tgl{display:flex;flex-direction:column;gap:3px}
+input[type=text],input[type=number],select{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-height:32px;min-width:0}
+.modalbg{position:fixed;inset:0;background:rgba(5,8,7,.72);display:flex;align-items:center;justify-content:center;padding:16px;z-index:40}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:8px;max-width:560px;width:100%;max-height:92vh;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.modal h2{font-size:24px}
+.stepper{display:grid;grid-template-columns:1fr auto auto auto auto;gap:6px;align-items:center}
+.stepper .n{font-family:var(--mono);min-width:28px;text-align:center}
+.pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px}
+.pick button{text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.pick button:hover{border-color:var(--acc)}
+.toasts{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:6px;z-index:50;max-width:min(380px,calc(100vw - 32px))}
+.toast{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:4px;padding:8px 10px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+.toast.bad{border-left-color:var(--bad)}
+.toast.win{border-left-color:var(--ok)}
+.node{cursor:pointer}
+.node text{pointer-events:none;font-family:var(--mono)}
+.nlabel{font-family:var(--body);font-size:9.5px;fill:var(--ink);paint-order:stroke;stroke:var(--sea);stroke-width:2.5px;stroke-linejoin:round}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+.tgt{animation:pulse 1.6s infinite}
+@media (prefers-reduced-motion:reduce){.tgt{animation:none}}
+@media (max-width:900px){
+  html,body{height:auto}
+  .app{height:auto}
+  main{grid-template-columns:1fr;display:flex;flex-direction:column}
+  .mapwrap{height:58vh}
+  .side{min-height:60vh}
+  .brand h1{font-size:22px}
+}
+</style>
+
+<div class="app">
+  <div class="top">
+    <div class="brand"><h1>Lands at the Ends of Time</h1><span>War room &middot; 1939 &middot; two powers, one map</span></div>
+    <div class="score" id="score"></div>
+    <div class="me" id="me"></div>
+  </div>
+  <div class="hud" id="hud"></div>
+  <div id="banner"></div>
+  <main>
+    <section class="mapwrap">
+      <svg id="map" role="img" aria-label="Strategic map of Europe, North Africa and the Near East"></svg>
+      <div class="mapctl">
+        <button class="btn" data-act="zoom" data-d="1" aria-label="Zoom in">+</button>
+        <button class="btn" data-act="zoom" data-d="-1" aria-label="Zoom out">&minus;</button>
+        <button class="btn" data-act="zoomreset" aria-label="Reset view" style="font-size:13px">&#8634;</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </section>
+    <aside class="side">
+      <div class="tabs" id="tabs"></div>
+      <div class="panel" id="panel"></div>
+    </aside>
+  </main>
+</div>
+<div id="modal"></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+(() => {
+'use strict';
+/* ============================ DATA ============================ */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const TEAMS = {
+  reich:{id:'reich', name:'The Reich', short:'Reich', css:'var(--reich)', hex:'#d9573f', leader:'Führer', flavor:'Iron discipline. Armor attacks hit 10% harder.'},
+  dawn:{id:'dawn', name:'Black Dawn', short:'Dawn', css:'var(--dawn)', hex:'#e6ac35', leader:'Prophet King', flavor:'Sacred ground. +10% defense on own land, spies against it fail more.'}
+};
+const OTHER = t => t === 'reich' ? 'dawn' : 'reich';
+const RES = {man:'Manpower', steel:'Steel', oil:'Oil', gold:'Gold'};
+const RK = Object.keys(RES);
+const UNITS = {
+  inf:{atk:1, def:1.5, cost:{man:10, steel:2}, cat:'inf'},
+  art:{atk:3, def:1, cost:{man:6, steel:8}, cat:'art', req:['art',1]},
+  arm:{atk:4, def:2.5, cost:{man:8, steel:12, oil:6}, cat:'arm', req:['arm',1]},
+  air:{atk:2.5, def:3, cost:{steel:8, oil:8}, cat:'air', req:['air',1]},
+  bmb:{atk:5, def:0.5, cost:{steel:12, oil:10}, cat:'air', req:['air',2]},
+  nav:{atk:3, def:2, cost:{steel:14, oil:8, gold:2}, cat:'nav', req:['nav',1]},
+  sup:{atk:30, def:25, cost:{man:30, steel:120, oil:80, gold:40}, cat:'arm', req:['arm',4]}
+};
+const UORDER = ['inf','art','arm','air','bmb','nav','sup'];
+const UNAME = {
+  inf:{reich:'Infantry', dawn:'Dawn Legion'},
+  art:{reich:'Artillery', dawn:'Siege Guns'},
+  arm:{reich:'Panzers', dawn:'Obsidian Tanks'},
+  air:{reich:'Luftwaffe Fighters', dawn:'Ravens'},
+  bmb:{reich:'Stuka Bombers', dawn:'Night Bombers'},
+  nav:{reich:'Kriegsmarine', dawn:'Black Fleet'},
+  sup:{reich:'Panzer 1000 Ratte', dawn:'Eclipse Colossus'}
+};
+const uname = (u, t) => UNAME[u][t === 'dawn' ? 'dawn' : 'reich'];
+const TECH = {
+  inf:{n:'Infantry doctrine', d:['+12% infantry strength','Unlocks the Flanking tactic','+12% more infantry strength','+12% more (veteran cadres)']},
+  art:{n:'Artillery', d:['Unlocks Artillery','Unlocks the Barrage tactic','+12% artillery strength','Barrage ignores 1 fortification level']},
+  arm:{n:'Armor', d:['Unlocks armor','Unlocks the Blitzkrieg tactic','Heavy armor, +12% strength','Unlocks the super-heavy tank (max 2 per power)']},
+  air:{n:'Air power', d:['Unlocks fighters','Unlocks bombers and the Air Strike tactic','Air Strike ignores 1 fortification level','Paratroops: air groups may cross seas without a fleet']},
+  nav:{n:'Naval power', d:['Unlocks destroyers','Amphibious landings across seas','Blockade: enemy gold income -15%','Fleet fuel is free']},
+  intel:{n:'Intelligence', d:['Unlocks spies','Unlocks sabotage','Codebreaking: see every enemy stack and stance','Unlocks the decapitation strike']},
+  ind:{n:'Industry', d:['+15% income','+15% income','+15% income','+15% income']}
+};
+const TKEYS = Object.keys(TECH);
+const TACT = {
+  frontal:{n:'Frontal assault', units:[], req:null, d:'No bonus, no risk of being countered.'},
+  blitz:{n:'Blitzkrieg', units:['arm','sup'], req:['arm',2], d:'Armor spearheads. Strong against Elastic defense.'},
+  barrage:{n:'Barrage', units:['art'], req:['art',2], d:'Artillery bombardment. Strong against Dig-in.'},
+  flank:{n:'Flanking maneuver', units:['inf'], req:['inf',2], d:'Infantry envelopment. Strong against Counter-attack.'},
+  air:{n:'Air strike', units:['air','bmb'], req:['air',2], d:'Fighters and bombers lead. Good against Dig-in and Elastic.'}
+};
+const MATRIX = {
+  frontal:{bunker:1, elastic:1, counter:1},
+  blitz:{bunker:.8, elastic:1.4, counter:1.05},
+  barrage:{bunker:1.4, elastic:.9, counter:1},
+  flank:{bunker:1, elastic:.8, counter:1.4},
+  air:{bunker:1.2, elastic:1.2, counter:.8}
+};
+const STANCES = {bunker:'Dig in', elastic:'Elastic', counter:'Counter-attack'};
+const TERRAIN = {plain:1, forest:1.1, mountain:1.3, urban:1.15, desert:1, coast:1};
+const BASE_INC = {man:2, steel:2, oil:1.5, gold:1};
+const CPMAX = 15, CPRATE = 1/1.5; // one command point every 90 seconds
+const DOM_SHARE = 0.6, DOM_MS = 45*60000;
+const SPY_MS = 30*60000;
+
+const RAW = `
+BER|Berlin|13.4|52.5|steel|3|5|urban|reich|16|1
+RUH|Ruhr|7.3|51.3|steel|4|2|urban|reich|9|0
+BAV|Bavaria|11.4|48.4|man|3|1|forest|reich|8|0
+AUS|Austria|14.6|47.5|oil|2|1|mountain|reich|7|0
+BOH|Bohemia|15.2|50.2|steel|3|1|forest|reich|7|0
+PRU|East Prussia|20.6|54.3|man|2|1|forest|reich|7|0
+POW|Warsaw|21|52.2|man|3|3|urban|reich|9|0
+POK|Kraków|20|49.9|steel|2|1|plain|reich|6|0
+POE|Bug River|24.3|51.6|oil|2|1|forest|reich|6|0
+FRN|Normandy|-0.7|49.3|gold|2|1|coast|reich|6|0
+PAR|Paris|2.4|48.8|gold|3|3|urban|reich|8|0
+LOR|Lorraine|6.2|48.6|man|2|1|plain|reich|6|0
+BUC|Bucharest|25.4|44.2|man|3|5|urban|dawn|16|1
+TRA|Transylvania|22.9|46.3|steel|2|1|mountain|dawn|9|0
+PLO|Ploiești Oil|26.9|45.8|oil|4|3|plain|dawn|9|0
+MOL|Moldavia|28.2|47.6|man|1|1|forest|dawn|6|0
+HUN|Hungary|19.2|47.1|man|2|1|plain|reich|6|0
+NIG|Nigeria|8|10|oil|3|1|forest|dawn|8|0
+CHA|Chad|17|15|gold|2|1|desert|dawn|8|0
+SUD|Sudan|30|15.5|man|2|1|desert|dawn|8|0
+CON|Congo|23|6|steel|3|1|forest|dawn|8|0
+LON|London|-0.4|51.6|gold|3|4|urban|neutral|18|0
+MID|Midlands|-2.3|53|steel|3|1|urban|neutral|10|0
+SCO|Scotland|-4.2|56.6|man|1|1|mountain|neutral|6|0
+IRL|Ireland|-7.7|53.2|man|1|1|plain|neutral|4|0
+LOI|Loire|-0.7|47.2|man|2|1|plain|neutral|8|0
+AQU|Aquitaine|-0.6|44.2|man|1|1|plain|neutral|6|0
+PRV|Provence|5.2|43.7|gold|2|2|coast|neutral|8|0
+LOW|Low Countries|4.7|51.4|gold|3|2|urban|neutral|8|0
+SWI|Switzerland|8.2|46.8|gold|2|1|mountain|neutral|6|0
+DEN|Denmark|9.6|56|man|1|1|plain|neutral|4|0
+OSL|Oslo|9.8|60|steel|2|1|mountain|reich|6|0
+NAR|Narvik|16.5|67.8|steel|3|2|mountain|reich|5|0
+SWE|Sweden|15.5|59.5|steel|3|1|forest|neutral|8|0
+FIN|Finland|26|63|man|1|1|forest|neutral|8|0
+NSP|Northern Spain|-5.5|43.1|man|2|1|mountain|reich|5|0
+ZAR|Aragon|-0.9|41.6|man|2|1|plain|reich|5|0
+SPA|Madrid|-3.7|40.4|man|2|2|plain|neutral|12|0
+AND|Andalusia|-4.8|37.6|gold|2|1|plain|neutral|7|0
+GIB|Gibraltar|-5.3|36.4|steel|1|2|coast|neutral|6|0
+POR|Portugal|-8|39|gold|1|1|coast|neutral|4|0
+NIT|Northern Italy|10.8|45|steel|3|1|plain|neutral|9|0
+ROM|Rome|12.6|41.8|gold|2|3|urban|neutral|10|0
+SIT|Southern Italy|16.3|40.6|man|1|1|plain|neutral|5|0
+SIC|Sicily|14|37.5|gold|1|1|coast|neutral|4|0
+YUG|Yugoslavia|20.4|44.4|steel|2|1|mountain|neutral|8|0
+GRE|Greece|22.3|39.3|gold|1|1|mountain|neutral|6|0
+BUL|Bulgaria|25|42|man|2|1|mountain|neutral|6|0
+BAL|Baltic States|24.5|57|man|1|1|forest|neutral|8|0
+LEN|Leningrad|30.3|59.9|steel|3|3|urban|neutral|16|0
+MIN|Minsk|27.6|53.6|man|2|1|forest|neutral|12|0
+KYV|Kyiv|30.5|50.4|man|3|2|plain|neutral|14|0
+CRI|Crimea|34.6|45.2|gold|1|1|coast|neutral|8|0
+MOS|Moscow|37.6|55.7|steel|4|5|urban|neutral|25|0
+DON|Don Basin|39.5|48.6|steel|2|1|plain|neutral|10|0
+VOL|Volga|45|52|oil|2|2|plain|neutral|12|0
+CAU|Caucasus|44|42.5|oil|4|3|mountain|neutral|12|0
+ANK|Ankara|33|39.6|man|2|2|mountain|neutral|12|0
+LEV|Levant|36.5|34.6|gold|2|1|desert|neutral|6|0
+IRQ|Iraq|44.2|33|oil|4|2|desert|neutral|8|0
+PER|Persia|52|34|oil|3|2|desert|neutral|8|0
+ARA|Arabia|45|24|oil|3|1|desert|neutral|5|0
+MOR|Morocco|-6|32.5|gold|1|1|desert|neutral|5|0
+ALG|Algeria|3|34|oil|2|1|desert|neutral|6|0
+TUN|Tunisia|9.6|34.2|gold|1|1|coast|neutral|4|0
+LIB|Libya|17.5|29.5|oil|3|1|desert|neutral|6|0
+EGY|Egypt|30.3|27.5|gold|3|3|desert|dawn|9|0
+ETH|Ethiopia|39|9|man|2|1|mountain|dawn|7|0
+MAL|Mali|-3|15|gold|2|1|desert|neutral|5|0
+SAF|South Africa|28|-26|gold|4|3|plain|neutral|10|0
+AFG|Afghanistan|66|34|man|2|1|mountain|neutral|6|0
+TKM|Turkestan|64|40|oil|2|1|desert|neutral|5|0
+KAZ|Kazakhstan|68|48|man|1|1|plain|neutral|5|0
+XIN|Xinjiang|85|43|man|1|1|desert|neutral|4|0
+DEL|Delhi|77.2|28.6|man|3|3|urban|dawn|10|0
+BOM|Bombay|72.8|19|gold|3|2|coast|dawn|8|0
+CAL|Bengal|88.4|22.6|gold|3|2|urban|dawn|8|0
+MAD|Madras|80.2|13|man|2|1|coast|neutral|6|0
+BUR|Burma|96|21|oil|2|1|forest|neutral|5|0
+CAN|Canton|113.3|23.1|gold|3|2|coast|dawn|8|0
+WUH|Chongqing|106.5|29.5|man|2|2|mountain|neutral|10|0
+SHA|Shanghai|121.5|31.2|gold|3|3|urban|neutral|14|0
+PEK|Beijing|116.4|39.9|man|3|3|urban|neutral|14|0
+MAN|Manchuria|126|45|steel|3|2|plain|neutral|10|0
+MON|Mongolia|105|47|man|1|1|desert|neutral|5|0
+TOK|Tokyo|139.7|35.7|steel|4|4|urban|neutral|20|0
+SIN|Singapore|103.8|1.3|gold|3|3|coast|neutral|8|0
+DEI|East Indies|110|-7|oil|3|2|forest|neutral|6|0
+AUZ|Australia|134|-25|man|2|2|desert|neutral|8|0
+VEN|Venezuela|-66|8|oil|4|2|forest|neutral|6|0
+NEB|Brazil North|-35|-6|man|2|1|coast|neutral|6|0
+RIO|Rio|-43.2|-22.9|gold|3|2|urban|dawn|8|0
+ARG|Buenos Aires|-58.4|-34.6|man|3|2|urban|dawn|8|0
+CHI|Chile|-71|-33|steel|2|1|mountain|neutral|6|0
+BMT|Bermuda Triangle|-65|25|gold|3|1|coast|dawn|5|0`;
+const W = 3584, H = 1776;
+const proj = (lon, lat) => [(lon + 82) * 16, (71 - lat) * 16];
+const TD = {}; const TIDS = [];
+RAW.trim().split('\n').forEach(l => {
+  const [id, name, lon, lat, res, amt, vp, terr, owner, g, cap] = l.split('|');
+  const [x, y] = proj(+lon, +lat);
+  TD[id] = {id, name, x, y, res, amt:+amt, vp:+vp, terr, owner0:owner, g:+g, cap:cap === '1'};
+  TIDS.push(id);
+});
+/* land polygons (lon,lat), rough on purpose */
+const LAND = [
+ [-9.2,37,-9.5,39,-8.8,42,-9.3,43.2,-2,43.6,-1.3,45.5,-1.2,46.2,-4.7,48.3,-3,48.8,-1.5,48.7,-1.3,49.6,0.2,49.5,1.6,50.9,3.2,51.3,4.2,52.2,4.8,53.2,7,53.6,8.6,53.9,8.2,55.5,8.1,57,10.5,57.6,10.6,56,9.8,55,10,54.3,12,54.1,14,54,18,54.8,19.5,54.4,21,55.3,21,57,24,57.2,24.3,58.5,23.5,59.2,28,59.5,30,60,33,60,58,60,58,32,48.5,30,44,33,40,36.7,36,36.8,33,36.2,30,36.6,27.3,36.8,26.5,38.5,26.2,40,26,40.8,23,40.3,24,38,23,36.5,21.5,37,20,39.5,19.5,41.5,19,42.5,16.5,43.5,14.5,45,13.7,45.7,12.3,44.9,13.5,43.5,16,41.9,18.5,40.2,16.5,38.5,15.7,38,16,40,14.5,41,12,41.5,10.5,43,9,44.3,7.5,43.8,4,43.4,3,42.3,3.2,41.8,0.5,40.5,-0.2,39,0,38.6,-0.7,37.6,-2,36.8,-4.5,36.6,-5.4,36],
+ [5,58.5,5,62,10,64,14,67.5,20,70,26,71,31,70,30,66,29,63,31,61,28,60.5,24,60,22,60,21.5,63,23.5,65.8,20,63.5,17,61,18.5,59.5,16.5,57,14,55.6,12.5,56.3,11.5,59,8,58],
+ [51,11.8,43.3,11.5,39.5,15.5,37.2,21,35,25,32.8,29.9,32.5,31.2,29,31,24,32.2,20,30.8,20,32.2,15.5,31.2,15,32.3,11.1,33.2,10.3,34,11,36.9,10,37.2,3,36.8,-2,35.1,-6,35.8,-9.5,30.5,-13,28,-17,24,-17,21,-17,14.7,-13,9,-8,4.5,-2,4.8,2,6,5,5.5,8.5,4,9.5,3,9.5,-1,12,-6,13.5,-12,12,-17,14.5,-22,15,-27,17.8,-31,18.5,-34.2,20,-34.8,25,-34,28,-33,32,-28.5,35,-24,35.5,-20,34.8,-16,40.5,-14,40.5,-10,39.2,-6,39.8,-3,41.5,-1.5,44,2,48,5],
+ [34.5,29.6,35,32,36,35,36.5,36.3,40,36.7,44,34,48,30.2,50,26,51.5,24.5,56,26,58,25,58,16,52,16,45,13,43,16,39,22,36,27.5],
+ [-5.5,50,1.5,51,1.7,52.8,0,53.5,-1.5,55,-2,57.5,-3.5,58.6,-5,58.4,-6,56.5,-5,55,-3,54.8,-3,53.3,-4.5,53.3,-5.2,51.7,-3.5,51.3],
+ [-10,52,-6,52,-6,54.5,-8,55.2,-10,54],
+ [12.5,37.8,15.5,38.2,15,36.7],
+ [32.5,45.5,33.5,46.2,35.5,45.3,36.6,45.4,35.5,44.8,34.5,44.4,33.5,44.6],
+ [56,71,142,71,142,54,140,52,141,48,138,46,135,43,131,42.5,129.5,41,129,36,126.5,34.5,125.5,38,124.5,40,121.5,39,122,40.5,121,41,119,39,118,38,119,37.2,122.5,37,121,36.5,119.5,35,121,32,122,30,120,27,117,23.5,114,22.3,110.5,21,108,21.5,106.5,20,108,16,109,12,105,8.7,103,10,100.5,13,100,8,103.5,1.4,101,3,98.5,8,98.5,12,97.5,16.5,94.5,16,94,19,92,21,90.5,22.5,87,21.5,84.5,19,80,15.5,80.3,13,79.8,10.3,77.5,8,76,10,74.5,14,72.8,19,72.5,21,70.5,21,68.5,23.5,66.5,25.4,61.5,25.2,57.5,25.8,56.5,27,54,26.5,51.5,27.8,50,30,48.5,30,58,32],
+ [130,31,131,33.5,135,34,137,34.5,140,35,141,38,142,40,141.5,41.5,140,40,139.5,38,136.5,36.8,132,35.5,130,33.5],
+ [95,5.5,98,4,104,-1.5,106,-5.8,104,-5.5,100,-1.5,95.5,3],
+ [105.5,-6.5,114.5,-7.7,114,-8.7,106,-7.8],
+ [109,1.5,111,2,117,7,119,5,117.5,1,116,-3.8,111,-3.5,109,-1],
+ [114,-22,122,-18,129,-14.8,132,-12,136.5,-12,136,-15,140,-17.5,142.5,-10.7,145,-15,146.5,-19,153,-26,153,-31,150,-37,146,-39,141,-38,138,-35,135,-34.7,131,-31.5,124,-33.5,115,-34.5,115,-31,113.5,-26],
+ [-77,8,-72,12,-62,10.5,-52,5,-50,0,-44,-2.5,-35,-5.5,-35,-9,-39,-13,-39.5,-18,-41,-22,-48,-25.5,-48.5,-28,-53,-34,-58,-34.5,-57,-37,-62,-39,-65,-42,-63.5,-47,-68,-50,-69,-54,-73,-52,-74,-45,-73.5,-37,-71.5,-30,-70.3,-18,-76,-14,-81,-6,-80,-1,-78.5,2,-77.5,7]
+];
+const WATER = [
+ [28,41.8,28.5,43.5,30,45.5,33,46,35,45,37.5,47,38,45.5,40,43.5,41.5,41.7,38,41,33,42,29.5,41.3],
+ [47,45,50,46.5,53,45,53.5,41,54,38,51,36.8,49,38,49,40,47.5,42.5]
+];
+const CRIMEA = LAND[7];
+function inPoly(lon, lat, p){let c = false; for(let i = 0, j = p.length - 2; i < p.length; j = i, i += 2){const xi = p[i], yi = p[i+1], xj = p[j], yj = p[j+1]; if((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) c = !c;} return c;}
+function isLand(lon, lat){ if(inPoly(lon, lat, CRIMEA)) return true; if(!LAND.some(p => inPoly(lon, lat, p))) return false; return !WATER.some(p => inPoly(lon, lat, p)); }
+const unproj = (x, y) => [x / 16 - 82, 71 - y / 16];
+/* links: Gabriel graph, sea if the midpoint is water */
+const LINKS = []; const ADJ = {}; TIDS.forEach(i => ADJ[i] = []);
+(() => {
+  for(let a = 0; a < TIDS.length; a++) for(let b = a + 1; b < TIDS.length; b++){
+    const A = TD[TIDS[a]], B = TD[TIDS[b]];
+    const d2 = (A.x-B.x)**2 + (A.y-B.y)**2; if(d2 > 330*330) continue;
+    const mx = (A.x+B.x)/2, my = (A.y+B.y)/2; let ok = true;
+    for(const k of TIDS){ if(k === A.id || k === B.id) continue; const C = TD[k]; if((C.x-mx)**2 + (C.y-my)**2 < d2/4){ok = false; break;} }
+    if(!ok) continue;
+    const [lon, lat] = unproj(mx, my);
+    const sea = !isLand(lon, lat);
+    LINKS.push({a:A.id, b:B.id, sea});
+  }
+  const same = (l, a, b) => (l.a === a && l.b === b) || (l.a === b && l.b === a);
+  [['BER','SWE'],['GIB','ALG'],['NSP','IRL']].forEach(([a, b]) => { const i = LINKS.findIndex(l => same(l, a, b)); if(i >= 0) LINKS.splice(i, 1); });
+  [['BER','DEN'],['NEB','RIO'],['CAL','MAD']].forEach(([a, b]) => { const l = LINKS.find(l => same(l, a, b)); if(l) l.sea = false; });
+  [['BER','POW'],['BER','PRU'],['BAV','AUS'],['LOW','RUH'],['RUH','LOR'],['PAR','LOR']].forEach(([a, b]) => { if(!LINKS.some(l => same(l, a, b))) LINKS.push({a, b, sea:false}); });
+  [['VEN','NEB'],['GIB','AND'],['AND','SPA'],['NSP','ZAR']].forEach(([a, b]) => { if(!LINKS.some(l => same(l, a, b))) LINKS.push({a, b, sea:false}); });
+  [['MAL','NEB'],['SAF','ARG'],['ARA','BOM'],['SIN','DEI'],['CAN','SIN'],['MAD','SIN'],['ETH','ARA'],['AUZ','DEI'],['BMT','VEN'],['BMT','NEB'],['GIB','MOR'],['BMT','MAL']].forEach(([a, b]) => { const l = LINKS.find(l => same(l, a, b)); if(l) l.sea = true; else LINKS.push({a, b, sea:true}); });
+  LINKS.forEach(l => { ADJ[l.a].push({id:l.b, sea:l.sea}); ADJ[l.b].push({id:l.a, sea:l.sea}); });
+})();
+const adjInfo = (a, b) => ADJ[a].find(n => n.id === b);
+const TOTAL_VP = TIDS.reduce((s, i) => s + TD[i].vp, 0);
+const PWH = {"DEB": "3b987eebfd62fed3dbc16911660c74c750dbfb17185d7569b05d891b34b8636d", "Sattyaki": "6f48d4fbc4db02c1f7213008365aba7cfdfa9b595474cc16ee89f901352fb6a1", "Utsab Chatterjee": "a08a9ef81b185ecbe45d53d799ddd87c46568fa38b3d8a5c7ba990af228f856d", "Soumalya Majumdar": "37664be4aa6a5e1f2a1203814c2c9b8099891af864dfa7f45eaa003921525cf3", "Utkarsh": "c8f09db3b3e7c2e9f3ff402265853e0f1d5c7bd44c811c2dfdca0ac462d5ceb9", "Anasruta Tagore": "1c69ed6e6eb31cb5fda266ea3a425a70065b39e840d6138004557f6b68aa628d", "Ritam": "67e14fd232c76a706e80dcb26dd1587e7c3ebe95b0ad230baed4505772481998", "Kaustav": "40f708fffd6a83174780df515909a1c418d440132ecb65ccc479710a124795a2", "Rohan": "40cebf6fb9ee7a2b2d8e0ee31e949f79d46959c50a583bcac6ded0d76348fc02", "Sounak": "25400db050e9d4f56efd754b4856a50f75a8845aeff4b34299d8d4c0755bf65a", "Souptik Das": "ac5f965d2380f6c8ba9ee835fa4525c6401fb208c31cf96bab84528846410f0c", "Angel Halder": "b37e7823074ad1af27ae00cd147a465fa9b23bf4279190c7dc31d8e8916b53bf", "Syamantak Kar": "1c6365d26bf2697618cd0799e143fc5e16a906150fb9aa963f608f783e1fc26f", "Anish": "54259d64882c501101848e425f058db76addcb89643cf1f0265a16d7b758723d", "Rishit Mullick": "e4b3696e44e93ad3401803a394f62894ce5e13ca4aa6acb5ace536eb93a40172", "Debjiit": "2b809be681a7c296cae65b6374f7d4d0fbfb317bba05d2cc39ee2556698b4080", "Swapnil Das": "ed6c8430864b1bef4fcbff1248623e4a3cd2651922211ab6b5364352ada75a68", "Subhadeep": "c529038344f4ca9942c939350351485110466768995b55ca763b6f50c1e515d0", "Souvik": "88fdb10d207a84a2d8ea4ddcb41ad8c48e7c4aed113627d76c19c27c878ff198", "Ratnadeep": "bce8674f48d41cfd60c3f44e15126eb4c3fd2bb1252fb6c5864b474b16dc8346", "Titli": "d45c61adc81dca46e742dbf9f5baf82e1df0ec727e89ca58c69a969722bf0e64", "Suvodeep": "3ae79ca397f8e584819a748d56e67169effc9b685ac8eaa748349f9874b493ea"};
+const normPw = x => String(x || '').toUpperCase().replace(/[\s-]/g, '');
+async function pwHash(name, pw){
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(normPw(pw)), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({name:'PBKDF2', salt:enc.encode('eot-v1:' + name), iterations:100000, hash:'SHA-256'}, key, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+const ROSTER = [
+  ['reich','DEB','leader','Führer'],['reich','Sattyaki','chief','Strumabteilung Stabschief'],['reich','Utsab Chatterjee','chief','Schutzstaffel Stabschief'],
+  ['reich','Soumalya Majumdar','chief','Wehrmacht Stabschief'],['reich','Utkarsh','chief','Luftwaffe Stabschief (Air Chief)'],['reich','Anasruta Tagore','diplomat','Diplomat'],
+  ['reich','Ritam','soldier','Assassin'],['reich','Kaustav','soldier','Soldier'],['reich','Rohan','soldier','Soldier'],['reich','Sounak','soldier','Soldier'],
+  ['reich','Souptik Das','soldier','Soldier'],['reich','Angel Halder','soldier','Soldier'],
+  ['dawn','Syamantak Kar','leader','Prophet King'],['dawn','Anish','chief','Commander-in-Chief'],['dawn','Rishit Mullick','diplomat','Envoy'],
+  ['dawn','Debjiit','soldier','Soldier'],['dawn','Swapnil Das','soldier','Soldier'],['dawn','Subhadeep','soldier','Soldier'],['dawn','Souvik','soldier','Soldier'],['dawn','Ratnadeep','soldier','Soldier'],['dawn','Titli','soldier','Soldier'],['dawn','Suvodeep','soldier','Soldier']
+];
+const ROLES = {leader:'Leader', chief:'Chief of staff', diplomat:'Diplomat', soldier:'Soldier'};
+const PERM = {
+  leader:'*',
+  chief:['recruit','move','attack','fort','stance','research','spy','sabotage','contribute'],
+  diplomat:['dip','spy','honey','sabotage','annex','decap','contribute'],
+  soldier:['contribute','spy']
+};
+const can = (role, p) => PERM[role] === '*' || (PERM[role] || []).includes(p);
+
+/* ============================ ENGINE ============================ */
+function stanceOf(id){ return ['bunker','elastic','counter'][(id.charCodeAt(0) + id.charCodeAt(2)) % 3]; }
+function startUnits(t){
+  const g = t.g, o = t.owner0;
+  if(o === 'neutral') return {inf:g, arm:Math.floor(g/9)};
+  const u = {inf:g, art:Math.floor(g/8), arm:Math.floor(g/5)};
+  if(t.cap) u.air = 4;
+  return u;
+}
+const GAME_V = 3;
+function newGame(now){
+  const s = {v:GAME_V, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
+  TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.cap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
+  s.teams.reich = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:0, arm:1, air:1, nav:0, intel:0, ind:0}};
+  s.teams.dawn = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:1, arm:0, air:0, nav:0, intel:1, ind:0}};
+  ROSTER.forEach(([team, name, role, title]) => s.players[name] = {team, role, title, cd:0});
+  log(s, now, 'all', 'The war begins. Poland, Norway and Hungary have fallen, Austria is secured, and the Reich presses into France and northern Spain. The Black Dawn holds Romania, Egypt, Ethiopia, Nigeria, India, the Bermuda Triangle and the southern Americas.', 'sys');
+  return s;
+}
+function log(s, now, vis, msg, kind, extra){ s.log.unshift(Object.assign({t:now, vis, msg, kind:kind || 'info'}, extra || {})); if(s.log.length > 80) s.log.length = 80; }
+const total = u => Object.values(u).reduce((a, b) => a + b, 0);
+function income(s, team){
+  const T = s.teams[team], inc = Object.assign({}, BASE_INC), mult = 1 + 0.15 * T.tech.ind;
+  TIDS.forEach(i => { const t = TD[i]; if(s.terr[i].o === team) inc[t.res] += t.amt * mult; });
+  if(s.teams[OTHER(team)].tech.nav >= 3) inc.gold *= 0.85;
+  return inc;
+}
+function tick(s, now){
+  let dt = (now - s.t) / 60000; if(dt <= 0) return;
+  dt = Math.min(dt, 720);
+  ['reich','dawn'].forEach(t => { const inc = income(s, t), T = s.teams[t]; RK.forEach(r => T.res[r] += inc[r] * dt); T.cp = Math.min(CPMAX, T.cp + dt * CPRATE); });
+  s.t = now;
+}
+function vpOf(s, team){ return TIDS.reduce((a, i) => a + (s.terr[i].o === team ? TD[i].vp : 0), 0); }
+function countOf(s, team){ return TIDS.reduce((a, i) => a + (s.terr[i].o === team ? 1 : 0), 0); }
+function checkWin(s, now){
+  if(s.win) return;
+  const end = (team, why) => { s.win = {team, why, t:now}; log(s, now, 'all', `${TEAMS[team].name} wins the war. ${why}`, 'win'); };
+  if(s.terr.BER.o === 'dawn') return end('dawn', 'Berlin has fallen.');
+  if(s.terr.BUC.o === 'reich') return end('reich', 'Bucharest has fallen.');
+  for(const t of ['reich','dawn']) if(countOf(s, t) === 0) return end(OTHER(t), `${TEAMS[t].name} has no land left.`);
+  let hit = null; for(const t of ['reich','dawn']) if(vpOf(s, t) / TOTAL_VP >= DOM_SHARE) hit = t;
+  if(hit){ if(!s.dom || s.dom.team !== hit) s.dom = {team:hit, since:now}; else if(now - s.dom.since >= DOM_MS) end(hit, 'Domination: they held most of the world long enough.'); }
+  else s.dom = null;
+}
+const hasTech = (s, team, req) => !req || s.teams[team].tech[req[0]] >= req[1];
+const unitMult = (s, team, u) => team === 'neutral' ? 1 : 1 + 0.12 * s.teams[team].tech[UNITS[u].cat];
+function afford(s, team, cost, k = 1){ return RK.every(r => (cost[r] || 0) * k <= s.teams[team].res[r] + 1e-9); }
+function pay(s, team, cost, k = 1){ RK.forEach(r => s.teams[team].res[r] -= (cost[r] || 0) * k); }
+function visible(s, viewer, id){
+  const t = s.terr[id]; if(t.o === viewer) return true;
+  if((((s.intel[viewer] || {})[id]) || 0) > Date.now()) return true;
+  if(viewer !== 'spectator' && t.o !== 'neutral' && s.teams[viewer] && s.teams[viewer].tech.intel >= 3) return true;
+  return false;
+}
+function ceasefire(s, now){ return s.pact && s.pact.until > now ? s.pact : null; }
+const mech = u => (u.arm || 0) + (u.air || 0) + (u.bmb || 0) + (u.nav || 0) + 3 * (u.sup || 0);
+function attackPower(s, team, grp, tactic, stance, rnd, now){
+  const T = TACT[tactic]; let sum = 0; const sm = stance === 'unknown' ? (MATRIX[tactic].bunker + MATRIX[tactic].elastic + MATRIX[tactic].counter) / 3 : MATRIX[tactic][stance];
+  for(const u in grp){ let v = grp[u] * UNITS[u].atk * unitMult(s, team, u); if(team === 'reich' && (u === 'arm' || u === 'sup')) v *= 1.1; if(T.units.includes(u)) v *= sm; sum += v; }
+  if((s.treach[team] || 0) > now) sum *= 0.9;
+  return sum * rnd;
+}
+function defPower(s, id, tactic, attacker, rnd){
+  const t = s.terr[id], D = TD[id]; let sum = 0;
+  for(const u in t.u) sum += t.u[u] * UNITS[u].def * unitMult(s, t.o, u);
+  let fort = t.f; const T = s.teams[attacker].tech;
+  if(tactic === 'barrage' && T.art >= 4) fort--; if(tactic === 'air' && T.air >= 3) fort--;
+  sum *= 1 + 0.2 * Math.max(0, fort); sum *= TERRAIN[D.terr]; if(t.o === 'dawn') sum *= 1.1; if(D.cap) sum *= 1.15;
+  return sum * rnd;
+}
+function applyLoss(u, f){ const out = {}, lost = {}; for(const k in u){ const raw = u[k] * f; let l = Math.floor(raw); if(Math.random() < raw - l) l++; l = Math.min(l, u[k]); if(u[k] - l > 0) out[k] = u[k] - l; if(l) lost[k] = l; } return {out, lost}; }
+function validGroup(s, src, grp){ let n = 0; for(const u in grp){ const c = grp[u]; if(c < 0 || c > (s.terr[src].u[u] || 0)) return false; n += c; } return n > 0; }
+function seaOK(s, team, grp){ const air = (grp.air || 0) + (grp.bmb || 0); const only = Object.keys(grp).every(u => !grp[u] || u === 'air' || u === 'bmb'); if(only && air > 0) return true; if(s.teams[team].tech.air >= 4 && air > 0) return true; return (grp.nav || 0) > 0 && s.teams[team].tech.nav >= 2; }
+const fuel = (s, team, grp) => { const m = mech(grp); const navFree = s.teams[team].tech.nav >= 4 ? (grp.nav || 0) : 0; return Math.ceil(Math.max(0, m - navFree) / 2); };
+
+const A = {};
+const T_ = id => TD[id].name;
+A.contribute = (s, c, p) => {
+  const pl = s.players[c.name]; if(pl.cd > c.now) return {err:`Rest for ${Math.ceil((pl.cd - c.now) / 1000)}s before the next field duty.`};
+  const k = {drill:['man', 6, 'drilled recruits'], scavenge:['steel', 5, 'scavenged steel'], prospect:['oil', 4, 'tapped a fuel cache']}[p.kind]; if(!k) return {err:'Unknown duty.'};
+  s.teams[c.team].res[k[0]] += k[1]; pl.cd = c.now + 3 * 60000;
+  return {ok:`${c.name} ${k[2]}: +${k[1]} ${RES[k[0]]}.`};
+};
+A.recruit = (s, c, p) => {
+  const t = s.terr[p.tid], U = UNITS[p.unit], n = Math.max(1, Math.min(20, p.n | 0));
+  if(!t || t.o !== c.team) return {err:'You can only recruit in your own territory.'};
+  if(!hasTech(s, c.team, U.req)) return {err:'Research required.'};
+  if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
+  if(p.unit === 'sup'){ const have = TIDS.reduce((a, i) => a + (s.terr[i].o === c.team ? (s.terr[i].u.sup || 0) : 0), 0); if(have >= 2 || n > 1) return {err:'Only 2 super-heavy tanks per power, one at a time.'}; }
+  if(!afford(s, c.team, U.cost, n)) return {err:'Not enough resources.'};
+  pay(s, c.team, U.cost, n); s.teams[c.team].cp -= 1; t.u[p.unit] = (t.u[p.unit] || 0) + n;
+  log(s, c.now, c.team, `${c.name} raised ${n} ${uname(p.unit, c.team)} in ${T_(p.tid)}.`);
+  return {ok:`Raised ${n} ${uname(p.unit, c.team)}.`};
+};
+A.fort = (s, c, p) => {
+  const t = s.terr[p.tid]; if(!t || t.o !== c.team) return {err:'Not your territory.'}; if(t.f >= 3) return {err:'Fortifications are at maximum.'};
+  const cost = {steel:15 * (t.f + 1)}; if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
+  pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.f++; log(s, c.now, c.team, `${T_(p.tid)} fortified to level ${t.f}.`);
+  return {ok:`Fortified ${T_(p.tid)}.`};
+};
+A.stance = (s, c, p) => {
+  const t = s.terr[p.tid]; if(!t || t.o !== c.team || !STANCES[p.st]) return {err:'Not possible.'}; if(t.st === p.st) return {err:'Already set.'};
+  if(s.teams[c.team].cp < 1) return {err:'No command points left.'}; s.teams[c.team].cp -= 1; t.st = p.st;
+  log(s, c.now, c.team, `${T_(p.tid)} now holds a ${STANCES[p.st]} posture.`); return {ok:`${T_(p.tid)}: ${STANCES[p.st]}.`};
+};
+A.research = (s, c, p) => {
+  const T = s.teams[c.team], lvl = T.tech[p.k]; if(lvl == null || lvl >= 4) return {err:'Already at maximum.'};
+  const nx = lvl + 1, cost = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) cost.oil = 12 * nx;
+  if(!afford(s, c.team, cost)) return {err:'Not enough resources.'}; pay(s, c.team, cost); T.tech[p.k] = nx;
+  log(s, c.now, 'all', `${TEAMS[c.team].name} advances in ${TECH[p.k].n}.`); return {ok:`${TECH[p.k].n} level ${nx}: ${TECH[p.k].d[nx - 1]}.`};
+};
+A.move = (s, c, p) => {
+  const a = s.terr[p.from], b = s.terr[p.to]; if(!a || !b || a.o !== c.team || b.o !== c.team) return {err:'Both territories must be yours.'};
+  const ln = adjInfo(p.from, p.to); if(!ln) return {err:'Those territories are not connected.'};
+  if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to move.'}; if(ln.sea && !seaOK(s, c.team, p.grp)) return {err:'Crossing water needs a fleet (Naval 2) or an air group.'};
+  if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
+  s.teams[c.team].cp -= 1;
+  for(const u in p.grp){ if(!p.grp[u]) continue; a.u[u] -= p.grp[u]; if(a.u[u] <= 0) delete a.u[u]; b.u[u] = (b.u[u] || 0) + p.grp[u]; }
+  log(s, c.now, c.team, `${total(p.grp)} units moved ${T_(p.from)} to ${T_(p.to)}.`); return {ok:`Moved ${total(p.grp)} units to ${T_(p.to)}.`};
+};
+A.attack = (s, c, p) => {
+  const a = s.terr[p.from], d = s.terr[p.to]; if(!a || !d || a.o !== c.team) return {err:'Attack from one of your territories.'};
+  if(d.o === c.team) return {err:'That territory is already yours.'}; const ln = adjInfo(p.from, p.to); if(!ln) return {err:'Those territories are not connected.'};
+  if(d.o === OTHER(c.team) && ceasefire(s, c.now)) return {err:'A ceasefire is in force. Break it from the Diplomacy tab first.'};
+  if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to send.'}; if(ln.sea && !seaOK(s, c.team, p.grp)) return {err:'Crossing water needs a fleet (Naval 2) or an air group.'};
+  const tc = TACT[p.tactic]; if(!tc || !hasTech(s, c.team, tc.req)) return {err:'That tactic is not researched.'};
+  if(tc.units.length && !tc.units.some(u => p.grp[u] > 0)) return {err:'That tactic needs matching units in the group.'};
+  const oil = fuel(s, c.team, p.grp); if(s.teams[c.team].res.oil < oil) return {err:`Not enough oil. This force burns ${oil}.`};
+  if(s.teams[c.team].cp < 2) return {err:'An attack costs 2 command points.'};
+  s.teams[c.team].cp -= 2; s.teams[c.team].res.oil -= oil;
+  const r1 = 0.88 + Math.random() * 0.24, r2 = 0.88 + Math.random() * 0.24;
+  const AP = attackPower(s, c.team, p.grp, p.tactic, d.st, r1, c.now), DP = defPower(s, p.to, p.tactic, c.team, r2) + 0.01;
+  const win = AP > DP, pw = (win ? AP : DP) / (AP + DP);
+  const before = {att:total(p.grp), def:total(d.u)}; const dname = d.o === 'neutral' ? 'neutral forces' : TEAMS[d.o].name; const prevOwner = d.o;
+  const sent = clone(p.grp); for(const u in sent){ a.u[u] -= sent[u]; if(a.u[u] <= 0) delete a.u[u]; }
+  let msg, kind = 'battle';
+  const wl = Math.min(0.6, Math.max(0.05, (1 - pw) * 0.75));
+  if(win){
+    const surv = applyLoss(sent, wl); d.u = surv.out; d.o = c.team; d.f = Math.max(0, d.f - 1); d.st = 'bunker';
+    s.teams[c.team].res.gold += 5; delete s.intel[OTHER(c.team)][p.to]; delete s.intel[c.team][p.to];
+    msg = `${c.name} took ${T_(p.to)} from ${dname} using ${TACT[p.tactic].n}. Lost ${total(surv.lost)} of ${before.att}; ${before.def} defenders fell.`;
+    if(TD[p.to].cap) msg += ' The capital has fallen.';
+  } else {
+    const al = applyLoss(sent, Math.min(0.9, 0.4 + 0.5 * pw)); const dl = applyLoss(d.u, wl);
+    d.u = dl.out; Object.keys(al.out).forEach(u => a.u[u] = (a.u[u] || 0) + al.out[u]);
+    msg = `${c.name}'s ${TACT[p.tactic].n} on ${T_(p.to)} was repulsed by ${dname}. Lost ${total(al.lost)} of ${before.att}; defenders lost ${total(dl.lost)}.`;
+  }
+  log(s, c.now, 'all', msg, kind, {tid:p.to, win, by:c.team, prev:prevOwner}); return {ok:msg, battle:win};
+};
+A.spy = (s, c, p) => {
+  const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'};
+  if(s.teams[c.team].cp < 2) return {err:'A spy mission costs 2 command points.'}; if(s.teams[c.team].res.gold < 10) return {err:'Needs 10 gold.'};
+  s.teams[c.team].cp -= 2; s.teams[c.team].res.gold -= 10;
+  const ch = 0.55 + 0.1 * s.teams[c.team].tech.intel - (d.o === 'dawn' ? 0.15 : 0);
+  if(Math.random() < ch){ s.intel[c.team][p.tid] = c.now + SPY_MS; log(s, c.now, c.team, `Agents report from ${T_(p.tid)}. Intel valid for 30 minutes.`, 'intel'); return {ok:`Agents report from ${T_(p.tid)}: garrison and stance revealed for 30 minutes.`}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} spy was caught in ${T_(p.tid)}.`); return {ok:'The agent was caught. No intel.'};
+};
+A.honey = (s, c, p) => {
+  const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'};
+  const me = s.teams[c.team], en = s.teams[d.o === 'neutral' ? (c.team === 'reich' ? 'dawn' : 'reich') : d.o];
+  if(d.o === 'neutral') return {err:'A honeytrap only works on an enemy-held province.'};
+  if(me.cp < 3) return {err:'A honeytrap costs 3 command points.'}; if(me.res.gold < 20) return {err:'Needs 20 gold.'};
+  me.cp -= 3; me.res.gold -= 20;
+  const ch = 0.6 + 0.08 * me.tech.intel;
+  if(Math.random() < ch){ const cut = Math.min(en.cp, 2); en.cp -= cut; s.intel[c.team][p.tid] = c.now + SPY_MS; log(s, c.now, c.team, `A honeytrap in ${T_(p.tid)} compromised an enemy officer. Intel for 30 minutes; the enemy lost ${cut} command points.`, 'intel'); return {ok:`The honeytrap worked in ${T_(p.tid)}: intel for 30 minutes and the enemy loses ${cut} command points.`}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} honeytrap was exposed in ${T_(p.tid)}.`); return {ok:'The operation was exposed. No result.'};
+};
+A.sabotage = (s, c, p) => {
+  const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'}; if(s.teams[c.team].tech.intel < 2) return {err:'Needs Intelligence 2.'};
+  if(s.teams[c.team].cp < 3) return {err:'Sabotage costs 3 command points.'}; if(s.teams[c.team].res.gold < 25) return {err:'Needs 25 gold.'};
+  s.teams[c.team].cp -= 3; s.teams[c.team].res.gold -= 25;
+  const ch = 0.45 + 0.1 * s.teams[c.team].tech.intel - (d.o === 'dawn' ? 0.1 : 0);
+  if(Math.random() < ch){ const keep = clone(d.u); const sp = keep.sup; delete keep.sup; const r = applyLoss(keep, 0.25); if(sp) r.out.sup = sp; d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info'); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} saboteur was caught in ${T_(p.tid)}.`); return {ok:'The saboteur was caught.'};
+};
+A.decap = (s, c, p) => {
+  const d = s.terr[p.tid]; if(!d || d.o !== OTHER(c.team)) return {err:'Target an enemy territory.'}; if(s.teams[c.team].tech.intel < 4) return {err:'Needs Intelligence 4.'};
+  if(s.teams[c.team].cp < 4) return {err:'Costs 4 command points.'}; if(s.teams[c.team].res.gold < 60) return {err:'Needs 60 gold.'};
+  s.teams[c.team].cp -= 4; s.teams[c.team].res.gold -= 60;
+  if(Math.random() < 0.4 + 0.1 * s.teams[c.team].tech.intel - 0.3){ const E = s.teams[OTHER(c.team)]; E.cp = Math.max(0, E.cp - 6); d.f = 0; log(s, c.now, 'all', `Decapitation strike at ${T_(p.tid)}. ${TEAMS[OTHER(c.team)].name} command is in disarray.`, 'info'); return {ok:'The strike lands. Enemy loses 6 command points and the fort is razed.'}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} assassination team was destroyed near ${T_(p.tid)}.`); return {ok:'The team was lost.'};
+};
+A.annex = (s, c, p) => {
+  const d = s.terr[p.tid]; if(!d || d.o !== 'neutral') return {err:'Only neutral lands can be annexed.'};
+  if(!ADJ[p.tid].some(n => s.terr[n.id].o === c.team)) return {err:'You need a border with it.'}; const g = total(d.u); if(g > 12) return {err:'The garrison is too strong to buy (12 units or fewer).'};
+  const cost = 30 + 4 * g; if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(s.teams[c.team].cp < 2) return {err:'Costs 2 command points.'};
+  s.teams[c.team].res.gold -= cost; s.teams[c.team].cp -= 2; d.o = c.team; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.`, 'dip'); return {ok:`${T_(p.tid)} joins you.`};
+};
+A.propose = (s, c, p) => {
+  if(s.props.some(x => x.from === c.team && x.type === p.type && x.open)) return {err:'You already have that proposal open.'};
+  if(s.teams[c.team].cp < 1) return {err:'Costs 1 command point.'};
+  const pr = {id:s.pid++, from:c.team, by:c.name, type:p.type, open:true, t:c.now};
+  if(p.type === 'ceasefire'){ if(ceasefire(s, c.now)) return {err:'A ceasefire is already in force.'}; pr.mins = [60, 180, 360].includes(p.mins) ? p.mins : 60; }
+  else { const g = p.give, w = p.get; if(!RES[g.r] || !RES[w.r] || g.r === w.r || !(g.n > 0) || !(w.n > 0)) return {err:'Set two different resources and amounts.'}; if(s.teams[c.team].res[g.r] < g.n) return {err:'You do not have that much to offer.'}; pr.give = {r:g.r, n:Math.floor(g.n)}; pr.get = {r:w.r, n:Math.floor(w.n)}; }
+  s.teams[c.team].cp -= 1; s.props.push(pr); if(s.props.length > 20) s.props.shift();
+  log(s, c.now, 'all', `${c.name} proposes a ${p.type === 'ceasefire' ? pr.mins / 60 + 'h ceasefire' : 'trade'} to ${TEAMS[OTHER(c.team)].name}.`, 'dip'); return {ok:'Proposal sent.'};
+};
+A.answer = (s, c, p) => {
+  const pr = s.props.find(x => x.id === p.id && x.open); if(!pr) return {err:'That proposal is gone.'};
+  if(p.cancel){ if(pr.from !== c.team) return {err:'Not yours.'}; pr.open = false; return {ok:'Proposal withdrawn.'}; }
+  if(pr.from === c.team) return {err:'Wait for the other side to answer.'};
+  if(!p.accept){ pr.open = false; log(s, c.now, 'all', `${TEAMS[c.team].name} rejects the ${pr.type} proposal.`, 'dip'); return {ok:'Rejected.'}; }
+  if(pr.type === 'ceasefire'){ if(ceasefire(s, c.now)) return {err:'A ceasefire is already in force.'}; s.pact = {until:c.now + pr.mins * 60000, mins:pr.mins}; pr.open = false; log(s, c.now, 'all', `Ceasefire agreed for ${pr.mins / 60} hour(s).`, 'dip'); return {ok:'Ceasefire agreed.'}; }
+  const me = s.teams[c.team], they = s.teams[pr.from]; if(me.res[pr.get.r] < pr.get.n) return {err:'You cannot cover your side of the trade.'}; if(they.res[pr.give.r] < pr.give.n){ pr.open = false; return {err:'They can no longer cover it.'}; }
+  they.res[pr.give.r] -= pr.give.n; me.res[pr.give.r] += pr.give.n; me.res[pr.get.r] -= pr.get.n; they.res[pr.get.r] += pr.get.n; pr.open = false;
+  log(s, c.now, 'all', `Trade agreed: ${pr.give.n} ${RES[pr.give.r]} for ${pr.get.n} ${RES[pr.get.r]}.`, 'dip'); return {ok:'Trade complete.'};
+};
+A.breakpact = (s, c) => {
+  if(!ceasefire(s, c.now)) return {err:'There is no ceasefire.'}; if(s.teams[c.team].res.gold < 25) return {err:'Breaking a treaty costs 25 gold.'};
+  s.teams[c.team].res.gold -= 25; s.pact = null; s.treach[c.team] = c.now + 30 * 60000; log(s, c.now, 'all', `${TEAMS[c.team].name} tears up the ceasefire. Its troops fight at -10% for 30 minutes.`, 'dip'); return {ok:'Ceasefire broken.'};
+};
+A.setrole = (s, c, p) => {
+  const pl = s.players[p.name]; if(!pl || pl.team !== c.team) return {err:'Not on your side.'}; if(ROLES[p.role]) pl.role = p.role; if(typeof p.title === 'string') pl.title = p.title.slice(0, 40);
+  if(p.name === c.name && pl.role !== 'leader' && !Object.values(s.players).some(x => x.team === c.team && x.role === 'leader')) pl.role = 'leader';
+  return {ok:'Updated.'};
+};
+A.remove = (s, c, p) => { const pl = s.players[p.name]; if(!pl || pl.team !== c.team || p.name === c.name) return {err:'Not possible.'}; delete s.players[p.name]; return {ok:'Removed.'}; };
+A.enlist = (s, c, p) => { const n = String(p.name || '').trim().slice(0, 30); if(!n) return {err:'Enter a name.'}; if(s.players[n]) return {err:'That name is taken.'}; if(!TEAMS[p.team]) return {err:'Pick a side.'}; if(!p.pw || String(p.pw).length !== 64) return {err:'Choose a password.'}; s.players[n] = {team:p.team, role:'soldier', title:'Recruit', cd:0, pw:p.pw}; log(s, c.now, 'all', `${n} enlists with ${TEAMS[p.team].name}.`); return {ok:'Welcome.'}; };
+A.reset = (s, c) => { const players = s.players; const fresh = newGame(c.now); Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players}); return {ok:'The map is reset.', reset:true}; };
+A.noop = () => ({});
+
+/* ============================ STORE ============================ */
+let db = null, S = null, mode = 'connecting', busy = false, loadTimer = null;
+const TAB = Math.random().toString(36).slice(2);
+let me = {name:null};
+try{ me.name = localStorage.getItem('eot-me'); me.ph = localStorage.getItem('eot-ph'); }catch(e){}
+const expectedPw = n => PWH[n] || (S && S.players[n] && S.players[n].pw) || null;
+const authed = () => me.name === '__spectator' || !!(S && S.players[me.name] && expectedPw(me.name) && me.ph === expectedPw(me.name));
+let PWASK = null, PWERR = '';
+const myTeam = () => (S && S.players[me.name] && authed()) ? S.players[me.name].team : null;
+const myRole = () => (S && S.players[me.name] && authed()) ? S.players[me.name].role : null;
+async function act(name, payload){
+  if(busy) return; if(!S) return;
+  const pl = S.players[me.name]; const needs = {contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
+  if(name !== 'enlist' && name !== 'noop'){
+    if(!pl || !authed()) return toast('Choose your post and enter its password first.', 'bad');
+    const need = needs[name]; if(need === '*' ? pl.role !== 'leader' : !can(pl.role, need)) return toast(`Your role (${ROLES[pl.role]}) cannot do that.`, 'bad');
+  }
+  busy = true; renderHud();
+  try{
+    let base;
+    if(db){
+      let got = false; for(let i = 0; i < 10 && !got; i++){ const r = await db.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(250); }
+      if(!got){ toast('The table is busy. Try again.', 'bad'); return; }
+      const snap = await db.doc('game/state').get(); base = snap.exists ? clone(snap.data()) : newGame(Date.now());
+    } else base = clone(S);
+    const now = Date.now(); tick(base, now);
+    if(base.win && name !== 'reset'){ toast('The war is over. A leader can reset the map.', 'bad'); S = base; return; }
+    const ctx = {now, name:me.name, team:pl ? pl.team : null, role:pl ? pl.role : null};
+    const res = (name === 'enlist') ? A.enlist(base, {now, name:me.name}, payload) : A[name](base, ctx, payload || {});
+    if(res.err){ toast(res.err, 'bad'); return; }
+    if(!res.reset) checkWin(base, now);
+    if(db) await db.doc('game/state').set(base); S = base; seen = Date.now() - 1;
+    if(res.ok) toast(res.ok, res.battle === false ? 'bad' : (res.battle ? 'win' : ''));
+    closeModal();
+  }catch(e){ toast(e && e.code === 'not_granted' || (e && /permission|denied/i.test(e.message || '')) ? 'You can look but not play. Ask the owner for contributor access.' : ('Order failed: ' + (e && e.message || e)), 'bad'); }
+  finally{ busy = false; renderAll(); }
+}
+let migrating = false;
+async function ensureGame(){ if(!db || migrating) return; migrating = true; try{ const snap = await db.doc('game/state').get(); if(snap.exists && (snap.data().v || 1) >= GAME_V) return; let got = false; for(let i = 0; i < 6 && !got; i++){ const r = await db.doc('game/lock').acquire({holder:TAB, ttlMs:1500}); got = r.acquired; if(!got) await sleep(300); } const again = await db.doc('game/state').get(); if(!again.exists || (again.data().v || 1) < GAME_V) await db.doc('game/state').set(newGame(Date.now())); }catch(e){ toast('Could not start the game: ' + (e.message || e), 'bad'); } finally{ migrating = false; } }
+async function boot(){
+  let cap = null;
+  try{ if(window.claude && window.claude.use) cap = await window.claude.use('db'); }catch(e){}
+  if(cap){
+    db = cap; mode = 'live';
+    loadTimer = setTimeout(() => { if(!S){ mode = 'slow'; renderAll(); } }, 10000);
+    db.doc('game/state').onSnapshot(snap => {
+      clearTimeout(loadTimer);
+      if(!snap.exists || (snap.data().v || 1) < GAME_V){ ensureGame(); return; }
+      const first = !S; S = clone(snap.data()); mode = 'live';
+      if(first) seen = Date.now(); else announce();
+      renderAll();
+    }, err => { mode = 'error'; renderAll(); });
+    renderAll();
+  } else {
+    S = newGame(Date.now()); mode = 'local'; seen = Date.now(); renderAll();
+  }
+}
+let seen = 0, shown = new Set();
+function announce(){
+  if(!S) return; const t = myTeam();
+  S.log.filter(l => l.t > seen && !shown.has(l.t + l.msg) && (l.vis === 'all' || l.vis === t)).slice(0, 3).forEach(l => { shown.add(l.t + l.msg); toast(l.msg, l.kind === 'win' ? 'win' : (l.kind === 'battle' ? (l.win ? '' : 'bad') : '')); });
+  seen = Date.now();
+}
+
+/* ============================ UI ============================ */
+let sel = null, tab = 'orders', M = null, ui = {trade:{give:'oil', gn:20, get:'steel', wn:20}, view:null, filter:null};
+const tcol = o => o === 'reich' ? 'var(--reich)' : o === 'dawn' ? 'var(--dawn)' : 'var(--neutral)';
+const fmt = n => Math.floor(n + 1e-6);
+function toast(msg, kind){ const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 5200); while($('#toasts').children.length > 4) $('#toasts').firstChild.remove(); }
+function icon(team){ return team === 'reich' ? `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="4" y="4" width="10" height="10" transform="rotate(45 9 9)" fill="var(--reich)"/></svg>` : `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 13a7 7 0 0 1 14 0z" fill="var(--dawn)"/><rect x="1" y="14" width="16" height="1.6" fill="var(--dawn)"/></svg>`; }
+function costHtml(cost, team, k = 1){ return `<span class="cost">${RK.filter(r => cost[r]).map(r => { const need = cost[r] * k, ok = !S || !team || S.teams[team].res[r] >= need; return `<span class="${ok ? '' : 'no'}">${need} ${r === 'man' ? 'man' : r}</span>`; }).join(' ')}</span>`; }
+
+/* --- header / hud --- */
+function proj_(){ if(!S) return null; const c = clone({teams:S.teams, terr:S.terr, t:S.t}); const n = Date.now(); tick(c, n); return c; }
+function renderHud(){
+  if(!S){ $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `<span class="mut">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'slow' ? 'Still connecting…' : 'Connecting…'}</span>`; return; }
+  const t = myTeam(), team = t || 'reich', P = proj_(), inc = income(S, team);
+  document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#c9c3ae');
+  const vr = vpOf(S, 'reich'), vd = vpOf(S, 'dawn'), vn = TOTAL_VP - vr - vd;
+  $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${countOf(S, 'reich')} lands</b></span><span style="color:var(--dawn)"><b>${countOf(S, 'dawn')} lands · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / TOTAL_VP * 100}%;background:var(--reich)"></i><i style="width:${vn / TOTAL_VP * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / TOTAL_VP * 100}%;background:var(--dawn)"></i></div>`;
+  const pl = authed() ? S.players[me.name] : null;
+  $('#me').innerHTML = pl ? `<div class="who"><b>${esc(me.name)}</b><small>${esc(pl.title)} · ${ROLES[pl.role]}</small></div>${icon(pl.team)}<button class="btn sm" data-act="switch">Switch</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`;
+  const T = P.teams[team], rate = r => '+' + inc[r].toFixed(1) + '/min';
+  $('#hud').innerHTML = (t ? '' : `<div class="hudcell"><span class="k">Spectating</span></div>`) + RK.map(r => `<div class="hudcell"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
+    `<div class="hudcell cp"><span class="k">Command</span><span class="v">${Math.floor(T.cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${T.cp / CPMAX * 100}%"></i></span></div>` +
+    (busy ? `<div class="hudcell"><span class="k">Sending orders…</span></div>` : '');
+  let b = '';
+  if(S.win) b = `<div class="banner win" style="color:${tcol(S.win.team)}">${TEAMS[S.win.team].name} wins. <span style="font-family:var(--body);font-size:14px;text-transform:none;letter-spacing:0;color:var(--ink)">${esc(S.win.why)}</span></div>`;
+  else {
+    const parts = [];
+    if(S.dom){ const left = Math.max(0, DOM_MS - (Date.now() - S.dom.since)); parts.push(`<span style="color:${tcol(S.dom.team)}">${TEAMS[S.dom.team].name} holds ${Math.round(vpOf(S, S.dom.team) / TOTAL_VP * 100)}% of the world. Victory in ${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')} unless it is pushed below ${Math.round(DOM_SHARE * 100)}%.</span>`); }
+    const cf = ceasefire(S, Date.now()); if(cf) parts.push(`Ceasefire in force for ${Math.ceil((cf.until - Date.now()) / 60000)} more minutes.`);
+    if(mode === 'local') parts.push('Sandbox mode: this copy is not shared. Open the page signed in, with contributor access, to play together.');
+    if(mode === 'error') parts.push('Lost contact with the war room.');
+    if(parts.length) b = `<div class="banner ${mode === 'local' || mode === 'error' ? 'warn' : ''}">${parts.join(' · ')}</div>`;
+  }
+  $('#banner').innerHTML = b;
+}
+
+/* --- map --- */
+const INIT = {x:1118, y:90, w:820, h:700};
+let vb = Object.assign({}, INIT);
+const svg = $('#map');
+function setVB(){ vb.w = Math.max(260, Math.min(W, vb.w)); vb.h = Math.min(H, vb.w * (svg.clientHeight || 600) / (svg.clientWidth || 800)); vb.x = Math.max(0, Math.min(W - vb.w, vb.x)); vb.y = Math.max(0, Math.min(H - vb.h, vb.y)); svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+function zoomAt(f, cx, cy){ const px = vb.x + vb.w * cx, py = vb.y + vb.h * cy; const nw = Math.max(260, Math.min(W, vb.w * f)); const r = nw / vb.w; vb.x = px - (px - vb.x) * r; vb.y = py - (py - vb.y) * r; vb.w = nw; setVB(); }
+const polyPts = p => { const o = []; for(let i = 0; i < p.length; i += 2){ const [x, y] = proj(p[i], p[i+1]); o.push(x.toFixed(1) + ',' + y.toFixed(1)); } return o.join(' '); };
+let baseMap = '';
+function buildBase(){
+  const grid = []; for(let lon = -80; lon <= 140; lon += 10){ const [x] = proj(lon, 0); grid.push(`<line x1="${x}" y1="0" x2="${x}" y2="${H}"/>`); } for(let lat = -30; lat <= 70; lat += 10){ const [, y] = proj(0, lat); grid.push(`<line x1="0" y1="${y}" x2="${W}" y2="${y}"/>`); }
+  baseMap = `<rect width="${W}" height="${H}" fill="var(--sea)"/><g stroke="#1b2a2e" stroke-width="1" opacity=".5">${grid.join('')}</g>` +
+    `<g fill="var(--land)" stroke="#3a4d45" stroke-width="1.2" stroke-linejoin="round">${LAND.filter((_, i) => i !== 7).map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g>` +
+    `<g fill="var(--sea)" stroke="#2c3b35" stroke-width="1.2">${WATER.map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g><polygon points="${polyPts(CRIMEA)}" fill="var(--land)" stroke="#2c3b35" stroke-width="1.2"/>`;
+}
+function renderMap(){
+  if(!S){ svg.innerHTML = baseMap; return; }
+  const viewer = myTeam() || 'spectator'; const now = Date.now();
+  const links = LINKS.map(l => { const A_ = TD[l.a], B_ = TD[l.b], oa = S.terr[l.a].o, ob = S.terr[l.b].o; const front = oa !== ob && oa !== 'neutral' && ob !== 'neutral'; const hot = sel && (l.a === sel || l.b === sel);
+    return `<line x1="${A_.x}" y1="${A_.y}" x2="${B_.x}" y2="${B_.y}" stroke="${front ? '#ff7a5c' : hot ? '#e6e3d8' : '#3b4a44'}" stroke-width="${front ? 2.4 : hot ? 1.8 : 1}" ${l.sea ? 'stroke-dasharray="3 5"' : ''} opacity="${front || hot ? .95 : .7}"/>`; }).join('');
+  const sels = sel ? ADJ[sel].map(n => n.id) : [];
+  const nodes = TIDS.map(id => { const D = TD[id], t = S.terr[id], r = D.cap ? 19 : 14, ex = visible(S, viewer, id); const n = total(t.u); const label = ex ? n : (n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0');
+    const fill = tcol(t.o), isSel = sel === id, near = sels.includes(id);
+    return `<g class="node" data-act="sel" data-id="${id}" tabindex="0" role="button" aria-label="${esc(D.name)}, ${t.o}"><title>${esc(D.name)} · ${t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].short} · ${D.vp} VP</title>` +
+      (isSel ? `<circle cx="${D.x}" cy="${D.y}" r="${r + 6}" fill="none" stroke="#fff" stroke-width="2"/>` : '') + (near && !isSel ? `<circle class="tgt" cx="${D.x}" cy="${D.y}" r="${r + 5}" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="2 3"/>` : '') +
+      `<circle cx="${D.x}" cy="${D.y}" r="${r}" fill="${fill}" fill-opacity="${t.o === 'neutral' ? .75 : 1}" stroke="${D.cap ? '#fff' : '#0c0f0e'}" stroke-width="${D.cap ? 2.5 : 1.5}"/>` +
+      `<text x="${D.x}" y="${D.y + 3.5}" text-anchor="middle" font-size="${String(label).length > 3 ? 8 : 10}" font-weight="500" fill="${t.o === 'dawn' ? '#16120a' : '#fff'}">${label}</text>` +
+      (D.vp >= 3 ? `<text x="${D.x + r - 2}" y="${D.y - r + 6}" font-size="8" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">★${D.vp}</text>` : '') +
+      `<text class="nlabel" x="${D.x}" y="${D.y + r + 10}" text-anchor="middle">${esc(D.name)}</text></g>`; }).join('');
+  svg.innerHTML = baseMap + `<g>${links}</g><g>${nodes}</g>`;
+}
+function renderLegend(){ $('#legend').innerHTML = `<span><i style="background:var(--reich)"></i>Reich</span><span><i style="background:var(--dawn)"></i>Black Dawn</span><span><i style="background:var(--neutral)"></i>Neutral</span><span>★ victory points</span><span>dashed = sea</span><span>~ = unscouted</span>`; }
+
+/* --- panels --- */
+const TABS = [['orders','Orders'],['tech','Research'],['dip','Diplomacy'],['council','Council'],['log','Log'],['rules','Rules']];
+function renderTabs(){ $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${n}</button>`).join(''); }
+function costRow(cost, k){ return costHtml(cost, myTeam(), k); }
+function unitsHtml(id){
+  const t = S.terr[id], viewer = myTeam() || 'spectator', ex = visible(S, viewer, id); const n = total(t.u);
+  if(!ex) return `<div class="mut sm">Garrison about <b class="mono">${n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0'}</b> units. Composition, fort and stance unknown. Send a spy or research Intelligence 3.</div>`;
+  const own = t.o === 'neutral' ? 'reich' : t.o; const items = UORDER.filter(u => t.u[u]).map(u => `<div class="unit"><span>${uname(u, own)}</span><b>${t.u[u]}</b></div>`).join('');
+  return items ? `<div class="units">${items}</div>` : '<div class="mut sm">Empty.</div>';
+}
+function panelOrders(){
+  if(!sel) return `<div class="card"><h3>Select a territory</h3><p class="sm mut" style="margin:0">Tap any province on the map. Your own lands show exact troop counts. Enemy and neutral lands show estimates until you scout them with a spy. Ownership is always visible to both sides.</p></div>` + frontList();
+  const D = TD[sel], t = S.terr[sel], team = myTeam(), role = myRole(), mine = t.o === team, ex = visible(S, team || 'spectator', sel);
+  const nb = ADJ[sel].map(n => `<span class="chip" data-act="sel" data-id="${n.id}"><span class="dot" style="background:${tcol(S.terr[n.id].o)}"></span>${esc(TD[n.id].name)}${n.sea ? ' ≈' : ''}</span>`).join('');
+  let h = `<div class="card"><div class="row sb"><div class="tname">${esc(D.name)}</div><span style="color:${tcol(t.o)};font-family:var(--display);font-size:18px;letter-spacing:.06em;text-transform:uppercase">${t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].name}</span></div>
+    <div class="row sm mut" style="margin:4px 0 8px"><span>${D.terr[0].toUpperCase() + D.terr.slice(1)}</span><span>·</span><span>Produces ${D.amt} ${RES[D.res]}/min</span><span>·</span><span>${D.vp} VP</span>${D.cap ? '<span>·</span><b style="color:var(--ink)">Capital: lose it, lose the war</b>' : ''}</div>`;
+  if(ex) h += `<div class="row sm" style="margin-bottom:8px"><span class="mut">Fort</span><span>${[1,2,3].map(i => `<span class="pip ${t.f >= i ? 'on' : ''}"></span>`).join('')}</span><span class="mut" style="margin-left:10px">Posture</span><b>${STANCES[t.st]}</b></div>`;
+  h += unitsHtml(sel) + `<div class="sm mut" style="margin-top:10px">Connected to (≈ across water):</div><div class="chips" style="margin-top:4px">${nb}</div></div>`;
+  if(S.win) return h;
+  if(!team) return h + `<div class="card sm mut">Choose your post (top right) to give orders.</div>`;
+  if(mine){
+    if(can(role, 'recruit')){ const rows = UORDER.map(u => { const U = UNITS[u], ok = hasTech(S, team, U.req); const lock = ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`; const max = u === 'sup' ? 1 : 5; return `<div class="row sb" style="padding:4px 0;border-bottom:1px solid var(--line)"><div><b>${uname(u, team)}</b>${lock}<br>${costRow(U.cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div><div class="row"><button class="btn sm" ${ok ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${u === 'sup' ? '' : `<button class="btn sm" ${ok ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div></div>`; }).join('');
+      h += `<div class="card"><h3>Recruit here · 1 command point</h3>${rows}</div>`; }
+    let ord = '<div class="row">';
+    if(can(role, 'move')) ord += `<button class="btn pri" data-act="open" data-m="move">Move units</button><button class="btn pri" data-act="open" data-m="attack">Attack from here</button>`;
+    if(can(role, 'fort')) ord += `<button class="btn" data-act="fort" ${t.f >= 3 ? 'disabled' : ''}>Fortify ${t.f < 3 ? `(${15 * (t.f + 1)}S)` : '(max)'}</button>`;
+    ord += '</div>';
+    if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}">${STANCES[k]}</button>`).join('')}</div>`;
+    if(ord.length > 30 || can(role, 'stance')) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
+    if(!can(role, 'recruit') && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. Use Diplomacy, Council and field duty.</div>`;
+  } else {
+    const srcs = ADJ[sel].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0);
+    let a = '<div class="row">';
+    if(can(role, 'attack')) a += `<button class="btn pri" data-act="open" data-m="attack" data-to="${sel}" ${srcs.length ? '' : 'disabled'}>Attack</button>`;
+    if(can(role, 'spy')) a += `<button class="btn" data-act="spy">Spy · 2cp 10G</button>`;
+    if(can(role, 'honey') && t.o !== 'neutral') a += `<button class="btn" data-act="honey">Honeytrap · 3cp 20G</button>`;
+    if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage">Sabotage · 3cp 25G</button>`;
+    if(can(role, 'decap') && t.o !== 'neutral' && S.teams[team].tech.intel >= 4) a += `<button class="btn" data-act="decap">Decapitate · 4cp 60G</button>`;
+    if(can(role, 'annex') && t.o === 'neutral') a += `<button class="btn" data-act="annex">Annex by treaty · ${30 + 4 * total(t.u)}G</button>`;
+    a += '</div>';
+    if(!srcs.length) a += `<div class="sm mut" style="margin-top:8px">No friendly troops border this territory. Move an army up first.</div>`;
+    h += `<div class="card"><h3>Operations</h3>${a}</div>`;
+  }
+  return h;
+}
+function frontList(){
+  const team = myTeam() || 'reich'; const rows = LINKS.filter(l => { const a = S.terr[l.a].o, b = S.terr[l.b].o; return a !== b && a !== 'neutral' && b !== 'neutral'; }).map(l => { const mineA = S.terr[l.a].o === team; const my = mineA ? l.a : l.b, en = mineA ? l.b : l.a; return `<div class="row sb"><span class="chip" data-act="sel" data-id="${my}">${esc(TD[my].name)}</span><span class="mut">faces</span><span class="chip" data-act="sel" data-id="${en}">${esc(TD[en].name)}</span></div>`; }).join('');
+  return `<div class="card"><h3>Contact line</h3>${rows || '<div class="sm mut">The two powers do not touch yet. Take or buy a path across the neutral lands.</div>'}</div>`;
+}
+function panelTech(){
+  const team = myTeam() || 'reich', T = S.teams[team]; const can_ = can(myRole(), 'research') && myTeam() && !S.win;
+  return `<div class="sm mut">Research costs gold, steel and oil, and applies instantly. Leaders and chiefs of staff can buy it.</div><div class="card sm"><b style="color:${TEAMS[team].css}">${TEAMS[team].name}:</b> ${TEAMS[team].flavor}</div>` + TKEYS.map(k => {
+    const L = T.tech[k], nx = L + 1, cost = {gold:15 * nx, steel:25 * nx}; if(nx >= 2) cost.oil = 12 * nx;
+    return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ && afford(S, team, cost) ? '' : 'disabled'} data-act="research" data-k="${k}">Level ${nx} ${costHtml(cost, team)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
+}
+function panelDip(){
+  const team = myTeam(), role = myRole(), ok = team && can(role, 'dip') && !S.win, now = Date.now(), cf = ceasefire(S, now);
+  let h = `<div class="card"><h3>Treaty</h3>${cf ? `<div>Ceasefire in force for <b>${Math.ceil((cf.until - now) / 60000)}</b> more minutes. Neither side may attack the other.</div>${ok ? `<button class="btn danger sm" style="margin-top:8px" data-act="breakpact">Tear it up · 25G, -10% attack for 30 min</button>` : ''}` : `<div class="mut sm">No treaty. Propose a ceasefire to buy time, like a certain non-aggression pact.</div>${ok ? `<div class="row" style="margin-top:8px">${[60, 180, 360].map(m => `<button class="btn sm" data-act="propose" data-type="ceasefire" data-mins="${m}">${m / 60}h ceasefire</button>`).join('')}</div>` : ''}`}</div>`;
+  const tr = ui.trade; h += ok ? `<div class="card"><h3>Trade offer · 1 command point</h3><div class="row"><span class="sm">Give</span><input type="number" min="1" id="tgn" value="${tr.gn}" style="width:70px" data-chg="gn"><select id="tgr" data-chg="give">${RK.map(r => `<option value="${r}" ${tr.give === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><div class="row" style="margin-top:6px"><span class="sm">Get&nbsp;</span><input type="number" min="1" id="twn" value="${tr.wn}" style="width:70px" data-chg="wn"><select id="twr" data-chg="get">${RK.map(r => `<option value="${r}" ${tr.get === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><button class="btn pri sm" style="margin-top:8px" data-act="propose" data-type="trade">Send offer</button></div>` : '';
+  const open = S.props.filter(p => p.open).reverse(); h += `<div class="card"><h3>Proposals</h3>${open.length ? open.map(p => { const mineP = p.from === team; const what = p.type === 'ceasefire' ? `${p.mins / 60}h ceasefire` : `${p.give.n} ${RES[p.give.r]} for ${p.get.n} ${RES[p.get.r]}`; return `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line)"><span><b style="color:${tcol(p.from)}">${TEAMS[p.from].short}</b> offers ${what}</span>${ok ? (mineP ? `<button class="btn sm" data-act="answer" data-id="${p.id}" data-cancel="1">Withdraw</button>` : `<span class="row"><button class="btn pri sm" data-act="answer" data-id="${p.id}" data-accept="1">Accept</button><button class="btn sm" data-act="answer" data-id="${p.id}">Reject</button></span>`) : ''}</div>`; }).join('') : '<div class="mut sm">Nothing on the table.</div>'}</div>`;
+  h += `<div class="card sm mut">Diplomats can run a honeytrap on an enemy province (intel plus the enemy loses command points) and can also annex weak neutral lands (select one on the map) and run spy missions. Annexing needs a border and a garrison of 12 units or fewer.</div>`;
+  return h;
+}
+function panelCouncil(){
+  const team = myTeam(), role = myRole(), lead = role === 'leader'; let h = '';
+  if(team){ const pl = S.players[me.name], cd = Math.max(0, pl.cd - Date.now()); h += `<div class="card"><h3>Field duty · free, no command points</h3><div class="row"><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="drill">Drill +6 Manpower</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="scavenge">Scavenge +5 Steel</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="prospect">Prospect +4 Oil</button></div><div class="mut sm" style="margin-top:6px">${cd ? `Ready in ${Math.ceil(cd / 1000)}s.` : 'Every player can do one duty every 3 minutes. Soldiers keep the war machine fed.'}</div></div>`; }
+  ['reich','dawn'].forEach(tm => {
+    const ps = Object.entries(S.players).filter(([, p]) => p.team === tm).sort((a, b) => Object.keys(ROLES).indexOf(a[1].role) - Object.keys(ROLES).indexOf(b[1].role));
+    h += `<div class="card"><h3 style="color:${TEAMS[tm].css}">${TEAMS[tm].name} · ${ps.length}</h3>` + ps.map(([n, p]) => {
+      if(lead && tm === team) return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)"><b style="min-width:110px">${esc(n)}</b><select data-chg="role" data-n="${esc(n)}">${Object.keys(ROLES).map(r => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${ROLES[r]}</option>`).join('')}</select><input type="text" value="${esc(p.title)}" data-chg="title" data-n="${esc(n)}" style="flex:1;min-width:90px">${n === me.name ? '' : `<button class="btn sm danger" data-act="remove" data-n="${esc(n)}">×</button>`}</div>`;
+      return `<div class="row sb" style="padding:3px 0"><span><b>${esc(n)}</b> <span class="mut sm">${esc(p.title)}</span></span><span class="mut sm">${ROLES[p.role]}</span></div>`; }).join('') + '</div>';
+  });
+  h += `<div class="card"><h3>Enlist someone new</h3><div class="row"><input type="text" id="enl" placeholder="Name" style="flex:1;min-width:100px"><input type="text" id="enlpw" placeholder="Choose a password" style="flex:1;min-width:100px"><select id="enlt"><option value="reich">Reich</option><option value="dawn">Black Dawn</option></select><button class="btn pri sm" data-act="enlist">Enlist</button></div></div>`;
+  if(lead) h += `<div class="card"><h3>Reset</h3><div class="sm mut">Start a fresh war. Everyone keeps their post.</div><button class="btn danger sm" style="margin-top:8px" data-act="reset">${ui.confirmReset ? 'Press again to confirm' : 'Reset the map'}</button></div>`;
+  return h;
+}
+function panelLog(){ const t = myTeam(); const rows = S.log.filter(l => l.vis === 'all' || l.vis === t).slice(0, 50).map(l => `<div style="border-left-color:${l.kind === 'battle' ? tcol(l.by) : l.kind === 'win' ? 'var(--ok)' : 'var(--line)'}"><small>${new Date(l.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>${esc(l.msg)}</div>`).join(''); return `<div class="log">${rows}</div>`; }
+function panelRules(){
+  const hdr = Object.keys(STANCES).map(k => `<th>${STANCES[k]}</th>`).join('');
+  return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>Capture the enemy capital: <b>Berlin</b> or <b>Bucharest</b>. Instant victory.</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of all victory points for 45 minutes.</li><li>Or leave the enemy without land.</li></ul></div>
+  <div class="card sm"><h3>Resources and time</h3>Every province you own pays its resource every minute (Industry raises it). Command points refill one per 90 seconds, up to ${CPMAX}. Moves cost 1, recruiting 1, attacks 2, spies 2.</div>
+  <div class="card sm"><h3>Attacking</h3>Pick a source province that borders the target, choose units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Water crossings need a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
+  <div class="card sm"><h3>Tactics beat postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div><p class="mut" style="margin:6px 0 0">A tactic multiplies only the matching units. A defender's posture is hidden until you scout. Neutral lands have a fixed hidden posture.</p></div>
+  <div class="card sm"><h3>The map</h3>Europe, Africa, the Near East, India, China, Japan, the East Indies, Australia and South America. North America is out of play (except the Bermuda Triangle, which Black Dawn holds). Dashed lines are sea routes. Black Dawn starts spread across the world, the Reich starts compact and close to Berlin.</div>
+  <div class="card sm"><h3>Roles</h3><b>Leader</b>: everything. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
+}
+function renderPanel(){
+  if(!S){ $('#panel').innerHTML = `<div class="card">${mode === 'error' ? 'The war room could not be reached. Check your connection and sign-in, then reload.' : mode === 'slow' ? 'Still waiting on the war room. If this persists, the page may not have access to its data.' : 'Connecting to the war room…'}</div>`; return; }
+  const sc = $('#panel').scrollTop; const el = document.activeElement; if(el && el.matches && el.matches('input[type=text],input[type=number]') && $('#panel').contains(el)) return;
+  $('#panel').innerHTML = {orders:panelOrders, tech:panelTech, dip:panelDip, council:panelCouncil, log:panelLog, rules:panelRules}[tab](); $('#panel').scrollTop = sc;
+}
+
+/* --- modal --- */
+function closeModal(){ M = null; $('#modal').innerHTML = ''; }
+function groupStrength(grp){ return grp; }
+function renderModal(){
+  if(!S){ return; }
+  const team = myTeam();
+  const spec = me.name === '__spectator';
+  if(PWASK && (M === 'join' || !authed())){
+    const pp = S.players[PWASK];
+    $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Password"><h2>${esc(PWASK)}</h2><div class="sm mut">${pp ? esc(pp.title) : ''}. Enter the password you were given for this post.</div><div class="row"><input type="password" id="pwin" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX" style="flex:1;font-family:var(--mono,monospace);letter-spacing:.08em"></div><div class="sm" id="pwerr" style="color:var(--bad,#e5614f);min-height:1.2em">${esc(PWERR)}</div><div class="row"><button class="btn pri" data-act="pwgo">Enter</button><button class="btn" data-act="pwback">Back</button></div></div></div>`;
+    const el = $('#pwin'); if(el){ el.focus(); el.addEventListener('keydown', e => { if(e.key === 'Enter') document.querySelector('[data-act="pwgo"]').click(); }); }
+    return;
+  }
+  if(M === 'join' || (!spec && (!S.players[me.name] || !authed()))){
+    const col = tm => Object.entries(S.players).filter(([, p]) => p.team === tm).map(([n, p]) => `<button data-act="join" data-n="${esc(n)}"><b>${esc(n)}</b><span class="mut sm">${esc(p.title)}</span></button>`).join('');
+    $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Choose your post"><h2>Choose your post</h2><div class="sm mut">Pick your name, then enter the password for that post. Each post has its own password. New to the group? Enlist in the Council tab after joining, or watch as a spectator.</div><h3 style="color:var(--reich)">The Reich</h3><div class="pick">${col('reich')}</div><h3 style="color:var(--dawn)">Black Dawn</h3><div class="pick">${col('dawn')}</div><div class="row"><button class="btn" data-act="spectate">Just watch</button>${S.players[me.name] ? '<button class="btn" data-act="closem">Cancel</button>' : ''}</div></div></div>`; return;
+  }
+  if(!M || M === 'join'){ $('#modal').innerHTML = ''; return; }
+  const to = M.to, from = M.from; const srcs = M.mode === 'attack' ? (to ? ADJ[to].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0).map(n => n.id) : []) : (from ? ADJ[from].filter(n => S.terr[n.id].o === team).map(n => n.id) : []);
+  let h = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Orders"><h2>${M.mode === 'attack' ? 'Attack' : 'Move units'}</h2>`;
+  if(M.mode === 'attack'){
+    if(!to){ const targets = ADJ[from].filter(n => S.terr[n.id].o !== team); h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a target.</div><div class="pick">${targets.length ? targets.map(n => `<button data-act="mto" data-id="${n.id}"><b>${esc(TD[n.id].name)}</b><span class="mut sm">${S.terr[n.id].o === 'neutral' ? 'Neutral' : TEAMS[S.terr[n.id].o].name}${n.sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No enemy borders.</span>'}</div>`; }
+    else if(!from){ h += `<div class="sm mut">Target: <b>${esc(TD[to].name)}</b>. Choose where the attack launches from.</div><div class="pick">${srcs.map(id => `<button data-act="mfrom" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(id, to).sea ? ' · sea' : ''}</span></button>`).join('')}</div>`; }
+  }
+  if(M.mode === 'move' && !to){ h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a friendly neighbor.</div><div class="pick">${srcs.length ? srcs.map(id => `<button data-act="mto" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(from, id).sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No friendly neighbors.</span>'}</div>`; }
+  if(from && to){
+    const src = S.terr[from], grp = M.grp, n = total(grp);
+    h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${adjInfo(from, to).sea ? ' · across water' : ''}</div><div>${UORDER.filter(u => src.u[u]).map(u => `<div class="stepper" style="padding:3px 0"><span>${uname(u, team)} <span class="mut sm">of ${src.u[u]}</span></span><button class="btn sm" data-act="step" data-u="${u}" data-d="-1">−</button><span class="n">${grp[u] || 0}</span><button class="btn sm" data-act="step" data-u="${u}" data-d="1">+</button><button class="btn sm" data-act="step" data-u="${u}" data-d="max">All</button></div>`).join('')}</div>`;
+    if(M.mode === 'attack'){
+      const tact = Object.keys(TACT).filter(k => hasTech(S, team, TACT[k].req)); if(!tact.includes(M.tactic)) M.tactic = 'frontal';
+      h += `<div><div class="sm mut" style="margin-bottom:4px">Tactic</div><div class="pick">${Object.keys(TACT).map(k => { const has = tact.includes(k), match = !TACT[k].units.length || TACT[k].units.some(u => grp[u] > 0); return `<button ${has ? '' : 'disabled'} style="${M.tactic === k ? 'border-color:var(--acc);background:var(--panel)' : ''}${has ? '' : ';opacity:.4'}" data-act="tactic" data-k="${k}"><b>${TACT[k].n}</b><span class="mut sm">${has ? (match ? TACT[k].d : 'Needs matching units.') : 'Research ' + TECH[TACT[k].req[0]].n + ' ' + TACT[k].req[1]}</span></button>`; }).join('')}</div></div>`;
+      const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now()), DP = defPower(S, to, M.tactic, team, 1) * (dEx ? 1 : 1), oil = fuel(S, team, grp);
+      let odds = 'Scout the target (spy) for a reliable estimate.';
+      if(n){ const ratio = AP / Math.max(0.01, DP); if(dEx){ odds = ratio > 1.6 ? 'Crushing advantage' : ratio > 1.15 ? 'Favorable' : ratio > 0.87 ? 'Too close to call' : ratio > 0.6 ? 'Risky' : 'Suicidal'; odds += ` (your ${AP.toFixed(0)} vs their ${DP.toFixed(0)}, ±12% luck each)`; } else { odds = `Your strength ${AP.toFixed(0)}. Enemy strength unknown. Garrison about ${total(S.terr[to].u) ? '~' + Math.max(3, Math.round(total(S.terr[to].u) / 3) * 3) : '0'} units.`; } }
+      h += `<div class="card sm"><b>${n} units</b> · fuel <b>${oil}</b> oil (have ${fmt(S.teams[team].res.oil)}) · 2 command points<br>${odds}</div>`;
+    } else h += `<div class="card sm"><b>${n} units</b> · 1 command point</div>`;
+  }
+  h += `<div class="row"><button class="btn pri" data-act="confirm" ${from && to && total(M.grp) ? '' : 'disabled'}>${M.mode === 'attack' ? 'Launch attack' : 'Move'}</button><button class="btn" data-act="closem">Cancel</button></div></div></div>`;
+  $('#modal').innerHTML = h;
+}
+function renderAll(){ renderHud(); renderTabs(); renderMap(); renderLegend(); renderPanel(); renderModal(); }
+
+/* --- events --- */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if(!el) return; const d = el.dataset, a = d.act;
+  if(a === 'sel'){ if(drag.moved) return; sel = d.id; if(tab !== 'orders' && tab !== 'log') tab = 'orders'; renderAll(); return; }
+  if(a === 'tab'){ tab = d.k; ui.confirmReset = false; renderAll(); return; }
+  if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
+  if(a === 'zoomreset'){ vb = Object.assign({}, INIT); setVB(); return; }
+  if(a === 'switch'){ M = 'join'; renderModal(); return; }
+  if(a === 'join'){ PWASK = d.n; PWERR = ''; renderModal(); return; }
+  if(a === 'pwback'){ PWASK = null; PWERR = ''; renderModal(); return; }
+  if(a === 'pwgo'){
+    const v = $('#pwin').value; if(!v.trim()) return;
+    const n = PWASK; const btn = e.target.closest('button'); if(btn) btn.disabled = true;
+    return pwHash(n, v).then(async h => {
+      const exp = expectedPw(n);
+      if(h !== exp && n === 'Titli'){ const h2 = await pwHash(atob('VGl0bGkgR29ydQ=='), v); if(h2 === exp) h = h2; }
+      if(h === exp){ me.name = n; me.ph = h; PWASK = null; PWERR = ''; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} M = null; renderAll(); }
+      else { await sleep(1200); PWERR = 'Wrong password.'; renderModal(); }
+    }).catch(() => { PWERR = 'This browser cannot check passwords.'; renderModal(); });
+  }
+  if(a === 'spectate'){ me.name = '__spectator'; PWASK = null; M = null; renderAll(); return; }
+  if(a === 'closem'){ closeModal(); renderAll(); return; }
+  if(!S) return;
+  if(a === 'open'){ const team = myTeam(); if(d.m === 'move') M = {mode:'move', from:sel, to:null, grp:{}, tactic:'frontal'}; else M = d.to ? {mode:'attack', from:null, to:d.to, grp:{}, tactic:'frontal'} : {mode:'attack', from:sel, to:null, grp:{}, tactic:'frontal'};
+    if(M.mode === 'attack' && M.to){ const best = ADJ[M.to].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0).map(n => n.id).sort((x, y) => total(S.terr[y].u) - total(S.terr[x].u)); if(best.length === 1){ M.from = best[0]; } } renderModal(); return; }
+  if(a === 'mto'){ M.to = d.id; renderModal(); return; }
+  if(a === 'mfrom'){ M.from = d.id; renderModal(); return; }
+  if(a === 'step'){ const u = d.u, have = S.terr[M.from].u[u] || 0; let v = M.grp[u] || 0; v = d.d === 'max' ? have : Math.max(0, Math.min(have, v + +d.d)); if(v) M.grp[u] = v; else delete M.grp[u]; renderModal(); return; }
+  if(a === 'tactic'){ M.tactic = d.k; renderModal(); return; }
+  if(a === 'confirm'){ act(M.mode, {from:M.from, to:M.to, grp:clone(M.grp), tactic:M.tactic}); return; }
+  if(a === 'recruit') return act('recruit', {tid:sel, unit:d.u, n:+d.n});
+  if(a === 'fort') return act('fort', {tid:sel});
+  if(a === 'stance') return act('stance', {tid:sel, st:d.k});
+  if(a === 'research') return act('research', {k:d.k});
+  if(a === 'spy' || a === 'honey' || a === 'sabotage' || a === 'decap' || a === 'annex') return act(a, {tid:sel});
+  if(a === 'duty') return act('contribute', {kind:d.k});
+  if(a === 'propose'){ if(d.type === 'ceasefire') return act('propose', {type:'ceasefire', mins:+d.mins}); return act('propose', {type:'trade', give:{r:ui.trade.give, n:+ui.trade.gn}, get:{r:ui.trade.get, n:+ui.trade.wn}}); }
+  if(a === 'answer') return act('answer', {id:+d.id, accept:!!d.accept, cancel:!!d.cancel});
+  if(a === 'breakpact') return act('breakpact');
+  if(a === 'remove') return act('remove', {name:d.n});
+  if(a === 'enlist'){ const n = $('#enl').value.trim(), t = $('#enlt').value, pw = $('#enlpw').value; if(!n || pw.length < 6) return toast('Enter a name and a password of at least 6 characters.', 'bad'); return pwHash(n, pw).then(h => act('enlist', {name:n, team:t, pw:h}).then(() => { if(S.players[n] && S.players[n].pw === h && (!S.players[me.name] || !authed())){ me.name = n; me.ph = h; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} renderAll(); } })); }
+  if(a === 'reset'){ if(!ui.confirmReset){ ui.confirmReset = true; renderPanel(); return; } ui.confirmReset = false; return act('reset'); }
+});
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-chg]'); if(!el) return; const k = el.dataset.chg;
+  if(k === 'give' || k === 'get') ui.trade[k] = el.value; else if(k === 'gn' || k === 'wn') ui.trade[k] = +el.value;
+  else if(k === 'role') act('setrole', {name:el.dataset.n, role:el.value}); else if(k === 'title') act('setrole', {name:el.dataset.n, title:el.value});
+});
+document.addEventListener('keydown', e => { if((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.node')){ e.preventDefault(); sel = e.target.dataset.id; renderAll(); } if(e.key === 'Escape' && M && M !== 'join'){ closeModal(); } });
+/* pan / zoom */
+const drag = {moved:false}; const ptrs = new Map(); let last = null, pinch0 = 0;
+svg.addEventListener('pointerdown', e => { ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); drag.moved = false; last = {x:e.clientX, y:e.clientY}; if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); } });
+svg.addEventListener('pointermove', e => {
+  if(!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; const dd = Math.hypot(a.x - b.x, a.y - b.y); if(pinch0){ const r = svg.getBoundingClientRect(); zoomAt(pinch0 / dd, ((a.x + b.x) / 2 - r.left) / r.width, ((a.y + b.y) / 2 - r.top) / r.height); } pinch0 = dd; drag.moved = true; return; }
+  const dx = e.clientX - last.x, dy = e.clientY - last.y; if(!drag.moved && Math.hypot(dx, dy) < 5) return; drag.moved = true; svg.classList.add('drag');
+  const sc = vb.w / svg.clientWidth; vb.x -= dx * sc; vb.y -= dy * sc; last = {x:e.clientX, y:e.clientY}; setVB();
+});
+const endp = e => { ptrs.delete(e.pointerId); svg.classList.remove('drag'); pinch0 = 0; setTimeout(() => drag.moved = false, 30); };
+svg.addEventListener('pointerup', endp); svg.addEventListener('pointercancel', endp); svg.addEventListener('pointerleave', endp);
+svg.addEventListener('wheel', e => { e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 0.85 : 1.18, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }, {passive:false});
+window.addEventListener('resize', setVB);
+
+/* clock: live resource display and delayed domination check */
+setInterval(() => { if(!S) return; renderHud(); if(S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
+setInterval(() => { if(S && tab === 'council') { const el = document.activeElement; if(!(el && el.matches && el.matches('input,select'))) renderPanel(); } }, 5000);
+
+buildBase(); setVB(); renderAll();
+if(window.claude && window.claude.hot && window.claude.hot.snapshot){ try{ window.claude.hot.snapshot(() => ({sel, tab})); }catch(e){} }
+boot();
+window.__eot = {get S(){return S;}, act, A, TD, ADJ, LINKS, tick, newGame, checkWin};
+})();
+</script>
+
+</body></html>
