@@ -185,14 +185,95 @@ const DIV_SUB = {
   econ:'The Golden Covenant'
 };
 const UNITS = {
-  // Reich & Neutral conventional forces
-  inf:{atk:1, def:1.5, cost:{man:10, steel:2}, cat:'inf', div:'land', pwr:1, n:'Infantry', desc:'Standard line infantry.', abil:''},
-  art:{atk:3, def:1, cost:{man:6, steel:8}, cat:'art', req:['art',1], div:'land', pwr:3, n:'Artillery', desc:'Heavy field guns.', abil:''},
-  arm:{atk:4, def:2.5, cost:{man:8, steel:12, oil:6}, cat:'arm', req:['arm',1], div:'land', pwr:4, n:'Panzers', desc:'Armored spearhead divisions.', abil:'Reich +10% armor attack'},
-  air:{atk:2.5, def:3, cost:{steel:8, oil:8}, cat:'air', req:['air',1], div:'air', pwr:3, n:'Luftwaffe Fighters', desc:'Air superiority squadrons.', abil:''},
-  bmb:{atk:5, def:0.5, cost:{steel:12, oil:10}, cat:'air', req:['air',2], div:'air', pwr:5, n:'Stuka Bombers', desc:'Dive bombers for ground support.', abil:''},
-  nav:{atk:3, def:2, cost:{steel:14, oil:8, gold:2}, cat:'nav', req:['nav',1], div:'water', pwr:3, n:'Kriegsmarine', desc:'Surface fleet & landing escort.', abil:'Sea crossings at Naval 2'},
-  sup:{atk:30, def:25, cost:{man:30, steel:120, oil:80, gold:40}, cat:'arm', req:['arm',4], div:'land', pwr:10, elite:true, max:2, n:'Panzer 1000 Ratte', desc:'Landcruiser super-heavy tank.', abil:'Max 2 per power'},
+  // The Reich — I. Land Division (Foot Soldiers, Artillery, Tanks)
+  inf:{team:'reich', div:'land', sub:'Foot Soldiers', pwr:1, atk:1, def:1.5, cost:{man:10, steel:2}, cat:'inf',
+    n:'Kar98k Riflemen', desc:'Standard German line infantry armed with the accurate Karabiner 98k rifle and Walther P38 / Luger P08 sidearms.', abil:''},
+  rk_mp40:{team:'reich', div:'land', sub:'Foot Soldiers', pwr:2, atk:1.8, def:1.8, cost:{man:11, steel:4}, cat:'inf', req:['inf',1],
+    n:'MP 40 Stormtroopers', desc:'Close-quarters assault squads and paratroopers equipped with folding-stock MP 40 submachine guns.', abil:'+15% attack in urban terrain'},
+  rk_mg42:{team:'reich', div:'land', sub:'Foot Soldiers', pwr:3, atk:1.6, def:3.0, cost:{man:10, steel:6}, cat:'inf', req:['inf',1],
+    n:'MG 34 & MG 42 Teams', desc:'Squad-level general-purpose machine gun teams ("Hitler\'s Buzzsaw", 1,200 rounds per minute).', abil:'+15% defensive fire'},
+  rk_pfau:{team:'reich', div:'land', sub:'Foot Soldiers', pwr:4, atk:2.4, def:3.4, cost:{man:10, steel:7, gold:1}, cat:'inf', req:['inf',2],
+    n:'Panzerfaust Tank-Hunters', desc:'Infantry armed with disposable recoilless anti-tank launchers lethal in close and urban fighting.', abil:'+25% defense vs armored assaults'},
+
+  rk_mor34:{team:'reich', div:'land', sub:'Artillery Guns', pwr:2, atk:2.2, def:1.2, cost:{man:5, steel:6}, cat:'art', req:['art',1],
+    n:'8 cm Granatwerfer 34', desc:'Primary battalion-level medium mortar prized for extreme accuracy, durability, and rapid fire.', abil:''},
+  art:{team:'reich', div:'land', sub:'Artillery Guns', pwr:3, atk:3.2, def:1.0, cost:{man:6, steel:8}, cat:'art', req:['art',1],
+    n:'10.5 cm leFH 18', desc:'The standard divisional light field howitzer for suppressing troops and destroying fortifications.', abil:''},
+  rk_sfh18:{team:'reich', div:'land', sub:'Artillery Guns', pwr:5, atk:4.8, def:1.4, cost:{man:7, steel:13, gold:2}, cat:'art', req:['art',2],
+    n:'15 cm sFH 18 "Immergrün"', desc:'Standard heavy divisional gun delivering long-range bombardment and counter-battery fire.', abil:''},
+  rk_flak88:{team:'reich', div:'land', sub:'Artillery Guns', pwr:6, atk:5.2, def:4.0, cost:{man:8, steel:15, oil:2, gold:3}, cat:'art', req:['art',2],
+    n:'8.8 cm FlaK 18/36/37', desc:'High-velocity dual-purpose "Eighty-Eight" cannon deadly against tanks, bunkers, and aircraft.', abil:'Anti-tank & anti-air defense'},
+  rk_nebel:{team:'reich', div:'land', sub:'Artillery Guns', pwr:6, atk:6.2, def:1.2, cost:{man:6, steel:14, oil:3, gold:3}, cat:'art', req:['art',3],
+    n:'15 cm Nebelwerfer 41', desc:'Six-barreled rocket launcher ("Screaming Mimi") saturating wide areas before infantry assaults.', abil:'Shock barrage (+10% Barrage attack)'},
+
+  rk_pz35:{team:'reich', div:'land', sub:'Tanks', pwr:2, atk:2.2, def:1.6, cost:{man:5, steel:7, oil:3}, cat:'arm', req:null, mech:true,
+    n:'Panzer 35(t)', desc:'10.5-ton Czech-designed light tank captured and pressed into German frontline service.', abil:'Reich +10% armor attack'},
+  rk_pz38:{team:'reich', div:'land', sub:'Tanks', pwr:3, atk:2.8, def:2.0, cost:{man:6, steel:9, oil:4}, cat:'arm', req:['arm',1], mech:true,
+    n:'Panzer 38(t)', desc:'Reliable 9.8-ton Czech-designed light tank kept in frontline production under German rule.', abil:'Reich +10% armor attack'},
+  rk_pz3:{team:'reich', div:'land', sub:'Tanks', pwr:4, atk:3.6, def:2.4, cost:{man:7, steel:11, oil:5}, cat:'arm', req:['arm',1], mech:true,
+    n:'Panzer III', desc:'20–23 ton medium tank armed with 37 mm or 50 mm guns; early-war anti-tank mainstay.', abil:'Reich +10% armor attack'},
+  arm:{team:'reich', div:'land', sub:'Tanks', pwr:5, atk:4.4, def:2.8, cost:{man:8, steel:13, oil:6}, cat:'arm', req:['arm',1], mech:true,
+    n:'Panzer IV', desc:'25-ton medium tank armed with a 75 mm gun; the Wehrmacht\'s main armored workhorse.', abil:'Reich +10% armor attack'},
+  rk_pz5:{team:'reich', div:'land', sub:'Tanks', pwr:6, atk:6.0, def:4.2, cost:{man:8, steel:18, oil:8, gold:2}, cat:'arm', req:['arm',2], mech:true,
+    n:'Panther (Panzer V)', desc:'45-ton medium tank featuring sloped armor and a high-velocity 75 mm gun.', abil:'Reich +10% armor attack'},
+  rk_tig1:{team:'reich', div:'land', sub:'Tanks', pwr:8, atk:8.2, def:6.5, cost:{man:10, steel:26, oil:12, gold:6}, cat:'arm', req:['arm',3], elite:true, mech:true,
+    n:'Tiger I (Panzer VI)', desc:'57-ton heavy breakthrough tank armed with an 88 mm KwK 36 gun and thick flat armor.', abil:'Heavy breakthrough armor'},
+  rk_tig2:{team:'reich', div:'land', sub:'Tanks', pwr:9, atk:10.0, def:8.0, cost:{man:10, steel:32, oil:14, gold:9}, cat:'arm', req:['arm',3], elite:true, mech:true,
+    n:'Tiger II / King Tiger', desc:'70-ton heavy tank combining sloped armor with the long-barreled 88 mm KwK 43 gun.', abil:'Heavy sloped armor'},
+  rk_lowe:{team:'reich', div:'land', sub:'Tanks', pwr:9, atk:12.0, def:9.5, cost:{man:12, steel:42, oil:20, gold:14}, cat:'arm', req:['arm',4], elite:true, mech:true,
+    n:'Panzer VII Löwe', desc:'Krupp VK 70.01 super-heavy tank project designed with heavy armor and long-range firepower.', abil:'Super-heavy prototype'},
+  rk_maus:{team:'reich', div:'land', sub:'Tanks', pwr:10, atk:16.5, def:15.0, cost:{man:16, steel:64, oil:32, gold:20}, cat:'arm', req:['arm',4], elite:true, mech:true, max:4,
+    n:'Panzer VIII Maus', desc:'188-ton super-heavy tank armed with a 128 mm main gun and a 75 mm secondary gun.', abil:'Super-heavy fortress (Max 4)', limitMsg:'Only 4 Panzer VIII Maus tanks may exist at a time.'},
+  sup:{team:'reich', div:'land', sub:'Monster Tanks', pwr:10, atk:30, def:25, cost:{man:30, steel:120, oil:80, gold:40}, cat:'arm', req:['arm',4], elite:true, mech:true, max:2,
+    n:'Landkreuzer P. 1000 Ratte', desc:'1,000-ton Krupp land cruiser mounting twin 280 mm battleship guns, a 128 mm AT gun, and AA cannons.', abil:'Ultra-heavy land cruiser (Max 2)', limitMsg:'Only 2 Landkreuzer P. 1000 Ratte may exist at a time.'},
+  rk_p1500:{team:'reich', div:'land', sub:'Monster Tanks', pwr:10, atk:45, def:34, cost:{man:45, steel:180, oil:120, gold:65}, cat:'arm', req:['arm',4], elite:true, mech:true, max:1,
+    n:'Landkreuzer P. 1500 Monster', desc:'1,500-ton tracked self-propelled platform for the 800 mm Schwerer Gustav railway gun with four submarine engines.', abil:'Supreme land dreadnought (Max 1)', limitMsg:'Only 1 Landkreuzer P. 1500 Monster may exist at a time.'},
+
+  // The Reich — II. Air Division (Luftwaffe)
+  air:{team:'reich', div:'air', sub:'Fighters', pwr:3, atk:2.6, def:3.2, cost:{steel:8, oil:8}, cat:'air', req:['air',1], mech:true,
+    n:'Messerschmitt Bf 109', desc:'Germany\'s primary single-engine fighter (over 33,000 built); fast and agile on every front.', abil:''},
+  rk_bf110:{team:'reich', div:'air', sub:'Fighters', pwr:4, atk:3.4, def:3.8, cost:{steel:11, oil:9, gold:2}, cat:'air', req:['air',1], mech:true,
+    n:'Messerschmitt Bf 110 Zerstörer', desc:'Twin-engine heavy fighter fitted with radar and heavy nose cannons for nocturnal air defense.', abil:'Radar night-defense'},
+  rk_fw190:{team:'reich', div:'air', sub:'Fighters', pwr:5, atk:4.4, def:4.5, cost:{steel:13, oil:10, gold:3}, cat:'air', req:['air',2], mech:true,
+    n:'Focke-Wulf Fw 190 Würger', desc:'Rugged radial-engined and D-9 "Dora" fighter excelling in roll rate, firepower, and ground attack.', abil:'Multirole fighter-bomber'},
+  rk_he219:{team:'reich', div:'air', sub:'Fighters', pwr:6, atk:4.2, def:6.0, cost:{steel:15, oil:11, gold:5}, cat:'air', req:['air',2], elite:true, mech:true,
+    n:'Heinkel He 219 Uhu', desc:'Twin-engine radar night fighter with upward-firing Schräge Musik cannons and ejection seats.', abil:'Superior bomber interception'},
+
+  rk_he111:{team:'reich', div:'air', sub:'Bombers', pwr:4, atk:4.0, def:1.2, cost:{steel:10, oil:9}, cat:'air', req:['air',1], mech:true,
+    n:'Heinkel He 111', desc:'Standard early-war medium bomber conducting horizontal raids and nocturnal supply drops.', abil:''},
+  bmb:{team:'reich', div:'air', sub:'Bombers', pwr:5, atk:5.2, def:0.8, cost:{steel:12, oil:10}, cat:'air', req:['air',2], mech:true,
+    n:'Junkers Ju 87 "Stuka"', desc:'Pinpoint tactical dive-bomber and cannon-armed tank-buster of the Blitzkrieg.', abil:'Precision ground support'},
+  rk_ju88:{team:'reich', div:'air', sub:'Bombers', pwr:6, atk:6.4, def:2.0, cost:{steel:15, oil:12, gold:3}, cat:'air', req:['air',2], mech:true,
+    n:'Junkers Ju 88', desc:'Fast, versatile Luftwaffe workhorse flying level-bombing, dive-bombing, and anti-shipping missions.', abil:'All-weather anti-shipping & bombing'},
+
+  rk_me163:{team:'reich', div:'air', sub:'Jet & Rocket Fighters', pwr:7, atk:5.5, def:7.0, cost:{steel:16, oil:16, gold:6}, cat:'air', req:['air',3], elite:true, mech:true,
+    n:'Messerschmitt Me 163 Komet', desc:'The only operational rocket-powered fighter in history, built for extreme-climb bomber interception.', abil:'Extreme-climb interceptor'},
+  rk_he162:{team:'reich', div:'air', sub:'Jet & Rocket Fighters', pwr:7, atk:5.8, def:5.4, cost:{steel:12, oil:14, gold:5}, cat:'air', req:['air',3], mech:true,
+    n:'Heinkel He 162 Volksjäger', desc:'Lightweight wood-and-metal emergency jet fighter rushed into frontline service.', abil:'Rapid-production jet'},
+  rk_me262:{team:'reich', div:'air', sub:'Jet & Rocket Fighters', pwr:8, atk:7.8, def:7.2, cost:{steel:22, oil:18, gold:10}, cat:'air', req:['air',3], elite:true, mech:true,
+    n:'Messerschmitt Me 262 Schwalbe', desc:'The world\'s first operational jet fighter, armed with four 30 mm cannons.', abil:'Jet air superiority'},
+
+  rk_ho229:{team:'reich', div:'air', sub:'Stealth Flying Wings', pwr:9, atk:9.5, def:6.5, cost:{steel:26, oil:22, gold:16}, cat:'air', req:['air',4], elite:true, mech:true,
+    n:'Horten Ho 229', desc:'Jet-powered flying wing constructed with radar-absorbing charcoal-and-sawdust plywood composite.', abil:'Stealth flying wing (evades AA)'},
+  rk_h18:{team:'reich', div:'air', sub:'Stealth Flying Wings', pwr:10, atk:14.0, def:6.0, cost:{steel:40, oil:32, gold:26}, cat:'air', req:['air',4], elite:true, mech:true, max:2,
+    n:'Horten H.XVIII', desc:'Massive six-engine transoceanic jet flying-wing stealth bomber designed to strike across continents.', abil:'Long-range stealth bomber (Max 2)', limitMsg:'Only 2 Horten H.XVIII bombers may exist at a time.'},
+
+  // The Reich — III. Water Division (Kriegsmarine — Ships & Submarines)
+  rk_mboat:{team:'reich', div:'water', sub:'Ships', pwr:2, atk:1.6, def:2.0, cost:{steel:8, oil:4, gold:1}, cat:'nav', req:null, mech:true,
+    n:'Minensuchboot (M-Boat)', desc:'Heavily armed ocean-going minesweepers performing coastal escort, patrol, and anti-submarine work.', abil:'Coastal escort & minesweeping'},
+  rk_sboot:{team:'reich', div:'water', sub:'Ships', pwr:3, atk:2.6, def:1.6, cost:{steel:10, oil:6, gold:2}, cat:'nav', req:['nav',1], mech:true,
+    n:'Schnellboot (E-Boat)', desc:'Fast wooden-hulled motor torpedo boats raiding coastal convoys at night with speed and stealth.', abil:'High-speed coastal raider'},
+  nav:{team:'reich', div:'water', sub:'Ships', pwr:4, atk:3.4, def:2.8, cost:{steel:14, oil:8, gold:2}, cat:'nav', req:['nav',1], mech:true,
+    n:'Type 1936 Narvik Destroyers', desc:'Backbone of Germany\'s surface destroyer fleet for minelaying, convoy escort, and surface skirmishes.', abil:'Amphibious sea crossings at Naval 2'},
+
+  rk_u7:{team:'reich', div:'water', sub:'Submarines', pwr:5, atk:4.4, def:3.0, cost:{steel:15, oil:8, gold:4}, cat:'nav', req:['nav',1], mech:true,
+    n:'Type VII U-Boat', desc:'The most-produced submarine class in history (700+ built); backbone of the Battle of the Atlantic.', abil:'Wolfpack commerce raiding (+gold)'},
+  rk_u7c:{team:'reich', div:'water', sub:'Submarines', pwr:6, atk:5.4, def:3.8, cost:{steel:18, oil:9, gold:6}, cat:'nav', req:['nav',2], mech:true,
+    n:'Type VIIC U-Boat', desc:'Definitive German submarine combining reliable diving depth, fast crash-diving, and a lethal torpedo load.', abil:'Enhanced Wolfpack raiding'},
+  rk_u9:{team:'reich', div:'water', sub:'Submarines', pwr:7, atk:6.2, def:4.5, cost:{steel:22, oil:12, gold:8}, cat:'nav', req:['nav',2], mech:true,
+    n:'Type IX U-Boat', desc:'Long-range ocean-going submarine patrolling off the Americas, Africa, and the Indian Ocean.', abil:'Long-range sea crossing & raiding'},
+  rk_u9c:{team:'reich', div:'water', sub:'Submarines', pwr:8, atk:7.4, def:5.4, cost:{steel:26, oil:12, gold:12}, cat:'nav', req:['nav',3], elite:true, mech:true,
+    n:'Type IXC U-Boat', desc:'Extended-range ocean raider carrying extra fuel and torpedoes to operate globally without refueling.', abil:'Halved fuel burn & global raiding'},
 
   // Black Dawn — I. Land Forces (The Oathbound Legions)
   bd_init:{team:'dawn', div:'land', pwr:1, atk:0.9, def:1.2, cost:{man:8, steel:1}, cat:'inf', req:null, basic:true, conv:true,
@@ -309,12 +390,13 @@ const UNITS = {
     n:'The Golden Synod', desc:'The supreme economic council coordinating the Black Dawn\'s financial, commercial and industrial institutions.',
     abil:'Golden Dominion: Provides substantial bonuses to gold generation, trade income and industrial production.'}
 };
-const REICH_UNITS = ['inf','art','arm','air','bmb','nav','sup'];
+const REICH_UNITS = Object.keys(UNITS).filter(k => UNITS[k].team === 'reich');
 const DAWN_UNITS = Object.keys(UNITS).filter(k => UNITS[k].team === 'dawn');
 const UORDER = [...REICH_UNITS, ...DAWN_UNITS];
 const unitsFor = team => team === 'dawn' ? DAWN_UNITS : REICH_UNITS;
 const divsFor = team => team === 'dawn' ? ['all','land','air','water','intel','pol','econ'] : ['all','land','air','water'];
-const uname = (u, t) => UNITS[u] ? UNITS[u].n : u;
+const divSub = (team, d) => team === 'dawn' ? (DIV_SUB[d] || '') : ({land:'Wehrmacht & Panzertruppen', air:'Luftwaffe', water:'Kriegsmarine'}[d] || '');
+const uname = (u, t) => t === 'neutral' ? ({inf:'Infantry', arm:'Armor'}[u] || (UNITS[u] ? UNITS[u].n : u)) : (UNITS[u] ? UNITS[u].n : u);
 const DAWN_PASSIVES = [
   ['International Trade', '+20% trade income'],
   ['Diplomatic Influence', '+25% diplomatic influence (CP) generation'],
@@ -326,21 +408,21 @@ const DAWN_PASSIVES = [
   ['Elite Recruitment', '+10% recruitment cost for elite formations']
 ];
 const TECH = {
-  inf:{n:'Infantry doctrine', d:['+12% infantry strength','Unlocks the Flanking tactic','+12% more infantry strength','+12% more (veteran cadres)']},
-  art:{n:'Artillery', d:['Unlocks Artillery','Unlocks the Barrage tactic','+12% artillery strength','Barrage ignores 1 fortification level']},
-  arm:{n:'Armor', d:['Unlocks armor','Unlocks the Blitzkrieg tactic','Heavy armor, +12% strength','Unlocks the super-heavy tank (max 2 per power)']},
-  air:{n:'Air power', d:['Unlocks fighters','Unlocks bombers and the Air Strike tactic','Air Strike ignores 1 fortification level','Paratroops: air groups may cross seas without a fleet']},
-  nav:{n:'Naval power', d:['Unlocks destroyers','Amphibious landings across seas','Blockade: enemy gold income -15%','Fleet fuel is free']},
+  inf:{n:'Infantry doctrine', d:['+12% infantry, MP 40 & MG 42','Unlocks Flanking & Panzerfaust','+12% more infantry strength','+12% more (veteran cadres)']},
+  art:{n:'Artillery', d:['Unlocks mortars & 10.5 cm leFH 18','Unlocks Barrage, sFH 18 & 8.8 cm FlaK','Unlocks Nebelwerfer 41 & +12% strength','Barrage ignores 1 fortification level']},
+  arm:{n:'Armor', d:['Unlocks Pz 38(t), Pz III & Pz IV','Unlocks Blitzkrieg & Panther (Pz V)','Unlocks Tiger I & II (+12% strength)','Unlocks Löwe, Maus & Landkreuzer P.1000/P.1500']},
+  air:{n:'Air power', d:['Unlocks Bf 109, Bf 110 & He 111','Unlocks Fw 190, He 219, Stuka, Ju 88 & Air Strike','Unlocks Me 262, Me 163 & He 162 (ignores 1 fort)','Unlocks Ho 229, Horten H.XVIII & paratroop crossings']},
+  nav:{n:'Naval power', d:['Unlocks E-Boat, Narvik Destroyers & Type VII U-Boat','Amphibious crossings, Type VIIC & IX U-Boats','Unlocks Type IXC U-Boat; blockade -15% enemy gold','Fleet fuel is free']},
   intel:{n:'Intelligence', d:['Unlocks spies','Unlocks sabotage','Codebreaking: see every enemy stack and stance','Unlocks the decapitation strike']},
   ind:{n:'Industry', d:['+15% income','+15% income','+15% income','+15% income']}
 };
 const TKEYS = Object.keys(TECH);
 const TACT = {
   frontal:{n:'Frontal assault', units:[], req:null, d:'No bonus, no risk of being countered.'},
-  blitz:{n:'Blitzkrieg', units:['arm','sup','bd_lega','bd_syno'], req:['arm',2], d:'Armor & Legate spearheads. Strong against Elastic defense.'},
-  barrage:{n:'Barrage', units:['art','bd_mant','bd_syno','bd_abys','bd_levi'], req:['art',2], d:'Heavy bombardment. Strong against Dig-in.'},
-  flank:{n:'Flanking maneuver', units:['inf','bd_init','bd_veil','bd_oath','bd_mant','bd_lega','bd_syno'], req:['inf',2], d:'Infantry envelopment. Strong against Counter-attack.'},
-  air:{n:'Air strike', units:['air','bmb','bd_rave','bd_vair','bd_obsv','bd_noct','bd_hera'], req:['air',2], d:'Aerial forces lead. Good against Dig-in and Elastic.'}
+  blitz:{n:'Blitzkrieg', units:[...REICH_UNITS.filter(u => UNITS[u].cat === 'arm'), 'bd_lega', 'bd_syno'], req:['arm',2], d:'Armor & Legate spearheads. Strong against Elastic defense.'},
+  barrage:{n:'Barrage', units:[...REICH_UNITS.filter(u => UNITS[u].cat === 'art'), 'bd_mant', 'bd_syno', 'bd_abys', 'bd_levi'], req:['art',2], d:'Heavy bombardment. Strong against Dig-in.'},
+  flank:{n:'Flanking maneuver', units:[...REICH_UNITS.filter(u => UNITS[u].cat === 'inf'), 'bd_init', 'bd_veil', 'bd_oath', 'bd_mant', 'bd_lega', 'bd_syno'], req:['inf',2], d:'Infantry envelopment. Strong against Counter-attack.'},
+  air:{n:'Air strike', units:[...REICH_UNITS.filter(u => UNITS[u].div === 'air'), 'bd_rave', 'bd_vair', 'bd_obsv', 'bd_noct', 'bd_hera'], req:['air',2], d:'Aerial forces lead. Good against Dig-in and Elastic.'}
 };
 const MATRIX = {
   frontal:{bunker:1, elastic:1, counter:1},
@@ -550,11 +632,22 @@ function startUnits(t){
     if(t.cap){ u.bd_mant = 2; u.bd_rave = 2; u.bd_obsv = 1; u.bd_whis = 1; u.bd_fact = 1; }
     return u;
   }
-  const u = {inf:g, art:Math.floor(g/8), arm:Math.floor(g/5)};
-  if(t.cap) u.air = 4;
+  const u = {
+    inf:Math.max(2, Math.ceil(g * 0.6)),
+    rk_mp40:Math.max(1, Math.floor(g * 0.2)),
+    rk_mg42:Math.max(1, Math.floor(g * 0.15)),
+    rk_mor34:Math.floor(g / 9),
+    art:Math.floor(g / 10),
+    rk_pz35:Math.floor(g / 9),
+    rk_pz3:Math.floor(g / 8),
+    arm:Math.floor(g / 8)
+  };
+  if(t.terr === 'coast') u.rk_mboat = 1;
+  if(t.cap){ u.air = 3; u.rk_he111 = 1; u.rk_bf110 = 1; u.bmb = 1; }
+  Object.keys(u).forEach(k => { if(!u[k]) delete u[k]; });
   return u;
 }
-const GAME_V = 4;
+const GAME_V = 5;
 function newGame(now){
   const s = {v:GAME_V, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
   TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.cap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
@@ -614,6 +707,11 @@ function annexCost(s, team, g){
   if(team === 'dawn') return Math.max(10, Math.round(base * (1 - dawnBonuses(s).annexDisc)));
   return base;
 }
+function reichCounts(s){
+  const c = {};
+  TIDS.forEach(i => { const t = s.terr[i]; if(t.o === 'reich') for(const u in t.u) c[u] = (c[u] || 0) + t.u[u]; });
+  return c;
+}
 function income(s, team){
   const T = s.teams[team], inc = Object.assign({}, BASE_INC), mult = 1 + 0.15 * T.tech.ind;
   TIDS.forEach(i => { const t = TD[i]; if(s.terr[i].o === team) inc[t.res] += t.amt * mult; });
@@ -621,6 +719,10 @@ function income(s, team){
     const b = dawnBonuses(s);
     inc.gold = inc.gold * b.goldMult + b.goldFlat;
     inc.steel += b.steelFlat;
+  } else {
+    const rc = reichCounts(s);
+    const uboatBonus = Math.min(8, 0.25 * (rc.rk_u7 || 0) + 0.4 * (rc.rk_u7c || 0) + 0.5 * (rc.rk_u9 || 0) + 0.7 * (rc.rk_u9c || 0));
+    inc.gold += uboatBonus;
   }
   if(s.teams[OTHER(team)].tech.nav >= 3 || (OTHER(team) === 'dawn' && (dawnCounts(s).bd_levi || 0) > 0)) inc.gold *= 0.85;
   return inc;
@@ -666,18 +768,23 @@ function visible(s, viewer, id){
 function ceasefire(s, now){ return s.pact && s.pact.until > now ? s.pact : null; }
 const mech = u => Object.keys(u).reduce((a, k) => {
   const n = u[k] || 0; if(!n) return a;
+  if(k === 'rk_p1500') return a + 4 * n;
   if(k === 'sup') return a + 3 * n;
+  if(k === 'rk_maus') return a + 2 * n;
   if(k === 'arm' || k === 'air' || k === 'bmb' || k === 'nav' || (UNITS[k] && UNITS[k].mech)) return a + n;
   return a;
 }, 0);
-function attackPower(s, team, grp, tactic, stance, rnd, now, fromId){
+function attackPower(s, team, grp, tactic, stance, rnd, now, fromId, toId){
   const T = TACT[tactic]; let sum = 0; const sm = stance === 'unknown' ? (MATRIX[tactic].bunker + MATRIX[tactic].elastic + MATRIX[tactic].counter) / 3 : MATRIX[tactic][stance];
   const hasLegate = team === 'dawn' && (grp.bd_lega || 0) > 0;
   const fromFriendly = team === 'dawn' && fromId && s.terr[fromId] && s.terr[fromId].o === 'dawn';
+  const urbanAtk = toId && TD[toId] && TD[toId].terr === 'urban';
   for(const u in grp){
     const U = UNITS[u]; if(!U || !grp[u]) continue;
     let v = grp[u] * U.atk * unitMult(s, team, u);
-    if(team === 'reich' && (u === 'arm' || u === 'sup')) v *= 1.1;
+    if(team === 'reich' && U.cat === 'arm') v *= 1.1; // Iron discipline: Reich armor +10%
+    if(u === 'rk_mp40' && urbanAtk) v *= 1.15; // MP 40 close-quarters urban specialist
+    if(u === 'rk_nebel' && tactic === 'barrage') v *= 1.10; // Nebelwerfer shock barrage
     if(team === 'dawn' && U.conv) v *= 0.9; // -10% conventional military effectiveness
     if(u === 'bd_oath' && fromFriendly) v *= 1.15; // Unbreakable Oath
     if(hasLegate && u !== 'bd_lega') v *= 1.12; // Authority of the Eclipse
@@ -687,12 +794,17 @@ function attackPower(s, team, grp, tactic, stance, rnd, now, fromId){
   if((s.treach[team] || 0) > now) sum *= 0.9;
   return sum * rnd;
 }
-function defPower(s, id, tactic, attacker, rnd){
+function defPower(s, id, tactic, attacker, rnd, attGrp){
   const t = s.terr[id], D = TD[id]; let sum = 0;
   const hasLegate = t.o === 'dawn' && (t.u.bd_lega || 0) > 0;
+  const attArmor = attGrp ? Object.keys(attGrp).some(u => attGrp[u] > 0 && UNITS[u] && UNITS[u].cat === 'arm') : false;
+  const attAir = tactic === 'air' || (attGrp ? Object.keys(attGrp).some(u => attGrp[u] > 0 && UNITS[u] && UNITS[u].div === 'air') : false);
   for(const u in t.u){
     const U = UNITS[u]; if(!U || !t.u[u]) continue;
     let v = t.u[u] * U.def * unitMult(s, t.o, u);
+    if(u === 'rk_mg42') v *= 1.15; // MG 34/42 suppressive fire
+    if(u === 'rk_pfau' && (attArmor || D.terr === 'urban')) v *= 1.25; // Panzerfaust anti-armor & urban defense
+    if(u === 'rk_flak88' && (attArmor || attAir)) v *= 1.15; // 8.8 cm FlaK dual-purpose defense
     if(t.o === 'dawn' && U.conv) v *= 0.9; // -10% conventional military effectiveness
     if(u === 'bd_oath' && t.o === 'dawn') v *= 1.15; // Unbreakable Oath
     if(hasLegate && u !== 'bd_lega') v *= 1.12; // Authority of the Eclipse
@@ -716,14 +828,14 @@ function seaOK(s, team, grp){
   if(onlyAir && airCnt > 0) return true;
   if(s.teams[team].tech.air >= 4 && airCnt > 0) return true;
   if((grp.bd_vair || 0) > 0 || (grp.bd_noct || 0) > 0 || (grp.bd_hera || 0) > 0) return true; // Aerial Logistics / Imperial Transit
-  const navCnt = (grp.nav || 0) + (grp.bd_tide || 0) + (grp.bd_abys || 0) + (grp.bd_levi || 0);
-  if((grp.bd_levi || 0) > 0) return true;
+  const navCnt = Object.keys(grp).reduce((a, u) => a + (grp[u] && UNITS[u] && UNITS[u].div === 'water' ? grp[u] : 0), 0);
+  if((grp.bd_levi || 0) > 0 || (grp.rk_u9 || 0) > 0 || (grp.rk_u9c || 0) > 0) return true; // Long-range ocean crossing
   return navCnt > 0 && s.teams[team].tech.nav >= 2;
 }
 const fuel = (s, team, grp) => {
   const m = mech(grp);
-  const navUnits = (grp.nav || 0) + (grp.bd_merc || 0) + (grp.bd_tide || 0) + (grp.bd_abys || 0) + (grp.bd_levi || 0);
-  const navFree = s.teams[team].tech.nav >= 4 ? navUnits : 0;
+  const navUnits = Object.keys(grp).reduce((a, u) => a + (grp[u] && UNITS[u] && UNITS[u].div === 'water' ? grp[u] : 0), 0);
+  const navFree = s.teams[team].tech.nav >= 4 ? navUnits : Math.floor((grp.rk_u9c || 0) * 0.5);
   const airLiftCut = Math.min(m, 2 * ((grp.bd_vair || 0) + 2 * (grp.bd_noct || 0)));
   return Math.ceil(Math.max(0, m - navFree - Math.floor(airLiftCut * 0.5)) / 2);
 };
@@ -791,7 +903,7 @@ A.attack = (s, c, p) => {
   if(s.teams[c.team].cp < 2) return {err:'An attack costs 2 command points.'};
   s.teams[c.team].cp -= 2; s.teams[c.team].res.oil -= oil;
   const r1 = 0.88 + Math.random() * 0.24, r2 = 0.88 + Math.random() * 0.24;
-  const AP = attackPower(s, c.team, p.grp, p.tactic, d.st, r1, c.now, p.from), DP = defPower(s, p.to, p.tactic, c.team, r2) + 0.01;
+  const AP = attackPower(s, c.team, p.grp, p.tactic, d.st, r1, c.now, p.from, p.to), DP = defPower(s, p.to, p.tactic, c.team, r2, p.grp) + 0.01;
   const win = AP > DP, pw = (win ? AP : DP) / (AP + DP);
   const before = {att:total(p.grp), def:total(d.u)}; const dname = d.o === 'neutral' ? 'neutral forces' : TEAMS[d.o].name; const prevOwner = d.o;
   const sent = clone(p.grp); for(const u in sent){ a.u[u] -= sent[u]; if(a.u[u] <= 0) delete a.u[u]; }
@@ -839,7 +951,7 @@ A.sabotage = (s, c, p) => {
   s.teams[c.team].cp -= 3; s.teams[c.team].res.gold -= 25;
   const defCut = d.o === 'dawn' ? (0.12 + Math.min(0.15, 0.02 * (d.u.bd_veil || 0))) : 0;
   const ch = 0.45 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? dawnBonuses(s).intelBonus * 0.5 : 0) - defCut;
-  if(Math.random() < ch){ const keep = clone(d.u); const sp = keep.sup, hr = keep.bd_hier; delete keep.sup; delete keep.bd_hier; const r = applyLoss(keep, 0.25); if(sp) r.out.sup = sp; if(hr) r.out.bd_hier = hr; d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info'); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
+  if(Math.random() < ch){ const keep = clone(d.u); const prot = {}; for(const k in keep) if(UNITS[k] && UNITS[k].max){ prot[k] = keep[k]; delete keep[k]; } const r = applyLoss(keep, 0.25); Object.assign(r.out, prot); d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info'); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} saboteur was caught in ${T_(p.tid)}.`); return {ok:'The saboteur was caught.'};
 };
 A.decap = (s, c, p) => {
@@ -1344,8 +1456,9 @@ function unitsHtml(id){
   const present = UORDER.filter(u => t.u[u]);
   if(!present.length) return '<div class="mut sm">Empty.</div>';
   const groups = list.filter(d => d !== 'all' && (f === 'all' || f === d)).map(d => {
-    const items = present.filter(u => UNITS[u] && UNITS[u].div === d).map(u => `<div class="unit"><span>${uname(u, own)}</span><b>${t.u[u]}</b></div>`).join('');
-    return items ? `<div class="divhdr">${DIVS[d]} Division${own === 'dawn' ? ` · ${DIV_SUB[d]}` : ''}</div><div class="units">${items}</div>` : '';
+    const items = present.filter(u => UNITS[u] && UNITS[u].div === d).map(u => `<div class="unit"><span>${uname(u, t.o)}</span><b>${t.u[u]}</b></div>`).join('');
+    const subLabel = t.o === 'neutral' ? '' : ` · ${divSub(own, d)}`;
+    return items ? `<div class="divhdr">${DIVS[d]} Division${subLabel}</div><div class="units">${items}</div>` : '';
   }).join('');
   return divBarHtml('gdiv', f, own) + (groups || '<div class="mut sm">No units in this division here.</div>');
 }
@@ -1366,11 +1479,13 @@ function panelOrders(){
       const rows = list.filter(d => d !== 'all' && (curDiv === 'all' || curDiv === d)).map(d => {
         const sub = uList.filter(u => UNITS[u].div === d);
         if(!sub.length) return '';
-        return `<div class="divhdr">${DIVS[d]} Division${team === 'dawn' ? ` · ${DIV_SUB[d]}` : ''}</div>` + sub.map(u => {
+        let lastSub = '';
+        return `<div class="divhdr">${DIVS[d]} Division · ${divSub(team, d)}</div>` + sub.map(u => {
           const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u);
           const lock = ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`;
           const capHit = U.max && TIDS.reduce((a, i) => a + (S.terr[i].o === team ? (S.terr[i].u[u] || 0) : 0), 0) >= U.max;
-          return `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costRow(cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0"><button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${U.max === 1 ? '' : `<button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div></div>`;
+          const subHdr = (U.sub && U.sub !== lastSub) ? (lastSub = U.sub, `<div class="mut sm" style="margin-top:6px;font-weight:600;color:var(--ink);opacity:.75">${esc(U.sub)}</div>`) : '';
+          return subHdr + `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:flex-start"><div style="flex:1;min-width:0"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${lock}</div><div style="margin-top:2px">${costRow(cost, 1)} <span class="cost">atk ${U.atk} · def ${U.def}</span></div>${U.abil ? `<div class="abil">${esc(U.abil)}</div>` : ''}</div><div class="row" style="flex-shrink:0"><button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="1">+1</button>${U.max === 1 ? '' : `<button class="btn sm" ${ok && !capHit ? '' : 'disabled'} data-act="recruit" data-u="${u}" data-n="5">+5</button>`}</div></div>`;
         }).join('');
       }).join('');
       h += `<div class="card"><h3>Recruit here · 1 command point</h3>${divBarHtml('div', curDiv, team)}${rows}</div>`;
@@ -1398,7 +1513,7 @@ function panelOrders(){
   return h;
 }
 function panelTroops(){
-  const team = myTeam() || 'dawn';
+  const team = myTeam() || 'reich';
   const list = divsFor(team), curDiv = list.includes(ui.tdiv) ? ui.tdiv : 'all';
   const counts = {};
   TIDS.forEach(i => { const t = S.terr[i]; if(t.o === team) for(const u in t.u) counts[u] = (counts[u] || 0) + t.u[u]; });
@@ -1411,15 +1526,19 @@ function panelTroops(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px" class="sm">${DAWN_PASSIVES.map(([k, v]) => `<div><b>${k}:</b> <span class="mut">${v}</span></div>`).join('')}</div>
     </div>`;
   } else {
-    passHtml = `<div class="card sm"><h3>The Reich · Faction Doctrine</h3><div class="sm mut">${TEAMS.reich.flavor}</div></div>`;
+    const rc = reichCounts(S);
+    const uGold = Math.min(8, 0.25 * (rc.rk_u7 || 0) + 0.4 * (rc.rk_u7c || 0) + 0.5 * (rc.rk_u9 || 0) + 0.7 * (rc.rk_u9c || 0));
+    passHtml = `<div class="card sm"><h3>The Reich · Wehrmacht, Luftwaffe &amp; Kriegsmarine</h3><div class="sm mut">${TEAMS.reich.flavor} U-boat Wolfpack raiding: <b>+${uGold.toFixed(1)} Gold/min</b>.</div></div>`;
   }
   const sections = list.filter(d => d !== 'all' && (curDiv === 'all' || curDiv === d)).map(d => {
     const sub = unitsFor(team).filter(u => UNITS[u].div === d);
     if(!sub.length) return '';
-    return `<div class="card"><h3>${DIVS[d]} Division${team === 'dawn' ? ` · ${DIV_SUB[d]}` : ''}</h3>` + sub.map(u => {
+    let lastSub = '';
+    return `<div class="card"><h3>${DIVS[d]} Division · ${divSub(team, d)}</h3>` + sub.map(u => {
       const U = UNITS[u], ok = hasTech(S, team, U.req), cost = unitCost(S, team, u), have = counts[u] || 0;
       const capHit = U.max && have >= U.max;
-      return `<div style="padding:7px 0;border-bottom:1px solid var(--line)">
+      const subHdr = (U.sub && U.sub !== lastSub) ? (lastSub = U.sub, `<div class="divhdr" style="margin-top:8px">${esc(U.sub)}</div>`) : '';
+      return subHdr + `<div style="padding:7px 0;border-bottom:1px solid var(--line)">
         <div class="row sb"><div><b>${uname(u, team)}</b> <span class="pwr">PWR ${U.pwr}</span>${U.elite ? '<span class="elite">Elite</span>' : ''}${ok ? '' : ` <span class="mut sm">(${TECH[U.req[0]].n} ${U.req[1]})</span>`}</div><span class="mono sm">Deployed: <b>${have}</b>${U.max ? `/${U.max}` : ''}</span></div>
         <div class="sm mut" style="margin:3px 0">${esc(U.desc)}</div>
         ${U.abil ? `<div class="abil">Special Ability: ${esc(U.abil)}</div>` : ''}
@@ -1538,7 +1657,7 @@ function renderModal(){
     if(M.mode === 'attack'){
       const tact = Object.keys(TACT).filter(k => hasTech(S, team, TACT[k].req)); if(!tact.includes(M.tactic)) M.tactic = 'frontal';
       h += `<div><div class="sm mut" style="margin-bottom:4px">Tactic</div><div class="pick">${Object.keys(TACT).map(k => { const has = tact.includes(k), match = !TACT[k].units.length || TACT[k].units.some(u => grp[u] > 0); return `<button ${has ? '' : 'disabled'} style="${M.tactic === k ? 'border-color:var(--acc);background:var(--panel)' : ''}${has ? '' : ';opacity:.4'}" data-act="tactic" data-k="${k}"><b>${TACT[k].n}</b><span class="mut sm">${has ? (match ? TACT[k].d : 'Needs matching units.') : 'Research ' + TECH[TACT[k].req[0]].n + ' ' + TACT[k].req[1]}</span></button>`; }).join('')}</div></div>`;
-      const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now(), from), DP = defPower(S, to, M.tactic, team, 1) * (dEx ? 1 : 1), oil = fuel(S, team, grp);
+      const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now(), from, to), DP = defPower(S, to, M.tactic, team, 1, grp) * (dEx ? 1 : 1), oil = fuel(S, team, grp);
       let odds = 'Scout the target (spy) for a reliable estimate.';
       if(n){ const ratio = AP / Math.max(0.01, DP); if(dEx){ odds = ratio > 1.6 ? 'Crushing advantage' : ratio > 1.15 ? 'Favorable' : ratio > 0.87 ? 'Too close to call' : ratio > 0.6 ? 'Risky' : 'Suicidal'; odds += ` (your ${AP.toFixed(0)} vs their ${DP.toFixed(0)}, ±12% luck each)`; } else { odds = `Your strength ${AP.toFixed(0)}. Enemy strength unknown. Garrison about ${total(S.terr[to].u) ? '~' + Math.max(3, Math.round(total(S.terr[to].u) / 3) * 3) : '0'} units.`; } }
       h += `<div class="card sm"><b>${n} units</b> · fuel <b>${oil}</b> oil (have ${fmt(S.teams[team].res.oil)}) · 2 command points<br>${odds}</div>`;
