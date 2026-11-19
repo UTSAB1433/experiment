@@ -124,7 +124,11 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 430px;
 .council-roster h3{color:var(--ink);color:color-mix(in srgb,var(--post-color) 80%,var(--ink))}
 .council-name{min-width:110px;overflow-wrap:anywhere}.council-name small{display:block;color:var(--mute)}
 .log{display:flex;flex-direction:column;gap:6px}
-.log div{font-size:13px;border-left:3px solid var(--line);padding-left:8px}
+.log > article{font-size:13px;border-left:3px solid var(--line);padding-left:8px}
+.log > p{margin:0 0 4px}
+.log-place{font:inherit;min-height:24px;padding:0 2px;border:0;background:transparent;color:#b2dcdc;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.log-place:hover{color:#fff}.log-place:focus-visible,.log-sites summary:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.log-sites{margin-top:4px}.log-sites summary{cursor:pointer;color:var(--ink);padding:5px 0}.log-sites p,.log-sites .chips{margin:4px 0}.log-sites .log-place{min-height:30px}
 .log small{font-family:var(--mono);color:var(--mute);font-size:11px;display:block}
 table{border-collapse:collapse;width:100%;font-size:12px}
 th,td{border:1px solid var(--line);padding:4px 6px;text-align:center}
@@ -664,6 +668,7 @@ RAW.trim().split('\n').forEach(l => {
 // Preserve its existing economic/VP weights for Classic compatibility; selectable
 // provinces and routes must be unique or Lima can spend CP moving troops to itself.
 const PROVINCES = Object.keys(TD);
+const provinceId = id => typeof id === 'string' && Object.hasOwn(TD,id);
 /* land polygons (lon,lat), rough on purpose */
 const LAND = [
  [-9.2,37,-9.5,39,-8.8,42,-9.3,43.2,-2,43.6,-1.3,45.5,-1.2,46.2,-4.7,48.3,-3,48.8,-1.5,48.7,-1.3,49.6,0.2,49.5,1.6,50.9,3.2,51.3,4.2,52.2,4.8,53.2,7,53.6,8.6,53.9,8.2,55.5,8.1,57,10.5,57.6,10.6,56,9.8,55,10,54.3,12,54.1,14,54,18,54.8,19.5,54.4,21,55.3,21,57,24,57.2,24.3,58.5,23.5,59.2,28,59.5,30,60,33,60,58,60,58,32,48.5,30,44,33,40,36.7,36,36.8,33,36.2,30,36.6,27.3,36.8,26.5,38.5,26.2,40,26,40.8,23,40.3,24,38,23,36.5,21.5,37,20,39.5,19.5,41.5,19,42.5,16.5,43.5,14.5,45,13.7,45.7,12.3,44.9,13.5,43.5,16,41.9,18.5,40.2,16.5,38.5,15.7,38,16,40,14.5,41,12,41.5,10.5,43,9,44.3,7.5,43.8,4,43.4,3,42.3,3.2,41.8,0.5,40.5,-0.2,39,0,38.6,-0.7,37.6,-2,36.8,-4.5,36.6,-5.4,36],
@@ -1113,20 +1118,20 @@ A.recruit = (s, c, p) => {
   if(!withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
   if(!afford(s, c.team, cost)) return {err:'Not enough resources.'};
   pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.u[p.unit] = (t.u[p.unit] || 0) + n;
-  log(s, c.now, c.team, `${c.name} raised ${n} ${uname(p.unit, c.team)} in ${T_(p.tid)}.`);
+  log(s, c.now, c.team, `${c.name} raised ${n} ${uname(p.unit, c.team)} in ${T_(p.tid)}.`, 'info', {tid:p.tid});
   return {ok:`Raised ${n} ${uname(p.unit, c.team)}.`};
 };
 A.fort = (s, c, p) => {
   const t = s.terr[p.tid]; if(!t || t.o !== c.team) return {err:'Not your territory.'}; if(t.f >= 3) return {err:'Fortifications are at maximum.'};
   const cost = fortCost(t.f); if(p.rank !== t.f + 1 || !withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
   if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
-  pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.f++; log(s, c.now, c.team, `${T_(p.tid)} fortified to level ${t.f}.`);
+  pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.f++; log(s, c.now, c.team, `${T_(p.tid)} fortified to level ${t.f}.`, 'info', {tid:p.tid});
   return {ok:`Fortified ${T_(p.tid)}.`};
 };
 A.stance = (s, c, p) => {
   const t = s.terr[p.tid]; if(!t || t.o !== c.team || !STANCES[p.st]) return {err:'Not possible.'}; if(t.st === p.st) return {err:'Already set.'};
   if(s.teams[c.team].cp < 1) return {err:'No command points left.'}; s.teams[c.team].cp -= 1; t.st = p.st;
-  log(s, c.now, c.team, `${T_(p.tid)} now holds a ${STANCES[p.st]} posture.`); return {ok:`${T_(p.tid)}: ${STANCES[p.st]}.`};
+  log(s, c.now, c.team, `${T_(p.tid)} now holds a ${STANCES[p.st]} posture.`, 'info', {tid:p.tid}); return {ok:`${T_(p.tid)}: ${STANCES[p.st]}.`};
 };
 A.research = (s, c, p) => {
   if(!TKEYS.includes(p.k)) return {err:'Unknown doctrine.'};
@@ -1162,7 +1167,7 @@ A.move = (s, c, p) => {
   if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
   s.teams[c.team].cp -= 1;
   for(const u in p.grp){ if(!p.grp[u]) continue; a.u[u] -= p.grp[u]; if(a.u[u] <= 0) delete a.u[u]; b.u[u] = (b.u[u] || 0) + p.grp[u]; }
-  log(s, c.now, c.team, `${total(p.grp)} units moved ${T_(p.from)} to ${T_(p.to)}.`); return {ok:`Moved ${total(p.grp)} units to ${T_(p.to)}.`};
+  log(s, c.now, c.team, `${total(p.grp)} units moved ${T_(p.from)} to ${T_(p.to)}.`, 'info', {tid:p.to,from:p.from}); return {ok:`Moved ${total(p.grp)} units to ${T_(p.to)}.`};
 };
 A.attack = (s, c, p) => {
   const a = s.terr[p.from], d = s.terr[p.to]; if(!a || !d || a.o !== c.team) return {err:'Attack from one of your territories.'};
@@ -1218,8 +1223,8 @@ A.spy = (s, c, p) => {
   const defCut = d.o === 'dawn' ? (0.15 + Math.min(0.15, 0.02 * (d.u.bd_veil || 0))) : 0;
   const ch = 0.55 + 0.1 * s.teams[c.team].tech.intel + attB - defCut;
   const dur = c.team === 'dawn' ? db.spyMs : SPY_MS;
-  if(Math.random() < ch){ s.intel[c.team][p.tid] = c.now + dur; log(s, c.now, c.team, `Agents report from ${T_(p.tid)}. Intel valid for ${Math.round(dur / 60000)} minutes.`, 'intel'); return {ok:`Agents report from ${T_(p.tid)}: garrison and stance revealed for ${Math.round(dur / 60000)} minutes.`}; }
-  log(s, c.now, 'all', `A ${TEAMS[c.team].short} spy was caught in ${T_(p.tid)}.`); return {ok:'The agent was caught. No intel.'};
+  if(Math.random() < ch){ s.intel[c.team][p.tid] = c.now + dur; log(s, c.now, c.team, `Agents report from ${T_(p.tid)}. Intel valid for ${Math.round(dur / 60000)} minutes.`, 'intel', {tid:p.tid}); return {ok:`Agents report from ${T_(p.tid)}: garrison and stance revealed for ${Math.round(dur / 60000)} minutes.`}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} spy was caught in ${T_(p.tid)}.`, 'info', {tid:p.tid}); return {ok:'The agent was caught. No intel.'};
 };
 A.honey = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'};
@@ -1230,8 +1235,8 @@ A.honey = (s, c, p) => {
   const db = dawnBonuses(s);
   const ch = 0.6 + 0.08 * me.tech.intel + (c.team === 'dawn' ? db.intelBonus * 0.5 : 0);
   const dur = c.team === 'dawn' ? db.spyMs : SPY_MS;
-  if(Math.random() < ch){ const cut = Math.min(en.cp, 2); en.cp -= cut; s.intel[c.team][p.tid] = c.now + dur; log(s, c.now, c.team, `A honeytrap in ${T_(p.tid)} compromised an enemy officer. Intel for ${Math.round(dur / 60000)} minutes; the enemy lost ${cut} command points.`, 'intel'); return {ok:`The honeytrap worked in ${T_(p.tid)}: intel for ${Math.round(dur / 60000)} minutes and the enemy loses ${cut} command points.`}; }
-  log(s, c.now, 'all', `A ${TEAMS[c.team].short} honeytrap was exposed in ${T_(p.tid)}.`); return {ok:'The operation was exposed. No result.'};
+  if(Math.random() < ch){ const cut = Math.min(en.cp, 2); en.cp -= cut; s.intel[c.team][p.tid] = c.now + dur; log(s, c.now, c.team, `A honeytrap in ${T_(p.tid)} compromised an enemy officer. Intel for ${Math.round(dur / 60000)} minutes; the enemy lost ${cut} command points.`, 'intel', {tid:p.tid}); return {ok:`The honeytrap worked in ${T_(p.tid)}: intel for ${Math.round(dur / 60000)} minutes and the enemy loses ${cut} command points.`}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} honeytrap was exposed in ${T_(p.tid)}.`, 'info', {tid:p.tid}); return {ok:'The operation was exposed. No result.'};
 };
 A.sabotage = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'}; if(s.teams[c.team].tech.intel < 2) return {err:'Needs Intelligence 2.'};
@@ -1239,22 +1244,22 @@ A.sabotage = (s, c, p) => {
   s.teams[c.team].cp -= 3; s.teams[c.team].res.gold -= 25;
   const defCut = d.o === 'dawn' ? (0.12 + Math.min(0.15, 0.02 * (d.u.bd_veil || 0))) : 0;
   const ch = 0.45 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? dawnBonuses(s).intelBonus * 0.5 : 0) - defCut;
-  if(Math.random() < ch){ const keep = clone(d.u); const prot = {}; for(const k in keep) if(UNITS[k] && UNITS[k].max){ prot[k] = keep[k]; delete keep[k]; } const r = applyLoss(keep, 0.25); Object.assign(r.out, prot); d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info'); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
-  log(s, c.now, 'all', `A ${TEAMS[c.team].short} saboteur was caught in ${T_(p.tid)}.`); return {ok:'The saboteur was caught.'};
+  if(Math.random() < ch){ const keep = clone(d.u); const prot = {}; for(const k in keep) if(UNITS[k] && UNITS[k].max){ prot[k] = keep[k]; delete keep[k]; } const r = applyLoss(keep, 0.25); Object.assign(r.out, prot); d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info', {tid:p.tid}); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} saboteur was caught in ${T_(p.tid)}.`, 'info', {tid:p.tid}); return {ok:'The saboteur was caught.'};
 };
 A.decap = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o !== OTHER(c.team)) return {err:'Target an enemy territory.'}; if(s.teams[c.team].tech.intel < 4) return {err:'Needs Intelligence 4.'};
   if(s.teams[c.team].cp < 4) return {err:'Costs 4 command points.'}; if(s.teams[c.team].res.gold < 60) return {err:'Needs 60 gold.'};
   s.teams[c.team].cp -= 4; s.teams[c.team].res.gold -= 60;
-  if(Math.random() < 0.4 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? 0.1 : -0.3)){ const E = s.teams[OTHER(c.team)]; E.cp = Math.max(0, E.cp - 6); d.f = 0; log(s, c.now, 'all', `Decapitation strike at ${T_(p.tid)}. ${TEAMS[OTHER(c.team)].name} command is in disarray.`, 'info'); return {ok:'The strike lands. Enemy loses 6 command points and the fort is razed.'}; }
-  log(s, c.now, 'all', `A ${TEAMS[c.team].short} assassination team was destroyed near ${T_(p.tid)}.`); return {ok:'The team was lost.'};
+  if(Math.random() < 0.4 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? 0.1 : -0.3)){ const E = s.teams[OTHER(c.team)]; E.cp = Math.max(0, E.cp - 6); d.f = 0; log(s, c.now, 'all', `Decapitation strike at ${T_(p.tid)}. ${TEAMS[OTHER(c.team)].name} command is in disarray.`, 'info', {tid:p.tid}); return {ok:'The strike lands. Enemy loses 6 command points and the fort is razed.'}; }
+  log(s, c.now, 'all', `A ${TEAMS[c.team].short} assassination team was destroyed near ${T_(p.tid)}.`, 'info', {tid:p.tid}); return {ok:'The team was lost.'};
 };
 A.annex = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o !== 'neutral') return {err:'Only neutral lands can be annexed.'};
   if(!ADJ[p.tid].some(n => s.terr[n.id].o === c.team)) return {err:'You need a border with it.'}; const g = total(d.u); if(g > 12) return {err:'The garrison is too strong to buy (12 units or fewer).'};
   const cost = annexCost(s, c.team, g); if(!withinQuote({gold:cost}, p.quote)) return {err:PRICE_CHANGED};
   if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(s.teams[c.team].cp < 2) return {err:'Costs 2 command points.'};
-  s.teams[c.team].res.gold -= cost; s.teams[c.team].cp -= 2; d.o = c.team; delete d.country; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.`, 'dip'); return {ok:`${T_(p.tid)} joins you.`};
+  s.teams[c.team].res.gold -= cost; s.teams[c.team].cp -= 2; d.o = c.team; delete d.country; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.`, 'dip', {tid:p.tid}); return {ok:`${T_(p.tid)} joins you.`};
 };
 A.propose = (s, c, p) => {
   if(s.props.some(x => x.from === c.team && x.type === p.type && x.open)) return {err:'You already have that proposal open.'};
@@ -1442,17 +1447,24 @@ function advanceFront(s,now,expected,allowRaids = false){
   if(frontTurn(s) !== expected || !Number.isSafeInteger(expected+1) || !frontDue(s,now)) return false;
   const holdings = independentHoldings(s), f = s.front ||= {turn:0, at:0, drill:{}};
   const raids = {reich:new Map(),dawn:new Map()}, recoveries = new Map(), pace = trainingPace(s);
+  // One representative location per active country for a quiet-turn dispatch.
+  // Snapshot these now: borders (and the site of resistance) can change later.
+  const sites = {};
   let stoodDown = false, drills = 0, reinforced = 0, mustered = 0;
   function train(k,n){
     const before = f.drill[k] || 0, gain = Math.min(n,drillCap(k)-before);
     if(gain > 0){ f.drill[k] = before+gain; drills += gain; }
+    return gain;
   }
   function offer(pool,k,op){ if(!pool.has(k)) pool.set(k,[]); pool.get(k).push(op); }
   for(const k of COUNTRY_IDS){
     const cap = capitalOf(k), fallen = !TD[cap].fcap && countryAt(s,cap) !== k;
-    train(k,pace); // once per country, including a government in exile
-    for(const from of holdings.get(k) || []){
-      reinforced += reinforce(s,from,k);
+    const ids = holdings.get(k) || [];
+    if(train(k,pace)) sites[k] = fallen ? ids[0] || cap : cap; // countrywide drills, including in exile
+    let garrison = null;
+    for(const from of ids){
+      const added = reinforce(s,from,k); reinforced += added;
+      if(added && (!garrison || from === cap)) garrison = from;
       if(!allowRaids && !fallen) continue;
       const grp = expedition(s.terr[from].u,!!COUNTRIES[k].specialty); if(!grp) continue;
       for(const {id:to,sea} of ADJ[from]){
@@ -1461,14 +1473,16 @@ function advanceFront(s,now,expected,allowRaids = false){
         else if(allowRaids && sideId(s.terr[to].o)) offer(raids[s.terr[to].o],k,{from,to,grp});
       }
     }
+    if(garrison) sites[k] = garrison;
     if(!fallen){
-      if(f.resistance && Object.hasOwn(f.resistance,k)){ delete f.resistance[k]; stoodDown = true; }
+      if(f.resistance && Object.hasOwn(f.resistance,k)){ delete f.resistance[k]; stoodDown = true; sites[k] = cap; }
     } else if(!recoveries.has(k)){
       // No legal expedition (often a one-province nation). Recruit locally;
       // never borrow the occupier's garrison or teleport troops over a sea link.
       const rank = frontRank(s,k), capSize = resistanceCap(rank), stock = f.resistance?.[k] || 0;
       const n = Math.min(capSize,stock + 1 + Math.floor(rank/2));
       (f.resistance ||= {})[k] = n; mustered += n - stock;
+      if(n > stock) sites[k] = cap;
       if(n === capSize) offer(recoveries,k,{to:cap,grp:{inf:n}});
     }
   }
@@ -1501,7 +1515,7 @@ function advanceFront(s,now,expected,allowRaids = false){
     log(s,now,'all',`${COUNTRIES[k].name} ${result}. ${route}: ${battle.sent} sent, ${battle.attLost} lost; ${battle.defLost} defenders lost.`,'front',
       {tid:to,by:'neutral',country:k,win:battle.win,...(from ? {from} : {}),...(recovery ? {recovery:true} : {})});
   } else if(drills || reinforced || mustered || stoodDown){
-    log(s,now,'all',`Independent powers held their ground. ${drills} drills completed; ${reinforced} garrison reinforcements arrived${mustered ? `; ${mustered} joined local resistance forces` : ''}.`,'front');
+    log(s,now,'all',`Independent powers held their ground. ${drills} drills completed; ${reinforced} garrison reinforcements arrived${mustered ? `; ${mustered} joined local resistance forces` : ''}.`,'front',{sites});
   } else return false;
   f.at = now; f.turn++; return true;
 }
@@ -2691,7 +2705,86 @@ function panelCouncil(){
   if(lead) h += `<div class="card"><h3>Reset</h3><div class="sm mut">Start a fresh war. Everyone keeps their post.</div><button class="btn danger sm" style="margin-top:8px" data-act="reset">${ui.confirmReset === S ? 'Press again to confirm' : 'Reset the map'}</button></div>`;
   return h;
 }
-function panelLog(){ const t = myTeam(); const rows = S.log.filter(l => l.vis === 'all' || l.vis === t).slice(0, 50).map(l => `<div style="border-left-color:${l.kind === 'battle' ? tcol(l.by) : l.kind === 'front' ? '#9ac6c6' : l.kind === 'win' ? 'var(--ok)' : 'var(--line)'}"><small>${new Date(l.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>${esc(l.msg)}</div>`).join(''); return `<div class="log">${rows}</div>`; }
+const logProvinceNames = new Map(PROVINCES.map(id => [TD[id].name,id]));
+const logCountries = [...COUNTRY_IDS].sort((a,b) => COUNTRIES[a].name.localeCompare(COUNTRIES[b].name));
+const nationNames = new Set(logCountries.map(k => COUNTRIES[k].name));
+// Longest first: e.g. the province “Mexico City” is one label, not “Mexico” + “ City”.
+const mapNames = [...new Set([...logProvinceNames.keys(),...nationNames])].sort((a,b) => b.length-a.length);
+const mapNamePattern = new RegExp('\\b(?:'+mapNames.map(n => n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\p{L}\\p{N}_])','gu');
+
+// Plain v6 messages predate location IDs on non-battle orders. Only recover
+// known event slots, never guess a place from a player, unit or research name.
+const oldLocationFormats = [
+  /^(.+) (?:fortified to level \d+|now holds a .+ posture)\.$/,
+  / raised \d+ .+ in (.+)\.$/,
+  / brought (.+) into the (?:Reich|Dawn) sphere by treaty\.$/,
+  /^Agents report from (.+)\. Intel valid for /,
+  /^A honeytrap in (.+) compromised an enemy officer\./,
+  /^A (?:Reich|Dawn) (?:spy was caught in|honeytrap was exposed in|saboteur was caught in|assassination team was destroyed near) (.+)\.$/,
+  /^Sabotage in (.+): depots burn,/,
+  /^Decapitation strike at (.+)\. (?:Black Dawn|The Reich) command is in disarray\./,
+  / wins the war\. (Berlin|Bucharest) has fallen\.$/
+];
+function logEndpoints(l){
+  if(l.tid != null || l.kind === 'front') return l; // aggregate reports have no single target
+  const move = /^(?:\d+) units moved (.+) to (.+)\.$/.exec(l.msg);
+  if(move) return {from:logProvinceNames.get(move[1]),tid:logProvinceNames.get(move[2])};
+  for(const pattern of oldLocationFormats){ const m = pattern.exec(l.msg); if(m) return {tid:logProvinceNames.get(m[1])}; }
+  return {};
+}
+function logPlace(id,label){
+  const place = TD[id].name, hint = `Show ${label === place ? place : label+' at '+place} on the map`;
+  return `<button type="button" class="log-place" data-act="goto" data-id="${id}" aria-label="${esc(hint)}" title="${esc(hint)}">${esc(label)}</button>`;
+}
+function logMessageHtml(l){
+  const {tid,from} = logEndpoints(l), msg = l.msg;
+  if(!provinceId(tid)) return esc(msg);
+  const dest = TD[tid].name, src = provinceId(from) ? TD[from].name : null;
+  const isFront = l.kind === 'front', route = msg.indexOf('. Expedition from ');
+  const destAt = msg.lastIndexOf(dest), srcAt = src ? msg.lastIndexOf(src) : -1;
+  let html = '', offset = 0, linkedTarget = false;
+  for(const hit of msg.matchAll(mapNamePattern)){
+    const name = hit[0], at = hit.index;
+    // The named countries in a dispatch fought at the recorded target, not
+    // necessarily at their home capital. The expedition origin is a separate link.
+    const headline = isFront && (route < 0 || at < route);
+    let id;
+    if(headline && (nationNames.has(name) || name === dest)) id = tid;
+    else if(name === src && at === srcAt) id = from;
+    else if(name === dest && at === destAt) id = tid;
+    else continue;
+    html += esc(msg.slice(offset,at)) + logPlace(id,name); offset = at+name.length;
+    if(id === tid) linkedTarget = true;
+  }
+  return html + esc(msg.slice(offset)) + (linkedTarget ? '' : ' · '+logPlace(tid,dest));
+}
+function activeLogCountries(l){ return l?.kind === 'front' && l.tid == null && record(l.sites) ? logCountries.filter(k => provinceId(l.sites[k])) : []; }
+function logSiteButtons(l,keys){ return keys.map(k => logPlace(l.sites[k],COUNTRIES[k].name)).join(''); }
+function visibleLog(){ const t = myTeam(); return S.log.filter(l => l.vis === 'all' || (t && l.vis === t)).slice(0,50); }
+// A campaign can have only one World front turn at a given time. Never use a
+// shifting log index as a location, even when a new order arrives with the list open.
+const reportKey = l => S.created+':'+l.t;
+function panelLog(){
+  const open = new Set(Array.from($('#panel').querySelectorAll('details.log-sites[open]'),el => el.dataset.report));
+  const rows = visibleLog().map(l => {
+    const keys = activeLogCountries(l), key = reportKey(l), expanded = open.has(key);
+    const sites = keys.length ? `<details class="log-sites" data-report="${key}"${expanded ? ' open' : ''}><summary>Countries active this turn (${keys.length})</summary><p class="sm mut">One location per country for this turn.</p><div class="chips">${expanded ? logSiteButtons(l,keys) : ''}</div></details>` : '';
+    const color = l.kind === 'battle' ? tcol(l.by) : l.kind === 'front' ? '#9ac6c6' : l.kind === 'win' ? 'var(--ok)' : 'var(--line)';
+    return `<article style="border-left-color:${color}"><small>${new Date(l.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>${logMessageHtml(l)}${sites}</article>`;
+  }).join('');
+  return `<div class="log"><p class="sm mut">Tap an underlined name to locate it on the map.</p>${rows}</div>`;
+}
+// Don't build thousands of map buttons just to display a collapsed timeline.
+document.addEventListener('toggle', e => {
+  const el = e.target;
+  if(!S || tab !== 'log' || !el.open || !el.matches?.('details.log-sites') || !$('#panel').contains(el)) return;
+  const list = el.lastElementChild;
+  if(!list.childElementCount){
+    const l = visibleLog().find(row => row.kind === 'front' && row.sites && reportKey(row) === el.dataset.report);
+    if(l) list.innerHTML = logSiteButtons(l,activeLogCountries(l));
+  }
+},true);
+
 const DOCTRINE_NAME = {arm:'Armored reserves',air:'Expeditionary air wings',nav:'Ocean fleets',art:'Artillery reserves'};
 const RANK_NUM = ['','I','II','III','IV','V'];
 function frontStatus(){
@@ -2864,7 +2957,16 @@ function renderAll(){
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if(!el) return; const d = el.dataset, a = d.act;
   if(a === 'sel'){ if(!drag.moved) selectTerritory(d.id); return; }
-  if(a === 'goto'){ sel = d.id; if(tab !== 'orders' && tab !== 'log') tab = 'orders'; focusTerr(d.id); renderAll(); return; }
+  if(a === 'goto'){
+    if(!S || !provinceId(d.id)) return;
+    sel = d.id; focusTerr(sel);
+    if(tab === 'log'){
+      renderMap(); // Keep the timeline, expanded countries and panel scroll position intact.
+      $(`#map .node[data-id="${sel}"]`)?.focus({preventScroll:true});
+      svg.scrollIntoView?.({block:'center',inline:'nearest'}); // on a phone the map may be above the log
+    } else { tab = 'orders'; renderAll(); }
+    return;
+  }
   if(a === 'clearsel'){ sel = null; renderAll(); return; }
   if(a === 'setreg'){ ui.natReg = d.r; renderPanel(); return; }
   if(a === 'reg'){ setRegion(d.reg); return; }

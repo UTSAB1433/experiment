@@ -92,8 +92,52 @@ module.exports = async function frontRoom({origin, context, brokers, fixture, pu
   await d.getByRole('button', {name: 'Locate Japan on the map'}).tap();
   assert.match(await d.locator('#panel').textContent(), /Tokyo/);
   assert.match(await d.locator('#panel').textContent(), /Japan · Rank/);
+  await d.locator('#tabs [data-k="log"]').tap();
+  const checkJump = async id => {
+    assert.equal(await d.locator('#tabs .on').getAttribute('data-k'), 'log');
+    const node = d.locator(`#map .node[data-id="${id}"]`);
+    assert.ok(
+      await node.evaluate(el => {
+        const r = el.getBoundingClientRect();
+        const dot = el.querySelector('circle:not([fill="none"])').getBoundingClientRect();
+        const top = document.elementFromPoint(dot.x + dot.width / 2, dot.y + dot.height / 2);
+        return (
+          el.contains(top) &&
+          el === document.activeElement &&
+          !!el.querySelector('circle[fill="none"]:not(.tgt)') &&
+          r.top >= 0 &&
+          r.bottom <= innerHeight &&
+          r.left >= 0 &&
+          r.right <= innerWidth
+        );
+      }),
+      'selected map node must be focused and visible on the phone: ' + id
+    );
+  };
+  await d.getByRole('button', {name: 'Show USSR at Moscow on the map'}).tap();
+  await checkJump('MOS');
+  const report = d.locator('details.log-sites').first();
+  await report.locator('summary').focus();
+  await d.keyboard.press('Enter');
+  const japan = report.getByRole('button', {name: /^Show Japan at /});
+  const site = await japan.getAttribute('data-id');
+  await japan.focus();
+  await d.keyboard.press('Space');
+  await checkJump(site);
+  assert.ok(await report.evaluate(el => el.open), 'jump did not collapse the log entry');
+  await d.setViewportSize({width: 320, height: 844});
+  assert.ok(await d.locator('#panel').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+  const logIssues = await d.evaluate(async () =>
+    (
+      await axe.run('#panel', {
+        runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa']}
+      })
+    ).violations.map(v => v.id)
+  );
+  assert.deepEqual(logIssues, []);
+  assert.deepEqual(changes(), [311, 312, 313, 314], 'map navigation did not issue a game order');
   await Promise.all(pages.map(p => p.context().close()));
   console.log(
-    'PASS: real World front reclaimed Moscow once across three devices; Dawn alone kept training, then AFK froze the front. Keyboard return started a fresh interval (310→314). Mobile locate, 320–1440px layout and axe passed.'
+    'PASS: real World front reclaimed Moscow once across three devices; Dawn alone kept training, then AFK froze the front. Keyboard return started a fresh interval (310→314). Log country links, touch/keyboard map jumps, 320–1440px layout and axe passed.'
   );
 };
