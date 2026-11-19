@@ -268,7 +268,7 @@ function launch({
 }
 const {game: factory} = launch({timers: {setTimeout() {}, setInterval() {}}, random: () => 0.5});
 function saved(rev) {
-  const st = factory.newGame(now - 60000);
+  const st = factory.newGame(now - 60000, false); // previously saved, multi-territory campaign
   st.rev = rev;
   st.players.Veteran = {team: 'dawn', role: 'soldier', title: 'Saved post #' + rev, cd: 1234, cp: 10};
   st.teams.dawn.res.gold = 200 + rev;

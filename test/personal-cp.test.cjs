@@ -27,7 +27,7 @@ const balances = s => Object.fromEntries(Object.entries(s.players).map(([n, p]) 
 // Exercise the real income clock, including when other orders split a refill into many small ticks.
 test('every post starts at 10 and earns exactly one spendable CP per 30 seconds, without faction modifiers or overflow', () => {
   const s = g.newGame(now);
-  Object.assign(s.terr.BUC.u, {bd_silv: 10, bd_csha: 10, bd_hera: 10, bd_hier: 1});
+  Object.assign(s.terr.NIG.u, {bd_silv: 10, bd_csha: 10, bd_hera: 10, bd_hier: 1});
   assert.ok(Object.values(s.players).every(p => p.cp === 10));
   assert.ok(Object.values(s.teams).every(t => !('cp' in t)));
   for (let ms = 1; ms < 30000; ms += 367) g.tick(s, now + ms);
@@ -57,11 +57,11 @@ test('each priced order checks and charges its issuer, never borrowing a teammat
     ['stance', 1, {tid: 'BER', st: 'elastic'}],
     ['move', 1, {from: 'RIO', to: 'BSB', grp: {inf: 1}}],
     ['attack', 2, {from: 'RIO', to: 'BSB', grp: {inf: 1}, tactic: 'frontal'}],
-    ['spy', 2, {tid: 'BUC'}],
-    ['honey', 3, {tid: 'BUC'}],
-    ['sabotage', 3, {tid: 'BUC'}],
-    ['decap', 4, {tid: 'BUC'}],
-    ['annex', 2, {tid: 'LOW', quote: ceiling}],
+    ['spy', 2, {tid: 'NIG'}],
+    ['honey', 3, {tid: 'NIG'}],
+    ['sabotage', 3, {tid: 'NIG'}],
+    ['decap', 4, {tid: 'NIG'}],
+    ['annex', 2, {tid: 'DEN', quote: ceiling}],
     ['propose', 1, {type: 'ceasefire', mins: 60}]
   ];
   for (const [order, cost, payload] of methods) {
@@ -70,7 +70,7 @@ test('each priced order checks and charges its issuer, never borrowing a teammat
     s.teams.reich.res.gold = 1000;
     s.terr.RIO = {o: 'reich', u: {inf: 5}, f: 0, st: 'bunker'};
     s.terr.BSB.o = order === 'move' ? 'reich' : 'neutral';
-    s.terr.LOW.u = {};
+    s.terr.DEN.u = {};
     if (order === 'recruit') s.players.DEB.role = 'chief';
     s.players.DEB.cp = cost - 0.01;
     const before = structuredClone(s);
@@ -101,7 +101,7 @@ test('a successful honeytrap or decapitation affects at most one enemy post and 
       s.teams.reich.tech.intel = 4;
       s.teams.reich.res.gold = 100;
       for (const p of Object.values(s.players)) if (p.team === 'dawn') p.cp = available;
-      const result = g.A[order](s, actor, {tid: 'BUC'});
+      const result = g.A[order](s, actor, {tid: 'NIG'});
       assert.ok(result.ok, result.err);
       const foes = Object.values(s.players).filter(p => p.team === 'dawn');
       assert.deepEqual(
@@ -111,7 +111,7 @@ test('a successful honeytrap or decapitation affects at most one enemy post and 
       assert.match(result.ok, available < 1 ? /No enemy officer/ : /One enemy officer lost/);
       assert.equal(s.players.DEB.cp, 10 - cost);
       assert.equal(s.players.Sattyaki.cp, 10);
-      assert.ok(order === 'honey' ? s.intel.reich.BUC > now : s.terr.BUC.f === 0);
+      assert.ok(order === 'honey' ? s.intel.reich.NIG > now : s.terr.NIG.f === 0);
     }
   }
 });

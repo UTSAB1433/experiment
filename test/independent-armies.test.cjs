@@ -38,7 +38,7 @@ function island() {
   s.terr.ICE.u = {inf: 30};
   return s;
 }
-test('every initially independent province belongs to exactly one country, with distinct home forces and no duplicate Lima or faction HQ', () => {
+test('each historical starting neutral belongs to one country, with distinct home forces and no duplicate Lima or faction HQ', () => {
   const s = saved(71),
     ids = Object.values(e.COUNTRIES).flatMap(c => c.homes);
   assert.equal(ids.length, new Set(ids).size);
@@ -58,6 +58,19 @@ test('every initially independent province belongs to exactly one country, with 
   );
   assert.equal(s.v, 7);
   assert.equal(s.front, undefined);
+  assert.ok(e.validSave(s));
+});
+test('in a capital-start room independent home capitals start at home and the first front turn cannot take either HQ', () => {
+  const s = e.newGame(now),
+    berlin = cp(s.terr.BER),
+    nigeria = cp(s.terr.NIG);
+  for (const [k, country] of Object.entries(e.COUNTRIES)) assert.equal(e.countryAt(s, country.homes[0]), k);
+  assert.equal(e.countryAt(s, 'PAR'), 'FRA');
+  assert.equal(e.countryAt(s, 'DEL'), 'IND');
+  assert.ok(turn(s));
+  assert.equal(s.front.resistance, undefined);
+  assert.deepEqual(cp(s.terr.BER), berlin);
+  assert.deepEqual(cp(s.terr.NIG), nigeria);
   assert.ok(e.validSave(s));
 });
 test('independents train once per country, not per province; specialties, bounded rebuilding and real defensive strength', () => {

@@ -25,7 +25,8 @@ const g = launch({
     'postCan',
     'frontInterval',
     'recordFrontTraffic',
-    'frontDue'
+    'frontDue',
+    'trainingPace'
   ]),
   timers: {setTimeout() {}, setInterval() {}}
 }).game;
@@ -81,6 +82,63 @@ test('Nigeria is the Dawn HQ on a fresh map and in victory checks; Bucharest rem
   other.terr.BER.o = 'dawn';
   g.checkWin(other, now);
   assert.equal(other.win.team, 'dawn');
+});
+
+test('new rooms start with exactly the two HQ garrisons; other provinces have local neutral defenders', () => {
+  const s = g.newGame(now),
+    oldOpening = g.newGame(now, false);
+  assert.deepEqual(Object.keys(s.terr).sort(), Object.keys(g.TD).sort());
+  assert.equal(Object.keys(s.terr).length, 147);
+  for (const [id, t] of Object.entries(s.terr)) {
+    if (id === 'BER' || id === 'NIG') {
+      assert.equal(t.o, id === 'BER' ? 'reich' : 'dawn');
+      same(t, oldOpening.terr[id]); // original HQ fort and troops, not all previous garrisons combined
+    } else {
+      assert.equal(t.o, 'neutral', id);
+      assert.equal(t.f, 0);
+      assert.equal(t.u.inf, g.TD[id].g);
+      assert.ok(
+        Object.keys(t.u).every(u => u === 'inf' || u === 'arm'),
+        id
+      );
+    }
+  }
+  same(s.teams, oldOpening.teams);
+  same(s.players, oldOpening.players);
+  g.checkWin(s, now);
+  assert.equal(s.win, null);
+  assert.equal(s.dom, null);
+  // Former faction holdings must be earned from the HQ, just like other neutral land.
+  const order = {unit: 'inf', n: 1, quote: ceiling},
+    c = ctx('reich', 'Sattyaki');
+  assert.ok(g.A.recruit(s, c, {...order, tid: 'RUH'}).err);
+  assert.ok(g.A.recruit(s, c, {...order, tid: 'BER'}).ok);
+  assert.ok(
+    factory.A.attack(s, c, {from: 'BER', to: 'RUH', grp: {...s.terr.BER.u}, tactic: 'frontal'}).battle
+  );
+  assert.equal(s.terr.RUH.o, 'reich');
+  assert.ok(g.A.recruit(s, c, {...order, tid: 'RUH'}).ok);
+  assert.ok(g.validSave(s));
+});
+
+test('the original room opening, not its current borders, determines expansion pace and an explicit reset', () => {
+  const fresh = g.newGame(now),
+    old = saved(32);
+  const expectedFresh = copy(fresh.terr),
+    expectedOld = copy(old.terr);
+  assert.equal(old.capitalStart, undefined);
+  for (const s of [fresh, old]) {
+    assert.equal(g.trainingPace(s), 1);
+    for (const id of ['RUH', 'POW', 'BAV', 'PRU', 'BOH', 'NAR', 'OSL']) s.terr[id].o = 'dawn';
+    assert.equal(g.trainingPace(s), 1);
+    s.terr.AUS.o = 'dawn';
+    assert.equal(g.trainingPace(s), s === fresh ? 2 : 1);
+    // Reset is explicit and starts this room's scenario over; it is not a save migration.
+    const p = {created: s.created, rev: s.rev, origin: s.origin};
+    assert.ok(g.A.reset(s, ctx('dawn'), p).reset);
+    same(s.terr, s === fresh ? expectedFresh : expectedOld);
+    assert.ok(g.validSave(s));
+  }
 });
 
 test('v6 preview and failed orders are read-only; a confirmed first order settles the old economy once and saves the handover with it', async t => {

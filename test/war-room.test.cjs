@@ -100,7 +100,13 @@ test('an empty room is playable: only the first explicit order persists the star
   const tooSoon = tab.game.act('enlist', enlist); await finishOrder(t,tooSoon);
   checkReadOnly(tab); assert.equal(tab.game.S, null, 'a timeout alone is not a read barrier');
   for(const s of tab.sockets){ const request = publications(s).find(p => p.data.type === 'req'); s.message('sync',request.data); } // A real MQTT 3.1.1 subscriber receives its own request.
+  const preview = structuredClone(tab.game.S.terr);
+  const held = team => Object.keys(preview).filter(id => preview[id].o === team);
+  assert.deepEqual(held('reich'), ['BER']); assert.deepEqual(held('dawn'), ['NIG']);
+  assert.equal(held('neutral').length, 145); checkReadOnly(tab);
   const order = tab.game.act('enlist', enlist); await finishOrder(t,order);
+  assert.deepEqual(structuredClone(tab.game.S.terr), preview);
+  assert.equal(tab.game.S.capitalStart, true);
   assert.equal(tab.game.S.rev, 2); assert.ok(tab.game.S.players[enlist.name]);
   assert.equal(publications(tab.sockets[0]).filter(p => p.retain).length, 1);
 });
