@@ -1186,16 +1186,17 @@ A.attack = (s, c, p) => {
   log(s,c.now,'all',msg,'battle',{tid:p.to,win,by:c.team,prev:prevOwner}); return {ok:msg,battle:win};
 };
 // Both player orders and independent sorties use the same strength, casualties,
-// terrain, fort and mastery rules. Authorization and prices belong to the caller.
-function resolveBattle(s,team,now,from,to,units,tactic){
+// terrain, fort and mastery rules. A local uprising supplies a reserve instead
+// of a source province; never subtract its attackers from the occupying garrison.
+function resolveBattle(s,team,now,from,to,units,tactic,source = s.terr[from].u){
   const grp = {...units};
-  const a = s.terr[from], d = s.terr[to];
+  const d = s.terr[to];
   const r1 = .88 + Math.random() * .24, r2 = .88 + Math.random() * .24;
   const AP = attackPower(s,team,grp,tactic,d.st,r1,now,from,to), DP = defPower(s,to,tactic,team,r2,grp) + .01;
   const win = AP > DP, pw = (win ? AP : DP) / (AP + DP);
   const wl = Math.min(.6,Math.max(.05,(1-pw)*.75));
   const sent = total(grp), defenders = total(d.u);
-  for(const [u,n] of Object.entries(grp)){ if(n){ a.u[u] -= n; if(!a.u[u]) delete a.u[u]; } }
+  for(const [u,n] of Object.entries(grp)){ if(n){ source[u] -= n; if(!source[u]) delete source[u]; } }
   const al = applyLoss(grp, win ? wl : Math.min(.9,.4+.5*pw), s.teams[team]);
   let defLost = defenders;
   if(win){
@@ -1203,7 +1204,7 @@ function resolveBattle(s,team,now,from,to,units,tactic){
     delete s.intel.reich[to]; delete s.intel.dawn[to];
   } else {
     const dl = applyLoss(d.u,wl,s.teams[d.o]); defLost = total(dl.lost); d.u = dl.out;
-    for(const [u,n] of Object.entries(al.out)) a.u[u] = (a.u[u] || 0) + n;
+    for(const [u,n] of Object.entries(al.out)) source[u] = (source[u] || 0) + n;
   }
   return {win,sent,attLost:total(al.lost),defLost};
 }
@@ -1380,7 +1381,8 @@ CHL|Chile|CHI`.split('\n')){
   COUNTRIES[key] = {name, homes, specialty};
   for(const id of homes) HOME[id] = key;
 }
-const MAJORS = Object.keys(COUNTRIES).filter(k => COUNTRIES[k].specialty);
+const COUNTRY_IDS = Object.keys(COUNTRIES);
+const MAJORS = COUNTRY_IDS.filter(k => COUNTRIES[k].specialty);
 const countryAt = (s,id) => s.terr[id].o === 'neutral' && !TD[id].fcap ? s.terr[id].country || HOME[id] : null;
 const baseRank = k => COUNTRIES[k].specialty ? 2 : 1;
 const drillCap = k => (FRONT_MAX - baseRank(k)) * DRILLS_PER_RANK;
@@ -1394,7 +1396,8 @@ function independentHoldings(s){
   }
   return held;
 }
-const hasIndependents = s => PROVINCES.some(id => countryAt(s,id));
+const capitalOf = k => COUNTRIES[k].homes[0];
+const resistanceCap = rank => 4 + 2 * rank;
 const frontTurn = s => s?.front?.turn || 0;
 const frontDue = (s,now) => Number.isSafeInteger(now) && now >= 0 && !s.win && (!s.front || now - s.front.at >= FRONT_MS);
 function reinforce(s,id,k){
@@ -1433,49 +1436,92 @@ function trainingPace(s){
     Object.values(s.teams[t].mastery || {}).some(skills => Object.values(skills).some(n => n >= 3)) ||
     PROVINCES.filter(id => TD[id].owner0 === 'neutral' && s.terr[id].o === t).length >= 8) ? 2 : 1;
 }
-function advanceFront(s,now,expected){
+// One live post funds upkeep and capital recovery. Only a fresh two-faction
+// muster may enable unrelated expeditions. Both use the same turn budget.
+function advanceFront(s,now,expected,allowRaids = false){
   if(frontTurn(s) !== expected || !Number.isSafeInteger(expected+1) || !frontDue(s,now)) return false;
-  const holdings = independentHoldings(s);
-  if(!holdings.size) return false;
-  const f = s.front ||= {turn:0, at:0, drill:{}};
-  const targets = {reich:new Map(),dawn:new Map()}; let changed = false, reinforced = 0;
-  const pace = trainingPace(s);
-  function train(k,n){ if((f.drill[k] || 0) < drillCap(k)){ f.drill[k] = Math.min(drillCap(k),(f.drill[k] || 0) + n); changed = true; } }
-  for(const [k,ids] of holdings){
-    train(k,pace); // once per country, not once per province
-    for(const from of ids){
+  const holdings = independentHoldings(s), f = s.front ||= {turn:0, at:0, drill:{}};
+  const raids = {reich:new Map(),dawn:new Map()}, recoveries = new Map(), pace = trainingPace(s);
+  let stoodDown = false, drills = 0, reinforced = 0, mustered = 0;
+  function train(k,n){
+    const before = f.drill[k] || 0, gain = Math.min(n,drillCap(k)-before);
+    if(gain > 0){ f.drill[k] = before+gain; drills += gain; }
+  }
+  function offer(pool,k,op){ if(!pool.has(k)) pool.set(k,[]); pool.get(k).push(op); }
+  for(const k of COUNTRY_IDS){
+    const cap = capitalOf(k), fallen = !TD[cap].fcap && countryAt(s,cap) !== k;
+    train(k,pace); // once per country, including a government in exile
+    for(const from of holdings.get(k) || []){
       reinforced += reinforce(s,from,k);
+      if(!allowRaids && !fallen) continue;
       const grp = expedition(s.terr[from].u,!!COUNTRIES[k].specialty); if(!grp) continue;
       for(const {id:to,sea} of ADJ[from]){
-        const side = s.terr[to].o;
-        if(side === 'neutral' || TD[to].fcap || (sea && !grp.nav)) continue;
-        if(!targets[side].has(k)) targets[side].set(k,[]);
-        targets[side].get(k).push({from,to,grp});
+        if(TD[to].fcap || (sea && !grp.nav)) continue;
+        if(to === cap && fallen) offer(recoveries,k,{from,to,grp});
+        else if(allowRaids && sideId(s.terr[to].o)) offer(raids[s.terr[to].o],k,{from,to,grp});
       }
     }
+    if(!fallen){
+      if(f.resistance && Object.hasOwn(f.resistance,k)){ delete f.resistance[k]; stoodDown = true; }
+    } else if(!recoveries.has(k)){
+      // No legal expedition (often a one-province nation). Recruit locally;
+      // never borrow the occupier's garrison or teleport troops over a sea link.
+      const rank = frontRank(s,k), capSize = resistanceCap(rank), stock = f.resistance?.[k] || 0;
+      const n = Math.min(capSize,stock + 1 + Math.floor(rank/2));
+      (f.resistance ||= {})[k] = n; mustered += n - stock;
+      if(n === capSize) offer(recoveries,k,{to:cap,grp:{inf:n}});
+    }
   }
-  const sides = ['reich','dawn'].filter(side => targets[side].size);
-  if(sides.length){
-    // Alternate defending factions if both have a frontier. Weight countries, not
-    // their number of borders, and don't repeat the same raider if there's a choice.
+  const sides = ['reich','dawn'].filter(side => raids[side].size);
+  let k, op, recovery = false;
+  if(recoveries.size && (!sides.length || f.turn % 2 === 0)){
+    // Rotate through ready liberation fronts, including small countries. When
+    // both factions are here, leave alternate operations available for raids.
+    const i = COUNTRY_IDS.indexOf(f.lastRecovery) + 1;
+    k = [...COUNTRY_IDS.slice(i),...COUNTRY_IDS.slice(0,i)].find(key => recoveries.has(key));
+    op = pickOne(recoveries.get(k)); f.lastRecovery = k; recovery = true;
+  } else if(sides.length){
     const side = f.target && sides.includes(OTHER(f.target)) ? OTHER(f.target) : pickOne(sides);
-    const candidates = [...targets[side].keys()];
-    const pool = candidates.filter(k => candidates.length === 1 || k !== f.raider);
-    const k = pickOne(pool.flatMap(k => COUNTRIES[k].specialty ? [k,k,k] : [k]));
-    const {from,to,grp} = pickOne(targets[side].get(k));
-    const battle = resolveBattle(s,'neutral',now,from,to,grp,'frontal');
-    if(battle.win) s.terr[to].country = k;
-    f.raider = k; f.target = side; train(k,1);
-    const result = battle.win ? `captured ${TD[to].name} from ${TEAMS[side].short}` : `was repelled by ${TEAMS[side].short} at ${TD[to].name}`;
-    log(s,now,'all',`${COUNTRIES[k].name} ${result}. Expedition from ${TD[from].name}: ${battle.sent} sent, ${battle.attLost} lost; ${battle.defLost} defenders lost.`,'front',{from,tid:to,by:'neutral',country:k,win:battle.win});
-  } else if(changed || reinforced){
-    log(s,now,'all',`Independent powers held their ground. ${reinforced} reinforcements arrived; no eligible border for a sortie.`,'front');
+    const candidates = [...raids[side].keys()], pool = candidates.filter(k => candidates.length === 1 || k !== f.raider);
+    k = pickOne(pool.flatMap(k => COUNTRIES[k].specialty ? [k,k,k] : [k]));
+    op = pickOne(raids[side].get(k)); f.raider = k; f.target = side;
+  }
+  if(op){
+    const {from,to,grp} = op, side = s.terr[to].o;
+    const defender = TEAMS[side]?.short || COUNTRIES[countryAt(s,to)].name;
+    const source = from ? s.terr[from].u : {inf:f.resistance[k]};
+    const battle = resolveBattle(s,'neutral',now,from,to,grp,'frontal',source);
+    if(!from) f.resistance[k] = source.inf || 0; // survivors go back into the local reserve on defeat
+    if(battle.win){ s.terr[to].country = k; if(recovery && f.resistance) delete f.resistance[k]; }
+    train(k,1);
+    const place = TD[to].name;
+    const result = recovery ? (battle.win ? `reclaimed its capital, ${place}, from ${defender}` : `was repelled by ${defender} trying to reclaim its capital, ${place}`) :
+      (battle.win ? `captured ${place} from ${defender}` : `was repelled by ${defender} at ${place}`);
+    const route = from ? `Expedition from ${TD[from].name}` : 'Local resistance';
+    log(s,now,'all',`${COUNTRIES[k].name} ${result}. ${route}: ${battle.sent} sent, ${battle.attLost} lost; ${battle.defLost} defenders lost.`,'front',
+      {tid:to,by:'neutral',country:k,win:battle.win,...(from ? {from} : {}),...(recovery ? {recovery:true} : {})});
+  } else if(drills || reinforced || mustered || stoodDown){
+    log(s,now,'all',`Independent powers held their ground. ${drills} drills completed; ${reinforced} garrison reinforcements arrived${mustered ? `; ${mustered} joined local resistance forces` : ''}.`,'front');
   } else return false;
   f.at = now; f.turn++; return true;
 }
 
 /* ============================ STORE & REAL-TIME MULTIPLAYER ============================ */
 let frontWatch = null, db = null, S = null, mode = 'connecting', busy = false, loadTimer = null;
+// Activity belongs to this device, not the campaign. Check the deadline even
+// inside a lock: a throttled HUD timer is not evidence that a player is active.
+const AFK_MS = 5 * 60000;
+let lastInput = Date.now(), awaySent = false, pageAway = false;
+const isAway = (now = Date.now()) => pageAway || now < lastInput || now - lastInput >= AFK_MS;
+const clockText = ms => { const sec = Math.max(0,Math.ceil(ms/1000)); return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0'); };
+function noteInput(event){
+  if(pageAway || event?.isTrusted === false) return;
+  const now = Date.now(), returning = awaySent || isAway(now); lastInput = now;
+  if(returning){ awaySent = false; frontWatch?.reset(); NET.announce(); if(S) updateFrontClock(); }
+}
+function checkIdle(){
+  if(!awaySent && isAway()){ awaySent = true; frontWatch?.depart(); NET.announce(); }
+}
 const TAB = Math.random().toString(36).slice(2, 10);
 const sanitizeRoom = r => String(r || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32) || 'utsab1433-1939';
 const QSP = new URLSearchParams(location.search);
@@ -1491,7 +1537,7 @@ const cleanFbUrl = u => String(u || '').trim().replace(/\/+$/, '');
 let FB_URL = cleanFbUrl(QSP.get('fb') || (rules ? '' : (() => { try{ return localStorage.getItem('eot-fb:' + ROOM); }catch(e){ return ''; } })()));
 const NET = { status:'connecting', transport:'Starting…', peers:new Map(), reconnect:null, announce:()=>{}, destroy:null };
 const onlineList = () => {
-  const now = Date.now(), out = [{tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), self:true}];
+  const now = Date.now(), out = [{tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), afk:!!myTeam() && isAway(), self:true}];
   NET.peers.forEach((p, k) => { if(k !== TAB && now - p.ts < 42000) out.push(p); else if(now - p.ts >= 42000) NET.peers.delete(k); });
   const partner = frontWatch?.partner; if(partner && !out.some(p => p.tab === partner.tab)) out.push(partner);
   return out;
@@ -1522,8 +1568,10 @@ function validMastery(m, team){
 }
 function validFront(f){
   return f == null || (record(f) && Number.isSafeInteger(f.turn) && f.turn > 0 && Number.isSafeInteger(f.at) && f.at >= 0 &&
+    (f.lastRecovery == null || countryId(f.lastRecovery)) &&
     (f.target == null || sideId(f.target)) && (f.raider == null || countryId(f.raider)) && record(f.drill) &&
-    Object.entries(f.drill).every(([k,n]) => countryId(k) && levelIn(n,drillCap(k))));
+    Object.entries(f.drill).every(([k,n]) => countryId(k) && levelIn(n,drillCap(k))) && (f.resistance == null || (record(f.resistance) &&
+      Object.entries(f.resistance).every(([k,n]) => countryId(k) && levelIn(n,resistanceCap(frontRank({front:f},k)))))));
 }
 function validSave(p){
   return p?.v === GAME_V && Number.isSafeInteger(p.rev) && p.rev > 0 && validFront(p.front) && Number.isFinite(p.created) && Number.isFinite(p.t) &&
@@ -1577,6 +1625,7 @@ function createMqttDb(room, cached, cacheKey = room){
       const valid = validSave(st) && matchesRules(st);
       if(stateTopic){
         c.present = true; c.invalid = !valid; c.record = valid ? st : null;
+        if(c === active && (!valid || isBetterState(latest,st))) frontWatch?.reset();
         // Keep the version/revision for relay selection, even when this build can't play it.
         if(isBetterState(st, c.state)) c.state = st;
       }
@@ -1621,14 +1670,14 @@ function createMqttDb(room, cached, cacheKey = room){
       pubMqtt('sync', {type:'res', from:TAB, to:msg.from, state:observed});
     }
     if(sub === 'pres' && msg.tab && msg.tab !== TAB){
-      if(c === active) frontWatch?.leave(msg.tab, msg.bye ? null : msg.team);
+      if(c === active) frontWatch?.leave(msg.tab, msg.bye || msg.afk ? null : msg.team);
       if(msg.bye) NET.peers.delete(msg.tab);
-      else NET.peers.set(msg.tab, {tab:msg.tab, name:msg.name || 'Player', team:msg.team || null, ts:Date.now()});
+      else NET.peers.set(msg.tab, {tab:msg.tab, name:msg.name || 'Player', team:msg.team || null, afk:msg.afk === true, ts:Date.now()});
       if(S) renderHud();
     }
   }
   if(bc) bc.onmessage = e => { if(!dead && e.data) handleMsg(null, e.data.sub, e.data.obj); };
-  const announcePres = (bye = false) => pubMqtt('pres', {tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), ts:Date.now(), bye});
+  const announcePres = (bye = false) => pubMqtt('pres', {tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), afk:!!myTeam() && isAway(), ts:Date.now(), bye});
   NET.announce = () => announcePres();
   const presTimer = setInterval(() => { if(active) announcePres(); }, 15000);
   const onUnload = () => announcePres(true);
@@ -1843,9 +1892,10 @@ function createFirebaseDb(fbBase, room, cached, cacheKey = room){
     NET.status = 'live'; NET.transport = 'Firebase RTDB';
     empty = st === null;
     if(!empty && (!validSave(st) || !matchesRules(st))){
-      observed = null; onSnap?.({exists:true, data:() => st}); return;
+      frontWatch?.reset(); observed = null; onSnap?.({exists:true, data:() => st}); return;
     }
     observed = st; // This backend read must confirm the highest displayed state (latest), not just an earlier read.
+    if(!st || isBetterState(latest,st)) frontWatch?.reset();
     mode = 'live';
     emit(st, refresh);
   }
@@ -1858,7 +1908,7 @@ function createFirebaseDb(fbBase, room, cached, cacheKey = room){
     try{ observeRead(await readState()); }
     catch(e){
       if(dead || streaming || generation !== at) return;
-      NET.status = 'off'; NET.transport = 'Firebase unreachable'; mode = 'local';
+      frontWatch?.reset(); NET.status = 'off'; NET.transport = 'Firebase unreachable'; mode = 'local';
       if(!S) emit(null, true); else renderHud();
     }
   }
@@ -1876,7 +1926,7 @@ function createFirebaseDb(fbBase, room, cached, cacheKey = room){
       });
       stream.onerror = () => {
         if(dead || stream !== es) return;
-        streaming = false; NET.status = 'connecting'; NET.transport = 'Polling Firebase…'; mode = 'connecting'; renderHud(); poll();
+        frontWatch?.reset(); streaming = false; NET.status = 'connecting'; NET.transport = 'Polling Firebase…'; mode = 'connecting'; renderHud(); poll();
       };
     }catch(e){ poll(); }
   }
@@ -2010,122 +2060,150 @@ async function act(name, payload){
   }catch(e){ toast(e && e.code === 'not_granted' || (e && /permission|denied/i.test(e.message || '')) ? 'You can look but not play. Ask the owner for contributor access.' : ('Order failed: ' + (e && e.message || e)), 'bad'); }
   finally{ busy = false; renderAll(); }
 }
-// Two-way, room-scoped muster. A roster entry or a recently cached "online" dot
-// is not a quorum. Reich issues a short-lived unique challenge; Dawn must answer
-// it from a live copy of this campaign. No passwords are sent. On document stores
-// two small, replaceable mailboxes suffice regardless of the number of tabs.
+// A local live streak is enough for upkeep. A separate, optional two-way
+// muster permits ordinary raids; an online dot is never authority for either.
 const MUSTER_MS = 5000, SIGNAL_LIFE = 18000;
 let frontWrite = null;
-// A stalled presence read/lock must not wedge player orders. Only bound reads;
-// never declare an in-flight state publication cancelled or blindly retry it.
+// Bound reads, never cancel/replay an in-flight publication.
 function readBy(promise,deadline){
   let timer;
   const limit = new Promise((_,reject) => { timer = setTimeout(() => reject(Error('Room confirmation timed out.')),Math.max(0,deadline-Date.now())); });
   return Promise.race([promise,limit]).finally(() => clearTimeout(timer));
 }
 function createFrontWatch(store,bus){
-  let since = null, last = 0, peer = null, pending = null, serial = 0, received = '', identity = '', campaign = null;
-  let readNo = 0, readAt = null, restUntil = 0, trouble = false, signalError = false;
-  const usable = (st=S) => store === db && (!!st && S?.created === st.created) && mode === 'live' && NET.status === 'live' &&
-    sawSavedRoom && bus.ready() && !st.win && hasIndependents(st) && !classicWithRanks(st) && !!me.ph && me.name !== '__spectator' &&
+  let since = null, last = 0, pairSince = null, pairLast = 0, peer = null, other = null;
+  let pulse = null, pending = null, received = '', serial = 0, epoch = 0, reading = null;
+  let identity = '', campaign = null, restUntil = 0, trouble = false, signalError = false;
+  const usable = (st=S) => store === db && !!st && S?.created === st.created && mode === 'live' && NET.status === 'live' &&
+    sawSavedRoom && bus.ready() && !st.win && !classicWithRanks(st) && !isAway() && !!me.ph && me.name !== '__spectator' &&
     !!st.players[me.name] && expectedPw(me.name,st) === me.ph;
-  function reset(){ since = null; peer = pending = null; last = restUntil = 0; received = ''; readNo++; readAt = null; trouble = false; }
+  const fresh = at => Date.now() >= at && Date.now()-at <= SIGNAL_LIFE;
+  function unpair(){ pairSince = null; other = peer = pending = null; received = ''; }
+  function reset(){ epoch++; unpair(); since = pulse = reading = null; last = restUntil = 0; trouble = signalError = false; }
   function self(){
     if(!usable()){ reset(); return null; }
     const team = S.players[me.name].team, key = team + ':' + me.name;
-    if(key !== identity || campaign !== S.created){ reset(); identity = key; campaign = S.created; }
+    if(key !== identity || campaign !== S.created || (since !== null && !fresh(last))){ reset(); identity = key; campaign = S.created; }
     return team;
   }
-  const joint = () => since !== null && Date.now() >= last && Date.now()-last <= SIGNAL_LIFE && usable() &&
-    S.created === campaign && identity === myTeam()+':'+me.name && S.players[peer?.name]?.team === OTHER(myTeam());
+  const active = () => since !== null && fresh(last) && usable() && S.created === campaign && identity === myTeam()+':'+me.name;
+  const joint = () => active() && pairSince !== null && fresh(pairLast) && peer.until > Date.now() && S.players[peer.name]?.team === OTHER(myTeam());
   const dueAt = () => Math.max(restUntil, Math.max(since ?? Date.now(), S?.front?.at || 0) + FRONT_MS);
-  function paired(msg,now){
-    if(since === null || now < last || now-last > SIGNAL_LIFE) since = now;
-    signalError = false; last = now; peer = {name:msg.name,tab:msg.tab,team:msg.team};
+  const pairDue = () => Math.max(dueAt(), (pairSince ?? Date.now()) + FRONT_MS);
+  function here(){ last = Date.now(); since ??= last; signalError = false; }
+  function paired(msg){
+    if(pairSince === null || !fresh(pairLast) || peer.until <= Date.now()) pairSince = Date.now();
+    pairLast = Date.now(); peer = {name:msg.name,tab:msg.tab,team:msg.team,until:msg.until};
   }
-  function signal(team,token,to){ return {v:1,team,tab:TAB,name:me.name,created:S.created,rev:S.rev,origin:S.origin || '',turn:frontTurn(S),at:Date.now(),token,to}; }
+  function signal(team,to,token){ const at = Date.now(); return {v:2,team,tab:TAB,name:me.name,created:S.created,rev:S.rev,origin:S.origin || '',turn:frontTurn(S),at,until:lastInput+AFK_MS,token:token || TAB+':'+(++serial)+':'+at,to}; }
   function send(msg){
+    const gen = epoch;
     Promise.resolve().then(() => {
-      if(self() === msg.team && campaign === msg.created && S.rev === msg.rev && me.name === msg.name) return bus.send(msg);
-    }).catch(() => { reset(); signalError = true; });
+      if(self() === msg.team && gen === epoch && S.rev === msg.rev) return bus.send(msg);
+    }).catch(() => { if(gen === epoch){ reset(); signalError = true; } });
+  }
+  const matches = (st,m) => st.created === m.created && st.rev === m.rev && (st.origin || '') === m.origin && frontTurn(st) === m.turn;
+  function validPeer(msg,team){
+    return msg?.v === 2 && !msg.bye && msg.team === OTHER(team) && msg.tab !== TAB && typeof msg.tab === 'string' &&
+      typeof msg.token === 'string' && !!msg.token && typeof msg.name === 'string' && S.players[msg.name]?.team === msg.team &&
+      matches(S,msg) && Number.isFinite(msg.at) && Math.abs(Date.now()-msg.at) <= SIGNAL_LIFE &&
+      Number.isFinite(msg.until) && msg.until > Date.now() && msg.until <= msg.at + AFK_MS;
   }
   function receive(msg){
-    const team = self(), now = Date.now();
-    if(msg?.bye && msg.created === campaign){ leave(msg.tab,null); return; }
-    if(!team || msg?.v !== 1 || msg.team !== OTHER(team) || msg.tab === TAB || typeof msg.tab !== 'string' ||
-      typeof msg.token !== 'string' || !msg.token || typeof msg.name !== 'string' || S.players[msg.name]?.team !== msg.team ||
-      msg.name === me.name || msg.created !== campaign || msg.rev !== S.rev || msg.origin !== (S.origin || '') || msg.turn !== frontTurn(S) || !Number.isFinite(msg.at) || Math.abs(now-msg.at)>SIGNAL_LIFE) return;
+    const team = self(); if(!team || msg?.v !== 2) return;
+    if(msg.bye && msg.created === campaign){ leave(msg.tab,null); return; }
+    // MQTT: only the selected broker can deliver this tab's current non-retained
+    // echo. Document stores confirm the same local streak with successful reads.
+    if(!bus.read && pulse && msg.tab === TAB && msg.token === pulse.token && msg.to === pulse.to &&
+      matches(S,msg) && matches(S,pulse) && msg.name === me.name && msg.team === team && msg.at === pulse.at && fresh(pulse.at)){
+      pulse = null; here(); trySolo(); return;
+    }
+    if(!validPeer(msg,team)) return;
+    other = msg; // can yield to a different pair, never grants permission to raid
     if(team === 'dawn'){
       if(msg.to !== 'dawn' || received === msg.token) return;
-      received = msg.token; paired(msg,now); send(signal(team,msg.token,msg.tab));
+      received = msg.token; paired(msg); send(signal(team,msg.tab,msg.token));
     } else {
-      if(!pending || pending.used || pending.rev !== msg.rev || msg.to !== TAB || msg.token !== pending.token || now < pending.at || now-pending.at>SIGNAL_LIFE) return;
-      pending.used = true; paired(msg,now);
-      // An answer to a pre-deadline heartbeat can keep the clock alive, but can
-      // never authorize a turn. Require a new round trip AFTER the full interval.
-      if(pending.at >= dueAt() && !busy && !frontWrite){
-        const job = frontWrite = commit(msg,identity,since,now).finally(() => { if(frontWrite === job) frontWrite = null; });
-      }
+      if(!pending || pending.used || pending.rev !== msg.rev || msg.to !== TAB || msg.token !== pending.token || !fresh(pending.at)) return;
+      pending.used = true; paired(msg);
+      // Pre-deadline challenges cannot authorize a later expansion raid.
+      if(joint() && pending.at >= pairDue()) start(msg);
     }
   }
-  async function commit(proof,who,start,ackAt){
-    const permitted = st => usable(st) && joint() && identity === who && since === start && peer.tab === proof.tab &&
-      S.rev === proof.rev && (S.origin || '') === proof.origin && (st.origin || '') === proof.origin && !isBetterState(S,st) &&
-      Date.now()-ackAt <= MUSTER_MS && Date.now() >= ackAt && Date.now() >= dueAt() && st.created === proof.created && st.rev === proof.rev &&
-      st.players[me.name].team === 'reich' && st.players[proof.name]?.team === 'dawn' && frontTurn(st) === proof.turn && frontDue(st,Date.now());
+  function trySolo(){
+    const now = Date.now(); if(!active() || now < dueAt()) return;
+    // Give a ready pair one short round-trip window. An absent, slow or AFK
+    // opponent can never indefinitely hold up rebuilding or capital recovery.
+    if(other && now < Math.min(other.until,other.at+SIGNAL_LIFE,dueAt()+5*MUSTER_MS)) return;
+    start(null);
+  }
+  function start(proof){
+    if(busy || frontWrite) return;
+    const ticket = {created:S.created,rev:S.rev,origin:S.origin || '',turn:frontTurn(S),team:myTeam(),gen:epoch};
+    const job = frontWrite = commit(ticket,proof,Date.now()).finally(() => { if(frontWrite === job) frontWrite = null; });
+  }
+  async function commit(ticket,proof,at){
+    const permitted = st => active() && epoch === ticket.gen && usable(st) && matches(S,ticket) && matches(st,ticket) &&
+      Date.now() >= at && Date.now()-at <= MUSTER_MS && Date.now() >= dueAt() && frontDue(st,Date.now()) && st.players[me.name].team === ticket.team &&
+      (!proof || (joint() && Date.now() >= pairDue() && peer.tab === proof.tab && proof.until > Date.now() && st.players[proof.name]?.team === 'dawn'));
     if(!permitted(S)) return;
     busy = true;
     try{
-      const {ref,remote,expires} = await readBy(lockedState(store,true),ackAt+MUSTER_MS); // low priority: yield a contended lock to the players
-      if(!remote || !permitted(remote)) return;
-      if(bus.read){ // A leave, superseding answer or sign-out may have arrived while acquiring the lock.
+      const {ref,remote,expires} = await readBy(lockedState(store,true),at+MUSTER_MS);
+      if(!remote || !permitted(remote) || Date.now() >= expires) return;
+      if(proof && bus.read){
         const ack = await readBy(bus.read('dawn'),expires);
-        // There are many tabs but only one Dawn mailbox. The same live player
-        // replying to a *newer* challenge confirms presence too; don't starve a
-        // valid, already-matched proof just because another Reich tab challenged.
-        if(ack?.v !== 1 || ack.bye || ack.team !== 'dawn' || ack.created !== proof.created || ack.origin !== proof.origin || ack.turn !== proof.turn || ack.rev !== proof.rev ||
-          ack.name !== proof.name || ack.tab !== proof.tab || !Number.isFinite(ack.at) || ack.at < proof.at || Math.abs(Date.now()-ack.at)>SIGNAL_LIFE) return;
+        // Two Reich tabs may share one Dawn mailbox. A newer answer from the
+        // same still-active player at this revision confirms the matched proof.
+        if(!validPeer(ack,ticket.team) || ack.name !== proof.name || ack.tab !== proof.tab || ack.at < proof.at) return;
       }
       if(!permitted(remote) || Date.now() >= expires) return;
       const next = clone(remote), now = Date.now();
-      tick(next,now); checkWin(next,now); // settle the old owners' income before changing the border
-      if(next.win || !advanceFront(next,now,proof.turn)){ restUntil = now + FRONT_MS; return; }
-      if(!permitted(remote) || Date.now() >= expires) return;
+      tick(next,now); checkWin(next,now); // settle the old owners' income first
+      if(next.win || !advanceFront(next,now,ticket.turn,!!proof)){ restUntil = now + FRONT_MS; return; }
       checkWin(next,now); next.rev = nextRevision(remote.rev); next.origin = TAB;
+      if(!permitted(remote) || Date.now() >= expires) return;
       await ref.set(next);
       if(store !== db || isBetterState(S,next)) return;
       S = next; trouble = false;
       if(S.log[0]?.kind === 'front') toast(S.log[0].msg);
-    }catch(_){ if(store === db) trouble = true; } // Never replay or publish an offline simulation.
+    }catch(_){ if(store === db) trouble = true; }
     finally{ if(store === db){ busy = false; renderAll(); } }
   }
   async function poll(){
     const team = self(); if(!team) return;
-    const now = Date.now();
-    if(since !== null && (now < last || now-last > SIGNAL_LIFE)) reset();
-    if(readAt !== null && now >= readAt && now-readAt < SIGNAL_LIFE) return;
-    const id = ++readNo, who = identity; readAt = now;
+    if(!bus.read){
+      if(pulse && matches(S,pulse) && fresh(pulse.at)) return; // allow a slow, still-live echo to finish
+      const challenge = team === 'reich' && (!pending || pending.used || !matches(S,pending) || !fresh(pending.at));
+      pulse = signal(team,challenge ? 'dawn' : 'here');
+      if(challenge) pending = pulse;
+      send(pulse); return;
+    }
+    if(reading) return;
+    const read = reading = {}, gen = epoch;
     try{
-      if(bus.read){
-        const msg = await bus.read(OTHER(team));
-        if(id !== readNo || self() !== team || who !== identity) return;
-        receive(msg);
+      const msg = await readBy(bus.read(OTHER(team)), Date.now()+SIGNAL_LIFE);
+      if(self() !== team || gen !== epoch) return;
+      here(); receive(msg);
+      if(team === 'reich' && (!pending || pending.used || pending.rev !== S.rev || !fresh(pending.at))){
+        pending = signal(team,'dawn'); send(pending);
       }
-      if(team === 'reich' && (!pending || pending.used || pending.rev !== S.rev || now-pending.at >= SIGNAL_LIFE)){
-        pending = signal(team, TAB + ':' + (++serial) + ':' + now, 'dawn'); send(pending);
-      }
-    }catch(_){ if(id === readNo){ reset(); signalError = true; } }
-    finally{ if(id === readNo) readAt = null; }
+      trySolo();
+    }catch(_){ if(gen === epoch){ reset(); signalError = true; } }
+    finally{ if(reading === read) reading = null; }
   }
-  function leave(tab,team){ if(peer?.tab === tab && peer.team !== team) reset(); }
+  function leave(tab,team){
+    if(other?.tab === tab && other.team !== team) other = null;
+    if(peer?.tab === tab && peer.team !== team) unpair();
+  }
   function depart(){
-    if(usable() && (peer || pending)){
-      const msg = {...signal(myTeam(),'leave','all'),bye:true};
-      try{ Promise.resolve(bus.send(msg)).catch(() => {}); }catch(_){} // Best-effort only. Expiry/nonce checks do not depend on it.
+    const team = myTeam();
+    if(store === db && mode === 'live' && bus.ready() && team && (peer || pending || pulse)){
+      try{ Promise.resolve(bus.send({...signal(team,'all'),bye:true})).catch(() => {}); }catch(_){}
     }
     reset();
   }
-  return {receive,poll,reset,leave,depart,joint,dueAt,ready:usable,get trouble(){return trouble;},get signalError(){return signalError;},get partner(){return joint() ? peer : null;}};
+  return {receive,poll,reset,leave,depart,active,joint,dueAt,ready:usable,get trouble(){return trouble;},get signalError(){return signalError;},get partner(){return joint() ? peer : null;}};
 }
 
 let bootId = 0;
@@ -2167,6 +2245,7 @@ async function boot(prepared = null){
     if(cap){
       NET.status = 'live'; NET.transport = 'Claude Shared DB';
       sharedLive = !!st && validSave(st) && matchesRules(st) && !isBetterState(lastShared,st) && !isBetterState(cached,st);
+      if(!sharedLive) frontWatch?.reset();
       if(st && (isBetterState(lastShared, st) || (sawSavedRoom && isBetterState(S, st)))) return;
       if(st) lastShared = st;
     }
@@ -2183,7 +2262,7 @@ async function boot(prepared = null){
     if(st) S = clone(st); else if(!S && !inMastery()) S = newGame(Date.now());
     if(first || st?.origin === TAB) seen = Date.now(); else announce();
     renderAll();
-  }, () => { if(id === bootId){ mode = 'error'; NET.status = 'off'; renderAll(); } });
+  }, () => { if(id === bootId){ frontWatch?.reset(); mode = 'error'; NET.status = 'off'; renderAll(); } });
   if(cap && typeof unsub === 'function') NET.destroy = unsub;
   const shared = db;
   const mailbox = team => shared.doc('game/muster-' + team);
@@ -2293,10 +2372,14 @@ function projectedEconomy(){
 function roomPillHtml(){
   const n = onlineList().length;
   const cls = NET.status === 'live' ? 'live' : (NET.status === 'connecting' ? 'conn' : 'off');
-  const lbl = NET.status === 'live' ? (backend === 'mqtt' ? `Live · ${n} online` : 'Live') : (NET.status === 'connecting' ? (S ? 'Syncing…' : 'Connecting…') : 'Offline');
+  const lbl = NET.status === 'live' ? (backend === 'mqtt' ? `Live · ${n} connected` : 'Live') : (NET.status === 'connecting' ? (S ? 'Syncing…' : 'Connecting…') : 'Offline');
   return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)}"><span class="sdot ${cls}"></span><span>${inMastery() ? 'Mastery' : 'Classic'} · ${lbl}</span></button>`;
 }
 function renderHud(){
+  if(M === 'room'){
+    const roster = $('#room-presence'), html = roomPresenceHtml();
+    if(roster && roster.innerHTML !== html) roster.innerHTML = html;
+  }
   if(!S){ $('#banner').innerHTML = ''; $('#hud').innerHTML = ''; $('#score').innerHTML = ''; $('#me').innerHTML = `${roomPillHtml()}<span class="mut sm">${mode === 'error' ? 'Cannot reach the war room.' : mode === 'incompatible' ? 'Incompatible save format.' : mode === 'slow' ? 'Still connecting…' : inMastery() && mode === 'live' ? 'Awaiting mastery session' : 'Connecting…'}</span>`; return; }
   const t = myTeam(), team = t || 'reich', P = projectedEconomy(), inc = income(S, team);
   refreshPrices(P);
@@ -2308,6 +2391,7 @@ function renderHud(){
   const T = P.teams[team], rate = r => S.win ? 'War ended' : '+' + inc[r].toFixed(1) + '/min';
   $('#hud').innerHTML = (t ? '' : `<div class="hudcell"><span class="k">Spectating</span></div>`) + RK.map(r => `<div class="hudcell"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
     `<div class="hudcell cp"><span class="k">Command</span><span class="v">${Math.floor(T.cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${T.cp / CPMAX * 100}%"></i></span></div>` +
+    (t ? `<div class="hudcell" title="Five minutes without input marks this device away. AFK players do not count toward World front operations."><span class="k">${isAway() ? 'AFK' : 'AFK in'}</span><span>${isAway() ? 'Interact to return' : clockText(lastInput+AFK_MS-Date.now())}</span></div>` : '') +
     (busy ? `<div class="hudcell"><span class="k">Sending orders…</span></div>` : '');
   let b = '';
   if(S.win) b = `<div class="banner win" style="color:${tcol(S.win.team)}">${TEAMS[S.win.team].name} wins. <span style="font-family:var(--body);font-size:14px;text-transform:none;letter-spacing:0;color:var(--ink)">${esc(S.win.why)}</span></div>`;
@@ -2611,52 +2695,55 @@ function panelLog(){ const t = myTeam(); const rows = S.log.filter(l => l.vis ==
 const DOCTRINE_NAME = {arm:'Armored reserves',air:'Expeditionary air wings',nav:'Ocean fleets',art:'Artillery reserves'};
 const RANK_NUM = ['','I','II','III','IV','V'];
 function frontStatus(){
-  const active = !!frontWatch?.joint();
   if(S.win) return ['Campaign ended','All independent operations have stopped.'];
-  if(mode !== 'live' || NET.status !== 'live') return ['Signals offline','No live room confirmation. Independent armies are paused.'];
-  if(!hasIndependents(S)) return ['Front closed','No independent country still holds a province.'];
+  if(mode !== 'live' || NET.status !== 'live') return ['Signals offline','This device cannot run an independent operation without live room confirmation.'];
   if(!myTeam()) return ['Observer','Only signed-in faction players activate the front. Spectators do not count.'];
+  if(isAway()) return ['AFK on this device','Move, tap or press a key to return. Other active players can still run operations.'];
   if(classicWithRanks(S)) return ['Orders paused','Continue this campaign in Mastery to preserve its existing ranks.'];
   if(!frontWatch?.ready()) return ['Awaiting live save','The front needs a confirmed campaign. In a new room, make a player order first.'];
-  if(!active && frontWatch.signalError) return ['Signal unavailable','Cannot confirm faction presence. Check room connectivity and permission to read and write the muster channel.'];
-  if(!active) return ['On standby',`Waiting for this device to confirm a ${TEAMS[OTHER(myTeam())].short} player. No attacks, rebuilding or training while unpaired.`];
-  const seconds = Math.max(0,Math.ceil((frontWatch.dueAt()-Date.now())/1000));
-  return ['Both factions online',frontWatch.trouble ? 'Waiting for a confirmed room turn; player orders take priority.' : seconds ? `Next operation in ${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}.` : 'Confirming the next operation with both factions…'];
+  if(!frontWatch.active()) return frontWatch.signalError ? ['Signal unavailable','Cannot confirm live activity. Check room connectivity and muster permissions.'] : ['Checking in','Confirming this post with the live room…'];
+  const left = frontWatch.dueAt()-Date.now();
+  return [frontWatch.joint() ? 'Both factions online' : 'Active player online',frontWatch.trouble ? 'Waiting for the room lock or save confirmation; player orders take priority.' : left > 0 ? `Next operation in ${clockText(left)}.` : 'Confirming the next operation…'];
 }
 function updateFrontClock(){
   if(!S || tab !== 'front') return;
   const [label,detail] = frontStatus();
   for(const [id,text] of [['#front-signal',label],['#front-countdown',detail]]){ const el = $(id); if(el && el.textContent !== text) el.textContent = text; }
-  $('#front-signal')?.classList.toggle('on',!!frontWatch?.joint());
+  $('#front-signal')?.classList.toggle('on',!!frontWatch?.active());
 }
 function panelFront(){
   const [label,detail] = frontStatus(), turn = frontTurn(S);
   const held = independentHoldings(S);
-  const point = k => held.get(k)?.includes(COUNTRIES[k].homes[0]) ? COUNTRIES[k].homes[0] : held.get(k)?.[0];
+  const occupied = COUNTRY_IDS.filter(k => countryAt(S,capitalOf(k)) !== k);
+  const point = k => held.get(k)?.includes(capitalOf(k)) ? capitalOf(k) : held.get(k)?.[0] || capitalOf(k);
   const roster = MAJORS.map(k => {
     const power = COUNTRIES[k], level = frontRank(S,k), n = held.get(k)?.length || 0;
-    const marks = Array.from({length:FRONT_MAX},(_,i)=>`<i class="${i < level && n ? 'trained' : ''}"></i>`).join('');
+    const marks = Array.from({length:FRONT_MAX},(_,i)=>`<i class="${i < level ? 'trained' : ''}"></i>`).join('');
     const key = point(k), drill = (S.front?.drill[k] || 0) % DRILLS_PER_RANK;
     return `<article class="power-row"><span class="power-code" aria-hidden="true">${k}</span><div><h4>${power.name}</h4><div class="sm mut">${DOCTRINE_NAME[power.specialty]} · ${n} independent ${n===1?'province':'provinces'}</div></div>
-      <div class="power-rating"><span>${!n ? 'Conquered' : 'Rank '+RANK_NUM[level]}</span><span class="power-marks" aria-hidden="true">${marks}</span></div>
-      ${key ? `<div class="power-foot"><span>${level === FRONT_MAX ? 'Fully trained' : `Training ${drill}/${DRILLS_PER_RANK} toward rank ${RANK_NUM[level+1]}`}</span><button class="btn sm" data-act="goto" data-id="${key}" aria-label="Locate ${power.name} on the map">Locate ↗</button></div>` : ''}</article>`;
+      <div class="power-rating"><span>${!n ? 'In exile · ' : ''}Rank ${RANK_NUM[level]}</span><span class="power-marks" aria-hidden="true">${marks}</span></div>
+      <div class="power-foot"><span>${level === FRONT_MAX ? 'Fully trained' : `Training ${drill}/${DRILLS_PER_RANK} toward rank ${RANK_NUM[level+1]}`}</span><button class="btn sm" data-act="goto" data-id="${key}" aria-label="Locate ${power.name} on the map">Locate ↗</button></div></article>`;
   }).join('');
   const minor = [...held.keys()].filter(k=>!COUNTRIES[k].specialty).sort((a,b)=>COUNTRIES[a].name.localeCompare(COUNTRIES[b].name));
   const report = S.log.find(l=>l.kind === 'front');
   return `<section class="card front-hero"><div class="front-brow">Field intelligence <span>OP / ${String(turn).padStart(3,'0')}</span></div>
     <h2>World front</h2><p>Beyond the two factions, independent armies are fighting for their own borders.</p>
-    <div class="front-watch"><b id="front-signal" class="${frontWatch?.joint()?'on':''}">${label}</b><span class="sm" id="front-countdown">${detail}</span></div></section>
-    <section class="card dispatch"><h3>Latest dispatch</h3>${report ? `<small class="mut mono">${new Date(report.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small><p>${esc(report.msg)}</p>${Object.hasOwn(TD,report.tid) ? `<button class="btn sm" data-act="goto" data-id="${esc(report.tid)}">Show battle on map ↗</button>`:''}` : '<p>No operations yet. The first turn needs 90 seconds with a player from each faction online.</p>'}</section>
+    <div class="front-watch"><b id="front-signal" class="${frontWatch?.active()?'on':''}">${label}</b><span class="sm" id="front-countdown">${detail}</span></div></section>
+    <section class="card dispatch"><h3>Latest dispatch</h3>${report ? `<small class="mut mono">${new Date(report.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small><p>${esc(report.msg)}</p>${Object.hasOwn(TD,report.tid) ? `<button class="btn sm" data-act="goto" data-id="${esc(report.tid)}">Show battle on map ↗</button>`:''}` : '<p>No operations yet. The first turn needs 90 seconds with one active player from either faction.</p>'}</section>
+    <details class="card sm"><summary>Occupied national capitals (${occupied.length})</summary><div class="chips" style="margin-top:8px">${occupied.map(k=>{
+      const cap = capitalOf(k), stock = S.front?.resistance?.[k] || 0;
+      return `<button class="chip" data-act="goto" data-id="${cap}">${COUNTRIES[k].name} · ${TD[cap].name}${stock ? ` · Resistance ${stock}/${resistanceCap(frontRank(S,k))}` : ''}</button>`;
+    }).join('') || 'All independent capitals are home-held.'}</div></details>
     <section class="power-list"><div class="front-brow">Major powers <span>Force readiness</span></div>${roster}</section>
     <details class="card sm"><summary>Other independent countries (${minor.length})</summary><div class="chips" style="margin-top:8px">${minor.map(k=>`<button class="chip" data-act="goto" data-id="${point(k)}">${COUNTRIES[k].name} · ${RANK_NUM[frontRank(S,k)]}</button>`).join('') || 'None remaining.'}</div></details>
-    <div class="card sm"><h3>Rules of engagement</h3>After 90 seconds with both factions present, independent countries can replenish surviving garrisons and train. Major powers field specialist units and rebuild faster. One army may sortie into a neighboring player province; sea routes need a fleet. The two faction HQs are off limits. Captured lands stop rebuilding for their former owners. Training doubles while either faction holds eight originally independent provinces or has a doctrine or mastery ability at rank III or higher. Leaving pauses operations; missed turns never stack.</div>`;
+    <div class="card sm"><h3>Rules of engagement</h3>One active player from either faction keeps the 90-second clock running. Independent countries train, reinforce their own garrisons and fight for occupied home capitals. If no army can reach its capital, local resistance recruits there, even in exile. A full reserve can challenge the occupier; victory is not automatic. Other border raids need both factions active. At most one battle happens per turn. Sea expeditions need a fleet, and neither faction HQ is a target. Major powers rebuild faster; training doubles if either faction holds eight originally independent provinces or reaches rank III in doctrine or mastery. After five minutes without input, this device is AFK and stops counting. Missed turns never stack.</div>`;
 }
 
 function panelRules(){
   const hdr = Object.keys(STANCES).map(k => `<th>${STANCES[k]}</th>`).join('');
   return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>Capture the enemy capital: <b>Berlin</b> or <b>Bucharest</b>. Instant victory.</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of all victory points for 45 minutes.</li><li>Or leave the enemy without land.</li></ul></div>
   <div class="card sm"><h3>Resources and time</h3>Every province you own pays its resource every minute (Industry raises it). Command points refill one per 90 seconds, up to ${CPMAX}. Moves cost 1, recruiting 1, attacks 2, spies 2.</div>
-  <div class="card sm"><h3>Independent countries</h3>With a signed-in player from each faction online, neutral countries can rebuild, train and attack across connected borders. Open <button class="btn sm" data-act="tab" data-k="front">World front</button> for the live clock, readiness and latest dispatch. Nothing accumulates offline.</div>
+  <div class="card sm"><h3>Independent countries</h3>With one active player online, independent countries train, rebuild and try to reclaim their national capitals. Other raids require both factions. Five minutes without input marks a post AFK until its player interacts again. Open <button class="btn sm" data-act="tab" data-k="front">World front</button> for the live clock, readiness and latest dispatch. Nothing accumulates offline.</div>
   <div class="card sm"><h3>Troop mastery</h3>Faction doctrines unlock formations. In Research → Troop mastery, choose a formation to improve its Attack, Defense or Vitality. Its role talent needs Attack and Defense at the rank you want to buy; tactic talents also need the matching doctrine. Each ability has five ranks and only affects the selected formation.</div>
   <div class="card sm"><h3>Attacking</h3>Pick a source province that borders the target, choose units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Water crossings need a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
   <div class="card sm"><h3>Tactics beat postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div><p class="mut" style="margin:6px 0 0">A tactic multiplies only the matching units. A defender's posture is hidden until you scout. Neutral lands have a fixed hidden posture.</p></div>
@@ -2688,17 +2775,20 @@ function roomUrl(r = ROOM, fb = FB_URL){
   if(rules){ u.searchParams.set('rules', rules); if(via) u.searchParams.set('via', via); }
   return u.toString();
 }
+function roomPresenceHtml(){
+  const peers = onlineList();
+  const peerHtml = peers.map(p => {
+    const name = p.team && S?.players[p.name]?.team === p.team ? postView(S.players,p.name).name : p.name;
+    return `<span class="chip"><span class="dot" style="background:${p.team ? tcol(p.team) : 'var(--mute)'}"></span>${esc(name)}${p.self ? ' (you)' : ''}${p.afk ? ' · AFK' : ''}</span>`;
+  }).join('');
+  return `<h3>${backend === 'mqtt' ? 'Connected devices' : 'Confirmed here'} (${peers.length})</h3><div class="pres">${peerHtml}</div>`;
+}
 function renderModal(refreshBudget = true){
   if(M === 'room'){
-    const peers = onlineList();
-    const peerHtml = peers.map(p => {
-      const name = p.team && S?.players[p.name]?.team === p.team ? postView(S.players,p.name).name : p.name;
-      return `<span class="chip"><span class="dot" style="background:${p.team ? tcol(p.team) : 'var(--mute)'}"></span>${esc(name)}${p.self ? ' (you)' : ''}</span>`;
-    }).join('');
     $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="War Room">
       <h2>${inMastery() ? 'Mastery' : 'Classic'} War Room · ${esc(ROOM)}</h2>${inMastery() ? '<div class="sm mut">Use this invite for mastery games. Classic is separate. <button class="btn sm" data-act="classicroom">Back to Classic</button></div>' : ''}
       <div class="sm mut">Status: <b style="color:${NET.status === 'live' ? 'var(--ok)' : NET.status === 'connecting' ? 'var(--dawn)' : 'var(--bad)'}">${esc(NET.transport)}</b>${S ? ` · Revision #${S.rev || 1}` : ''}</div>
-      <div class="card sm"><h3>${backend === 'mqtt' ? 'Online now' : 'Confirmed here'} (${peers.length})</h3><div class="pres">${peerHtml}</div></div>
+      <div class="card sm" id="room-presence">${roomPresenceHtml()}</div>
       <div class="card sm"><h3>Invite friends</h3><div class="row"><input type="text" readonly id="roomlink" value="${esc(roomUrl())}" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn pri sm" data-act="copyroom">Copy link</button></div><div class="mut sm" style="margin-top:6px">Share this link so everyone joins the same live war room (100% free real-time sync).</div></div>
       <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" value="${esc(ROOM)}" placeholder="room-code" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New random</button></div></div>
       <details class="card sm"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
@@ -2878,7 +2968,7 @@ document.addEventListener('click', e => {
       else { await sleep(1200); PWERR = 'Wrong password.'; renderModal(); }
     }).catch(() => { PWERR = 'This browser cannot check passwords.'; renderModal(); });
   }
-  if(a === 'spectate'){ frontWatch?.depart(); me.name = '__spectator'; PWASK = null; M = null; NET.announce(); renderAll(); return; }
+  if(a === 'spectate'){ frontWatch?.depart(); me.name = '__spectator'; me.ph = null; try{ localStorage.setItem('eot-me', me.name); localStorage.removeItem('eot-ph'); }catch(_){} PWASK = null; M = null; NET.announce(); renderAll(); return; }
   if(a === 'closem'){ closeModal(); renderAll(); return; }
   if(!S) return;
   if(a === 'open'){ const team = myTeam(); if(d.m === 'move') M = {mode:'move', from:sel, to:null, grp:{}, tactic:'frontal'}; else M = d.to ? {mode:'attack', from:null, to:d.to, grp:{}, tactic:'frontal'} : {mode:'attack', from:sel, to:null, grp:{}, tactic:'frontal'};
@@ -2945,10 +3035,12 @@ svg.addEventListener('wheel', e => { e.preventDefault(); const r = svg.getBoundi
 window.addEventListener('resize', setVB);
 
 /* Presence is ephemeral: the simulation clock is never part of tick() or a HUD projection. */
-window.addEventListener('pagehide', () => frontWatch?.depart());
+for(const event of ['pointerdown','pointermove','keydown','wheel','click','input']) document.addEventListener(event,noteInput,{capture:true,passive:true});
+window.addEventListener('pagehide', () => { pageAway = true; checkIdle(); });
+window.addEventListener('pageshow', () => { if(pageAway){ pageAway = false; noteInput(); } });
 setInterval(() => frontWatch?.poll(), MUSTER_MS);
 /* clock: live resource display and delayed domination check */
-setInterval(() => { if(!S) return; renderHud(); updateFrontClock(); if(mode === 'live' && S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
+setInterval(() => { checkIdle(); if(!S) return; renderHud(); updateFrontClock(); if(mode === 'live' && S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
 setInterval(() => { if(S && tab === 'council' && ui.councilView === 'posts') { const el = document.activeElement; if(!(el && el.matches && el.matches('input,select'))) renderPanel(); } }, 5000);
 
 buildBase(); setVB(); renderMapnav();
