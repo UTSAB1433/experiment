@@ -11,11 +11,11 @@ const app = new vm.Script(inline, {filename: 'index.html'});
 const inspect = names =>
   new vm.Script(inline.replace('window.__eot = {', `window.__eot = {${names.join(',')},`));
 const room = 'sync-test',
-  key = 'eot-live-state:' + room;
-const prefix = 'lands-eot/v1/' + room + '/';
-const RULES = 'mastery-1',
+  RULES = 'mastery-1',
   masterWire = room + ':' + RULES,
-  masterKey = key + ':' + RULES + '|mqtt|emqx';
+  key = 'eot-live-state:' + masterWire,
+  masterKey = key + '|mqtt|emqx',
+  prefix = 'lands-eot/v1/' + masterWire + '/';
 const ceiling = {man: 10000, gold: 10000, steel: 10000, oil: 10000};
 const flush = () => new Promise(resolve => setImmediate(resolve));
 // Advance the virtual clock in sub-lease steps, allowing the subscription warmup,
@@ -75,7 +75,7 @@ function launch({
   EventSource,
   timers,
   random,
-  rules,
+  rules = RULES,
   via,
   relay,
   storedFb,
@@ -239,6 +239,7 @@ function launch({
       removeItem: k => storage.delete(k)
     },
     ...(random && {Math: Object.assign(Object.create(Math), {random})}),
+    crypto: require('node:crypto').webcrypto,
     TextEncoder,
     TextDecoder,
     ArrayBuffer,
@@ -268,13 +269,27 @@ function launch({
 const {game: factory} = launch({timers: {setTimeout() {}, setInterval() {}}, random: () => 0.5});
 function saved(rev) {
   const st = factory.newGame(now - 60000);
-  st.v = 6;
   st.rev = rev;
   st.players.Veteran = {team: 'dawn', role: 'soldier', title: 'Saved post #' + rev, cd: 1234, cp: 10};
   st.teams.dawn.res.gold = 200 + rev;
   return st;
 }
-const masterySaved = rev => Object.assign(saved(rev), {ruleset: RULES});
+const masterySaved = saved;
+function legacySaved(rev) {
+  const st = saved(rev);
+  st.v = 6;
+  delete st.players.Dhruv;
+  // The v6 HQ-specific starting formations and fort were in Bucharest, not Nigeria.
+  for (const id of ['BUC', 'NIG']) {
+    st.terr[id].f = id === 'BUC' ? 1 : 0;
+    for (const u of ['bd_mant', 'bd_rave']) st.terr[id].u[u] = id === 'BUC' ? 2 : 1;
+    for (const u of ['bd_obsv', 'bd_whis', 'bd_fact']) {
+      if (id === 'BUC') st.terr[id].u[u] = 1;
+      else delete st.terr[id].u[u];
+    }
+  }
+  return st;
+}
 function checkReadOnly({sockets, channels}) {
   const pubs = sockets.flatMap(publications);
   assert.ok(!pubs.some(p => p.retain || p.topic.endsWith('/state')), 'no state was published to a broker');
@@ -289,6 +304,9 @@ const enlist = {name: 'New player', team: 'dawn', pw: 'a'.repeat(64)};
 // as elements so the app's real clock can change their disabled state and cost color.
 function purchaseRoom(st, team, role = 'chief', cp = 10) {
   const identity = {name: 'Test chief', ph: 'fixture-only'};
+  const holders = Object.values(st.players).filter(p => p.team === team && p.role === role);
+  if ((role === 'leader' && holders.length) || (role === 'chief' && holders.length >= 4))
+    holders[0].role = 'soldier';
   st.players[identity.name] = {team, role, pw: identity.ph, title: 'Test', cd: 0, cp};
   const tab = launch({cached: st, identity, rules: st.ruleset, relay: 'emqx'}),
     panel = tab.$('#panel');
@@ -338,6 +356,7 @@ module.exports = {
   inspect,
   saved,
   masterySaved,
+  legacySaved,
   checkReadOnly,
   enlist,
   purchaseRoom

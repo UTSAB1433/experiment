@@ -24,10 +24,9 @@ function connect(tab, st) {
   return relay;
 }
 
-for (const make of [saved, masterySaved]) {
-  test(`${make === saved ? 'Classic' : 'Mastery'}: complete three-tier charter, including the unspecified VI; browsing writes nothing`, t => {
+test(`Mastery: complete three-tier charter, including the unspecified VI; browsing writes nothing`, t => {
     mockTime(t);
-    const st = make(209);
+    const st = saved(209);
     st.front = {turn: 7, at: now, drill: {USSR: 4}};
     const tab = launch({relay:'emqx', cached: st, rules: st.ruleset, identity: {name: '__spectator'}});
     connect(tab, st);
@@ -59,7 +58,6 @@ for (const make of [saved, masterySaved]) {
     assert.deepEqual(structuredClone(tab.game.S), structuredClone(st));
     checkReadOnly(tab);
   });
-}
 
 test('the post picker and password prompt show the office but use the original login key for every appointee', t => {
   mockTime(t);

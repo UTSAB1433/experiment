@@ -1,10 +1,19 @@
 // Called by mixed-room-smoke: same real loopback brokers and isolated Chromium
 // identities. Only browser clocks are accelerated; no manual engine/AI entry point.
 const assert = require('node:assert/strict');
-module.exports = async function frontRoom({origin, context, brokers, fixture, publish, latest, writes, live}) {
+module.exports = async function frontRoom({
+  origin,
+  context,
+  brokers,
+  fixture,
+  publish,
+  latest,
+  writes,
+  live
+}) {
   const code = 'world-front-test',
-    topic = 'lands-eot/v1/' + code + '/state',
-    url = origin + '/?room=' + code;
+    topic = 'lands-eot/v1/' + code + ':mastery-1/state',
+    url = origin + '/?room=' + code + '&rules=mastery-1&via=mqtt&relay=emqx';
   const board = fixture();
   board.rev = 310;
   for (const id of ['PAR', 'DEL', 'BSB']) board.terr[id].o = 'neutral';

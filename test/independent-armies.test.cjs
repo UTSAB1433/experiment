@@ -31,7 +31,7 @@ function quiet() {
 function island() {
   const s = saved(60);
   for (const [id, t] of Object.entries(s.terr)) {
-    t.o = id === 'BUC' ? 'dawn' : 'reich';
+    t.o = id === 'NIG' ? 'dawn' : 'reich';
     t.u = {};
   }
   s.terr.ICE.o = 'neutral';
@@ -56,7 +56,7 @@ test('every initially independent province belongs to exactly one country, with 
     ['USSR', 'USA', 'JPN'].map(k => e.COUNTRIES[k].specialty),
     ['arm', 'air', 'nav']
   );
-  assert.equal(s.v, 6);
+  assert.equal(s.v, 7);
   assert.equal(s.front, undefined);
   assert.ok(e.validSave(s));
 });
@@ -216,7 +216,7 @@ test('1,000 seeded turns: correct target faction, routes, alternating fronts, HQ
   for (let run = 0; run < 25; run++) {
     const s = saved(555);
     const teams = cp(s.teams),
-      hqs = [cp(s.terr.BER), cp(s.terr.BUC)];
+      hqs = [cp(s.terr.BER), cp(s.terr.NIG)];
     for (let i = 0; i < 40; i++) {
       const prev = Object.fromEntries(Object.entries(s.terr).map(([id, t]) => [id, t.o]));
       const last = s.front?.target;
@@ -250,7 +250,7 @@ test('1,000 seeded turns: correct target faction, routes, alternating fronts, HQ
       assert.ok(g.validSave(s));
     }
     assert.deepEqual(cp(s.teams), teams);
-    assert.deepEqual([cp(s.terr.BER), cp(s.terr.BUC)], hqs);
+    assert.deepEqual([cp(s.terr.BER), cp(s.terr.NIG)], hqs);
   }
   assert.equal(battles, 1000);
   assert.ok(wins > 100 && losses > 100);
@@ -329,7 +329,7 @@ for (const owner of ['reich', 'dawn', 'neutral'])
     assert.match(r.msg, /reclaimed its capital/);
     for (let i = 0; i < 5; i++) assert.ok(solo(s));
     assert.equal(s.log.filter(l => l.kind === 'front' && l.tid).length, 1);
-    for (const id of ['BUC', 'BER', 'LOR']) assert.deepEqual(cp(s.terr[id]), before[id]);
+    for (const id of ['NIG', 'BER', 'LOR']) assert.deepEqual(cp(s.terr[id]), before[id]);
     assert.ok(e.validSave(s));
   });
 

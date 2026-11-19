@@ -1,4 +1,4 @@
-// Compare Classic (and Mastery before training) to the actual previous engine with
+// Compare unchanged zero-rank Mastery combat and economy to the actual previous engine with
 // identical random rolls, not to an approximation of its combat/economy formulas.
 const vm = require('node:vm'),
   fs = require('node:fs'),
@@ -31,16 +31,32 @@ assert.ok(
   Number.isSafeInteger(seed) && Number.isSafeInteger(cases) && cases > 0,
   'Use an integer seed and a positive battle count.'
 );
-// The one intentional economy difference: each post starts with its faction's old CP.
+// Normalize personal CP and the version tag; the engine comparison uses identical garrisons.
 function asPersonal(s) {
+  s.v = 7;
+  s.ruleset = 'mastery-1';
   for (const pl of Object.values(s.players)) pl.cp = s.teams[pl.team].cp;
   for (const side of Object.values(s.teams)) delete side.cp;
   return s;
 }
-const officer = team => (team === 'reich' ? 'DEB' : 'Anish');
+const officer = team => (team === 'reich' ? 'Sattyaki' : 'Anish');
 const st = old.newGame(now),
   random = rng(seed);
-assert.deepEqual(asPersonal(structuredClone(st)), structuredClone(next.newGame(now)));
+const initial = asPersonal(structuredClone(st)),
+  actual = structuredClone(next.newGame(now));
+// Only the HQ-specific bonuses move; the two provinces retain their own base garrisons.
+for (const u of ['bd_mant', 'bd_rave', 'bd_obsv', 'bd_whis', 'bd_fact']) {
+  const old = initial.terr.NIG.u[u];
+  initial.terr.NIG.u[u] = initial.terr.BUC.u[u];
+  if (old) initial.terr.BUC.u[u] = old;
+  else delete initial.terr.BUC.u[u];
+}
+initial.terr.NIG.f = 1;
+initial.terr.BUC.f = 0;
+assert.equal(actual.players.Dhruv.team, 'reich');
+assert.equal(actual.players.Dhruv.role, 'soldier');
+delete actual.players.Dhruv;
+assert.deepEqual(initial, actual);
 for (const t of Object.values(st.teams)) {
   for (const k in t.res) t.res[k] = 100000;
   for (const k in t.tech) t.tech[k] = 4;
@@ -88,7 +104,8 @@ for (const [id, neighbors] of Object.entries(next.ADJ)) {
   assert.deepEqual(keys(neighbors).sort(), [...new Set(keys(old.ADJ[id].filter(n => n.id !== id)))].sort());
 }
 const sides = ['reich', 'dawn'],
-  pair = Object.keys(next.ADJ).filter(t => next.ADJ[t].length);
+  stable = t => !['BUC', 'NIG'].includes(t), // their capture/win semantics intentionally changed (tested separately)
+  pair = Object.keys(next.ADJ).filter(t => stable(t) && next.ADJ[t].some(n => stable(n.id)));
 function group(team) {
   const g = {};
   for (let i = 0, n = 1 + Math.floor(random() * 5); i < n; i++)
@@ -100,7 +117,7 @@ for (let i = 0; i < cases; i++) {
     team = pick(sides),
     foe = i % 3 ? (team === 'dawn' ? 'reich' : 'dawn') : 'neutral',
     to = pick(pair),
-    route = pick(next.ADJ[to]),
+    route = pick(next.ADJ[to].filter(n => stable(n.id))),
     from = route.id;
   const tactic = pick(Object.keys(old.TACT)),
     grp = group(team),
@@ -124,7 +141,6 @@ for (let i = 0; i < cases; i++) {
     st: pick(['elastic', 'counter', 'bunker'])
   };
   const b = asPersonal(copy(a));
-  if (i % 2) b.ruleset = 'mastery-1';
   const p = {from, to, grp, tactic},
     ctx = {now, team, name: officer(team)};
   old.rolls(i);
@@ -137,13 +153,12 @@ for (let i = 0; i < cases; i++) {
   next.tick(b, now + 60000);
   old.checkWin(a, now + 60000);
   next.checkWin(b, now + 60000);
-  delete b.ruleset;
   asPersonal(a);
   for (const [name, pl] of Object.entries(a.players))
-    pl.cp = st.teams[pl.team].cp + 3 - (name === ctx.name ? 2 : 0); // one minute, one attack
+    pl.cp = st.teams[pl.team].cp + 2 - (name === ctx.name ? 2 : 0); // one minute, one attack
   equal(b, a, 'after battle, income and victory check ' + i);
   battles++;
 }
 console.log(
-  `PASS: initial v6 save with personal CP, ${recruits} recruitment orders, ${studies} doctrine orders and ${battles} seeded mixed-formation battles versus the pre-mastery engine (seed ${seed}).`
+  `PASS: v7 starting map/roster delta, ${recruits} recruitment orders, ${studies} doctrine orders and ${battles} seeded mixed-formation battles versus the pre-mastery engine (seed ${seed}).`
 );
