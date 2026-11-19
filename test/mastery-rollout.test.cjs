@@ -172,7 +172,7 @@ test('an open battle picker follows roster changes and closes if a teammate alre
   const {tab, relay} = purchaseRoom(st, 'reich');
   tab.click('sel', {id: from});
   tab.click('open', {m: 'attack'});
-  tab.click('mto', {id: to});
+  tab.change('attackplace', to);
   for (const u of ['inf', 'rk_mp40']) tab.click('step', {u, d: 'max'});
   assert.match(tab.$('#modal').innerHTML, />19 units</);
   st.terr[from].u = {inf: 5};
