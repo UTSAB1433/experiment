@@ -210,7 +210,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const TEAMS = {
   reich:{id:'reich', name:'The Reich', short:'Reich', css:'var(--reich)', hex:'#d9573f', leader:'Führer', flavor:'Iron discipline. Armor attacks hit 10% harder.'},
-  dawn:{id:'dawn', name:'Black Dawn', short:'Dawn', css:'var(--dawn)', hex:'#e6ac35', leader:'Prophet-King', flavor:'Per tenebras, ad imperium. +20% trade, +25% diplomatic influence, +15% territorial stability, +15% research efficiency, +15% gold, +20% intel coverage; -10% conventional military strength, +10% elite recruitment cost.'}
+  dawn:{id:'dawn', name:'Black Dawn', short:'Dawn', css:'var(--dawn)', hex:'#e6ac35', leader:'Prophet-King', flavor:'Per tenebras, ad imperium. +20% trade, +15% territorial stability, +15% research efficiency, +15% gold, +20% intel coverage; -10% conventional military strength, +10% elite recruitment cost.'}
 };
 const OTHER = t => t === 'reich' ? 'dawn' : 'reich';
 const RES = {man:'Manpower', steel:'Steel', oil:'Oil', gold:'Gold'};
@@ -350,7 +350,7 @@ const UNITS = {
     abil:'Imperial Transit: Provides a substantial transportation and logistical bonus.'},
   bd_hera:{team:'dawn', div:'air', pwr:10, atk:9.0, def:8.0, cost:{steel:28, oil:22, gold:18}, cat:'air', req:['air',4], elite:true, mech:true,
     n:'Heralds of the Black Sun', desc:'The supreme aerial establishment of the organisation, symbolising its technological prestige and international standing.',
-    abil:'Black Sun Ascendant: Provides faction-wide prestige and communication bonuses.'},
+    abil:'Black Sun Ascendant: Carries the Black Dawn’s emissaries and dispatches.'},
 
   // Black Dawn — III. Naval Forces (The Abyssal Order)
   bd_sail:{team:'dawn', div:'water', pwr:1, atk:0.8, def:1.1, cost:{steel:5, gold:2}, cat:'nav', req:null, conv:true,
@@ -395,7 +395,7 @@ const UNITS = {
     abil:'Open Channels: Slightly improves relations with neutral territories.'},
   bd_silv:{team:'dawn', div:'pol', pwr:3, atk:0.8, def:1.5, cost:{man:5, gold:12}, cat:'intel', req:['intel',1],
     n:'Silver Tongues', desc:'Skilled diplomats recognised for their negotiating abilities and maintenance of international relationships.',
-    abil:'Art of Persuasion: Increases diplomatic influence generation.'},
+    abil:'Art of Persuasion: Represents the Black Dawn in foreign negotiations.'},
   bd_ocov:{team:'dawn', div:'pol', pwr:5, atk:1.2, def:2.5, cost:{man:6, gold:18}, cat:'intel', req:['intel',2],
     n:'Oracles of the Covenant', desc:'Senior diplomatic officials responsible for maintaining important international agreements and alliances.',
     abil:'Sacred Covenant: Improves alliance stability.'},
@@ -404,10 +404,10 @@ const UNITS = {
     abil:'Imperial Representation: Increases influence in territories with established diplomatic relationships.'},
   bd_csha:{team:'dawn', div:'pol', pwr:9, atk:2.8, def:4.8, cost:{man:10, steel:14, gold:36}, cat:'intel', req:['intel',3], elite:true,
     n:'The Council of Shadows', desc:'The supreme political institution of the Black Dawn, coordinating its diplomatic relationships and international political authority.',
-    abil:'Invisible Sovereignty: Provides a substantial faction-wide diplomatic influence and territorial stability bonus.'},
+    abil:'Invisible Sovereignty: Reduces the gold cost of annexation and strengthens territorial defense.'},
   bd_hier:{team:'dawn', div:'pol', pwr:10, atk:4.0, def:7.0, cost:{man:15, steel:20, gold:60}, cat:'intel', req:['intel',4], elite:true, max:1,
     n:'The Grand Hierophant', desc:'The highest expression of the Black Dawn\'s political and religious authority, traditionally represented by the Prophet-King.',
-    abil:'The Grand Mandate: Provides a powerful faction-wide influence bonus and improves diplomatic relations. (Max 1)',
+    abil:'The Grand Mandate: Reduces annexation costs and the penalties for breaking a treaty. (Max 1)',
     limitMsg:'Only one Grand Hierophant may exist at a time.'},
 
   // Black Dawn — VI. Economic & Industrial Apparatus (The Golden Covenant)
@@ -440,7 +440,6 @@ const divSub = (team, d) => team === 'dawn' ? (DIV_SUB[d] || '') : ({land:'Wehrm
 const uname = (u, t) => t === 'neutral' ? ({inf:'Infantry', arm:'Armor', art:'Artillery', nav:'Fleet', air:'Air wing'}[u] || (UNITS[u] ? UNITS[u].n : u)) : (UNITS[u] ? UNITS[u].n : u);
 const DAWN_PASSIVES = [
   ['International Trade', '+20% trade income'],
-  ['Diplomatic Influence', '+25% diplomatic influence (CP) generation'],
   ['Territorial Stability', '+15% territorial stability & defense'],
   ['Research Efficiency', '+15% research cost efficiency'],
   ['Gold Generation', '+15% gold income'],
@@ -492,7 +491,7 @@ const MATRIX = {
 const STANCES = {bunker:'Dig in', elastic:'Elastic', counter:'Counter-attack'};
 const TERRAIN = {plain:1, forest:1.1, mountain:1.3, urban:1.15, desert:1, coast:1};
 const BASE_INC = {man:2, steel:2, oil:1.5, gold:1};
-const CPMAX = 15, CPRATE = 1/1.5; // one command point every 90 seconds
+const CP_START = 10, CPMAX = 20, CP_MS = 20000;
 const DOM_SHARE = 0.6, DOM_MS = 45*60000;
 const SPY_MS = 30*60000;
 
@@ -844,9 +843,9 @@ const GAME_V = 6;
 function newGame(now){
   const s = {v:GAME_V, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
   TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.fcap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
-  s.teams.reich = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:0, arm:1, air:1, nav:0, intel:0, ind:0}};
-  s.teams.dawn = {res:{man:80, steel:80, oil:60, gold:50}, cp:10, tech:{inf:1, art:1, arm:0, air:0, nav:0, intel:1, ind:0}};
-  ROSTER.forEach(([team, name, role, title]) => s.players[name] = {team, role, title, cd:0});
+  s.teams.reich = {res:{man:80, steel:80, oil:60, gold:50}, tech:{inf:1, art:0, arm:1, air:1, nav:0, intel:0, ind:0}};
+  s.teams.dawn = {res:{man:80, steel:80, oil:60, gold:50}, tech:{inf:1, art:1, arm:0, air:0, nav:0, intel:1, ind:0}};
+  ROSTER.forEach(([team, name, role, title]) => s.players[name] = {team, role, title, cd:0, cp:CP_START});
   log(s, now, 'all', 'The war begins across the globe. Use the region buttons (World, Americas, Europe, Africa, Mid East, Asia, Oceania) or the nation directory to reach every front.', 'sys');
   return s;
 }
@@ -863,7 +862,6 @@ function dawnBonuses(s){
     c,
     basicDisc: Math.min(0.25, 0.02 * (c.bd_init || 0)),
     cdCutMs: Math.min(60000, 10000 * (c.bd_rave || 0)),
-    cpMult: 1.25 + Math.min(0.45, 0.05 * (c.bd_silv || 0) + 0.08 * (c.bd_csha || 0) + 0.15 * (c.bd_hier || 0) + 0.10 * (c.bd_hera || 0)),
     resDisc: Math.min(0.40, 0.15 + 0.03 * (c.bd_arch || 0) + 0.04 * (c.bd_orac || 0) + 0.08 * (c.bd_obsd || 0)),
     goldMult: 1.15 + Math.min(0.45, 0.02 * (c.bd_sail || 0) + 0.04 * (c.bd_merc || 0) + 0.08 * (c.bd_levi || 0) + 0.03 * (c.bd_fact || 0) + 0.05 * (c.bd_gexc || 0) + 0.08 * (c.bd_gsyn || 0)),
     goldFlat: Math.min(12, 0.4 * (c.bd_fact || 0) + 1.0 * (c.bd_gpat || 0) + 1.8 * (c.bd_gexc || 0) + 2.5 * (c.bd_gsyn || 0)),
@@ -952,15 +950,26 @@ function income(s, team){
   if(s.teams[OTHER(team)].tech.nav >= 3 || (OTHER(team) === 'dawn' && (dawnCounts(s).bd_levi || 0) > 0)) inc.gold *= 0.85;
   return inc;
 }
+// Balances are as of s.t. A legacy v6 post inherits its faction's last balance
+// once. Only settle on a working copy (order, import, continuation or HUD).
+function settleCommand(s, elapsedMs = 0){
+  for(const pl of Object.values(s.players)){
+    const balance = pl.cp ?? Math.max(0, Math.min(CPMAX, s.teams[pl.team].cp));
+    // Count whole refill milliseconds, tolerating only floating-point noise.
+    // Copying a snapshot at its own timestamp preserves even legacy fractions.
+    const bankedMs = Math.floor(balance * CP_MS + 1e-9);
+    pl.cp = elapsedMs ? Math.min(CPMAX, (bankedMs + elapsedMs) / CP_MS) : balance;
+  }
+  for(const team of Object.values(s.teams)) delete team.cp;
+}
 function tick(s, now){
-  let dt = (now - s.t) / 60000; if(dt <= 0) return;
-  dt = Math.min(dt, 720);
-  const db = dawnBonuses(s);
+  const elapsed = Math.max(0, now - s.t);
+  settleCommand(s, elapsed);
+  if(!elapsed) return;
+  const dt = Math.min(elapsed / 60000, 720);
   ['reich','dawn'].forEach(t => {
     const inc = income(s, t), T = s.teams[t];
     RK.forEach(r => T.res[r] += inc[r] * dt);
-    const rate = CPRATE * (t === 'dawn' ? db.cpMult : 1);
-    T.cp = Math.min(CPMAX, T.cp + dt * rate);
   });
   s.t = now;
 }
@@ -1093,6 +1102,21 @@ const fuel = (s, team, grp) => {
   return Math.ceil(Math.max(0, m - navFree - Math.floor(airLiftCut * 0.5)) / 2);
 };
 
+// Call only after the order's other checks pass, on the locked actor's post.
+function spendCP(s, c, amount){
+  const pl = s.players[c.name];
+  if(!pl || pl.team !== c.team || !(pl.cp >= amount)) return false;
+  pl.cp -= amount;
+  return true;
+}
+function disruptCommand(s, team, max){
+  const targets = Object.values(s.players).filter(pl => pl.team === team && pl.cp >= 1);
+  if(!targets.length) return 'No enemy officer had a command point to lose.';
+  const pl = targets[Math.floor(Math.random() * targets.length)];
+  const cut = Math.min(max, Math.floor(pl.cp));
+  pl.cp -= cut;
+  return `One enemy officer lost ${cut} command point${cut === 1 ? '' : 's'}.`;
+}
 const A = {};
 const T_ = id => TD[id].name;
 A.contribute = (s, c, p) => {
@@ -1109,7 +1133,6 @@ A.recruit = (s, c, p) => {
   if(!t || t.o !== c.team) return {err:'You can only recruit in your own territory.'};
   if(!knownUnit(p.unit) || U.team !== c.team) return {err:'That formation does not belong to your faction.'};
   if(!hasTech(s, c.team, U.req)) return {err:'Research required.'};
-  if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
   if(U.max){
     const have = TIDS.reduce((a, i) => a + (s.terr[i].o === c.team ? (s.terr[i].u[p.unit] || 0) : 0), 0);
     if(have + n > U.max) return {err:U.limitMsg || `Only ${U.max} ${U.n} may exist at a time.`};
@@ -1117,20 +1140,21 @@ A.recruit = (s, c, p) => {
   const cost = recruitCost(s, c.team, p.unit, n);
   if(!withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
   if(!afford(s, c.team, cost)) return {err:'Not enough resources.'};
-  pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.u[p.unit] = (t.u[p.unit] || 0) + n;
+  if(!spendCP(s, c, 1)) return {err:'No command points left.'};
+  pay(s, c.team, cost); t.u[p.unit] = (t.u[p.unit] || 0) + n;
   log(s, c.now, c.team, `${c.name} raised ${n} ${uname(p.unit, c.team)} in ${T_(p.tid)}.`, 'info', {tid:p.tid});
   return {ok:`Raised ${n} ${uname(p.unit, c.team)}.`};
 };
 A.fort = (s, c, p) => {
   const t = s.terr[p.tid]; if(!t || t.o !== c.team) return {err:'Not your territory.'}; if(t.f >= 3) return {err:'Fortifications are at maximum.'};
   const cost = fortCost(t.f); if(p.rank !== t.f + 1 || !withinQuote(cost, p.quote)) return {err:PRICE_CHANGED};
-  if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
-  pay(s, c.team, cost); s.teams[c.team].cp -= 1; t.f++; log(s, c.now, c.team, `${T_(p.tid)} fortified to level ${t.f}.`, 'info', {tid:p.tid});
+  if(!afford(s, c.team, cost)) return {err:'Not enough steel.'}; if(!spendCP(s, c, 1)) return {err:'No command points left.'};
+  pay(s, c.team, cost); t.f++; log(s, c.now, c.team, `${T_(p.tid)} fortified to level ${t.f}.`, 'info', {tid:p.tid});
   return {ok:`Fortified ${T_(p.tid)}.`};
 };
 A.stance = (s, c, p) => {
   const t = s.terr[p.tid]; if(!t || t.o !== c.team || !STANCES[p.st]) return {err:'Not possible.'}; if(t.st === p.st) return {err:'Already set.'};
-  if(s.teams[c.team].cp < 1) return {err:'No command points left.'}; s.teams[c.team].cp -= 1; t.st = p.st;
+  if(!spendCP(s, c, 1)) return {err:'No command points left.'}; t.st = p.st;
   log(s, c.now, c.team, `${T_(p.tid)} now holds a ${STANCES[p.st]} posture.`, 'info', {tid:p.tid}); return {ok:`${T_(p.tid)}: ${STANCES[p.st]}.`};
 };
 A.research = (s, c, p) => {
@@ -1164,8 +1188,7 @@ A.move = (s, c, p) => {
   const a = s.terr[p.from], b = s.terr[p.to]; if(!a || !b || a.o !== c.team || b.o !== c.team) return {err:'Both territories must be yours.'};
   const ln = adjInfo(p.from, p.to); if(!ln) return {err:'Those territories are not connected.'};
   if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to move.'}; if(ln.sea && !seaOK(s, c.team, p.grp)) return {err:'Crossing water needs a fleet (Naval 2) or an air group.'};
-  if(s.teams[c.team].cp < 1) return {err:'No command points left.'};
-  s.teams[c.team].cp -= 1;
+  if(!spendCP(s, c, 1)) return {err:'No command points left.'};
   for(const u in p.grp){ if(!p.grp[u]) continue; a.u[u] -= p.grp[u]; if(a.u[u] <= 0) delete a.u[u]; b.u[u] = (b.u[u] || 0) + p.grp[u]; }
   log(s, c.now, c.team, `${total(p.grp)} units moved ${T_(p.from)} to ${T_(p.to)}.`, 'info', {tid:p.to,from:p.from}); return {ok:`Moved ${total(p.grp)} units to ${T_(p.to)}.`};
 };
@@ -1177,8 +1200,8 @@ A.attack = (s, c, p) => {
   const tc = TACT[p.tactic]; if(!tc || !hasTech(s, c.team, tc.req)) return {err:'That tactic is not researched.'};
   if(tc.units.length && !tc.units.some(u => p.grp[u] > 0)) return {err:'That tactic needs matching units in the group.'};
   const oil = fuel(s, c.team, p.grp); if(s.teams[c.team].res.oil < oil) return {err:`Not enough oil. This force burns ${oil}.`};
-  if(s.teams[c.team].cp < 2) return {err:'An attack costs 2 command points.'};
-  s.teams[c.team].cp -= 2; s.teams[c.team].res.oil -= oil;
+  if(!spendCP(s, c, 2)) return {err:'An attack costs 2 command points.'};
+  s.teams[c.team].res.oil -= oil;
   const prevOwner = d.o, dname = prevOwner === 'neutral' ? 'neutral forces' : TEAMS[prevOwner].name;
   const {win,sent,attLost,defLost} = resolveBattle(s,c.team,c.now,p.from,p.to,p.grp,p.tactic);
   let msg;
@@ -1216,8 +1239,9 @@ function resolveBattle(s,team,now,from,to,units,tactic,source = s.terr[from].u){
 
 A.spy = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'};
-  if(s.teams[c.team].cp < 2) return {err:'A spy mission costs 2 command points.'}; if(s.teams[c.team].res.gold < 10) return {err:'Needs 10 gold.'};
-  s.teams[c.team].cp -= 2; s.teams[c.team].res.gold -= 10;
+  if(s.teams[c.team].res.gold < 10) return {err:'Needs 10 gold.'};
+  if(!spendCP(s, c, 2)) return {err:'A spy mission costs 2 command points.'};
+  s.teams[c.team].res.gold -= 10;
   const db = dawnBonuses(s);
   const attB = c.team === 'dawn' ? db.intelBonus : 0;
   const defCut = d.o === 'dawn' ? (0.15 + Math.min(0.15, 0.02 * (d.u.bd_veil || 0))) : 0;
@@ -1228,20 +1252,27 @@ A.spy = (s, c, p) => {
 };
 A.honey = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'};
-  const me = s.teams[c.team], en = s.teams[d.o === 'neutral' ? (c.team === 'reich' ? 'dawn' : 'reich') : d.o];
+  const me = s.teams[c.team];
   if(d.o === 'neutral') return {err:'A honeytrap only works on an enemy-held province.'};
-  if(me.cp < 3) return {err:'A honeytrap costs 3 command points.'}; if(me.res.gold < 20) return {err:'Needs 20 gold.'};
-  me.cp -= 3; me.res.gold -= 20;
+  if(me.res.gold < 20) return {err:'Needs 20 gold.'};
+  if(!spendCP(s, c, 3)) return {err:'A honeytrap costs 3 command points.'};
+  me.res.gold -= 20;
   const db = dawnBonuses(s);
   const ch = 0.6 + 0.08 * me.tech.intel + (c.team === 'dawn' ? db.intelBonus * 0.5 : 0);
   const dur = c.team === 'dawn' ? db.spyMs : SPY_MS;
-  if(Math.random() < ch){ const cut = Math.min(en.cp, 2); en.cp -= cut; s.intel[c.team][p.tid] = c.now + dur; log(s, c.now, c.team, `A honeytrap in ${T_(p.tid)} compromised an enemy officer. Intel for ${Math.round(dur / 60000)} minutes; the enemy lost ${cut} command points.`, 'intel', {tid:p.tid}); return {ok:`The honeytrap worked in ${T_(p.tid)}: intel for ${Math.round(dur / 60000)} minutes and the enemy loses ${cut} command points.`}; }
+  if(Math.random() < ch){
+    const loss = disruptCommand(s, d.o, 2);
+    s.intel[c.team][p.tid] = c.now + dur;
+    log(s, c.now, c.team, `A honeytrap in ${T_(p.tid)} compromised an enemy officer. Intel for ${Math.round(dur / 60000)} minutes. ${loss}`, 'intel', {tid:p.tid});
+    return {ok:`The honeytrap worked in ${T_(p.tid)}: intel for ${Math.round(dur / 60000)} minutes. ${loss}`};
+  }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} honeytrap was exposed in ${T_(p.tid)}.`, 'info', {tid:p.tid}); return {ok:'The operation was exposed. No result.'};
 };
 A.sabotage = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o === c.team) return {err:'Choose a foreign territory.'}; if(s.teams[c.team].tech.intel < 2) return {err:'Needs Intelligence 2.'};
-  if(s.teams[c.team].cp < 3) return {err:'Sabotage costs 3 command points.'}; if(s.teams[c.team].res.gold < 25) return {err:'Needs 25 gold.'};
-  s.teams[c.team].cp -= 3; s.teams[c.team].res.gold -= 25;
+  if(s.teams[c.team].res.gold < 25) return {err:'Needs 25 gold.'};
+  if(!spendCP(s, c, 3)) return {err:'Sabotage costs 3 command points.'};
+  s.teams[c.team].res.gold -= 25;
   const defCut = d.o === 'dawn' ? (0.12 + Math.min(0.15, 0.02 * (d.u.bd_veil || 0))) : 0;
   const ch = 0.45 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? dawnBonuses(s).intelBonus * 0.5 : 0) - defCut;
   if(Math.random() < ch){ const keep = clone(d.u); const prot = {}; for(const k in keep) if(UNITS[k] && UNITS[k].max){ prot[k] = keep[k]; delete keep[k]; } const r = applyLoss(keep, 0.25); Object.assign(r.out, prot); d.u = r.out; d.f = Math.max(0, d.f - 1); log(s, c.now, 'all', `Sabotage in ${T_(p.tid)}: depots burn, ${total(r.lost)} units lost.`, 'info', {tid:p.tid}); return {ok:`Sabotage succeeded in ${T_(p.tid)}: ${total(r.lost)} units lost, fortification weakened.`}; }
@@ -1249,25 +1280,30 @@ A.sabotage = (s, c, p) => {
 };
 A.decap = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o !== OTHER(c.team)) return {err:'Target an enemy territory.'}; if(s.teams[c.team].tech.intel < 4) return {err:'Needs Intelligence 4.'};
-  if(s.teams[c.team].cp < 4) return {err:'Costs 4 command points.'}; if(s.teams[c.team].res.gold < 60) return {err:'Needs 60 gold.'};
-  s.teams[c.team].cp -= 4; s.teams[c.team].res.gold -= 60;
-  if(Math.random() < 0.4 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? 0.1 : -0.3)){ const E = s.teams[OTHER(c.team)]; E.cp = Math.max(0, E.cp - 6); d.f = 0; log(s, c.now, 'all', `Decapitation strike at ${T_(p.tid)}. ${TEAMS[OTHER(c.team)].name} command is in disarray.`, 'info', {tid:p.tid}); return {ok:'The strike lands. Enemy loses 6 command points and the fort is razed.'}; }
+  if(s.teams[c.team].res.gold < 60) return {err:'Needs 60 gold.'};
+  if(!spendCP(s, c, 4)) return {err:'Costs 4 command points.'};
+  s.teams[c.team].res.gold -= 60;
+  if(Math.random() < 0.4 + 0.1 * s.teams[c.team].tech.intel + (c.team === 'dawn' ? 0.1 : -0.3)){
+    const loss = disruptCommand(s, d.o, 6); d.f = 0;
+    log(s, c.now, 'all', `Decapitation strike at ${T_(p.tid)}. ${TEAMS[d.o].name} command is in disarray. ${loss}`, 'info', {tid:p.tid});
+    return {ok:`The strike lands. ${loss} The fort is razed.`};
+  }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} assassination team was destroyed near ${T_(p.tid)}.`, 'info', {tid:p.tid}); return {ok:'The team was lost.'};
 };
 A.annex = (s, c, p) => {
   const d = s.terr[p.tid]; if(!d || d.o !== 'neutral') return {err:'Only neutral lands can be annexed.'};
   if(!ADJ[p.tid].some(n => s.terr[n.id].o === c.team)) return {err:'You need a border with it.'}; const g = total(d.u); if(g > 12) return {err:'The garrison is too strong to buy (12 units or fewer).'};
   const cost = annexCost(s, c.team, g); if(!withinQuote({gold:cost}, p.quote)) return {err:PRICE_CHANGED};
-  if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(s.teams[c.team].cp < 2) return {err:'Costs 2 command points.'};
-  s.teams[c.team].res.gold -= cost; s.teams[c.team].cp -= 2; d.o = c.team; delete d.country; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.`, 'dip', {tid:p.tid}); return {ok:`${T_(p.tid)} joins you.`};
+  if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(!spendCP(s, c, 2)) return {err:'Costs 2 command points.'};
+  s.teams[c.team].res.gold -= cost; d.o = c.team; delete d.country; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.`, 'dip', {tid:p.tid}); return {ok:`${T_(p.tid)} joins you.`};
 };
 A.propose = (s, c, p) => {
   if(s.props.some(x => x.from === c.team && x.type === p.type && x.open)) return {err:'You already have that proposal open.'};
-  if(s.teams[c.team].cp < 1) return {err:'Costs 1 command point.'};
-  const pr = {id:s.pid++, from:c.team, by:c.name, type:p.type, open:true, t:c.now};
+  const pr = {id:s.pid, from:c.team, by:c.name, type:p.type, open:true, t:c.now};
   if(p.type === 'ceasefire'){ if(ceasefire(s, c.now)) return {err:'A ceasefire is already in force.'}; pr.mins = [60, 180, 360].includes(p.mins) ? p.mins : 60; }
   else { const g = p.give, w = p.get; if(!RES[g.r] || !RES[w.r] || g.r === w.r || !(g.n > 0) || !(w.n > 0)) return {err:'Set two different resources and amounts.'}; if(s.teams[c.team].res[g.r] < g.n) return {err:'You do not have that much to offer.'}; pr.give = {r:g.r, n:Math.floor(g.n)}; pr.get = {r:w.r, n:Math.floor(w.n)}; }
-  s.teams[c.team].cp -= 1; s.props.push(pr); if(s.props.length > 20) s.props.shift();
+  if(!spendCP(s, c, 1)) return {err:'Costs 1 command point.'};
+  s.pid++; s.props.push(pr); if(s.props.length > 20) s.props.shift();
   log(s, c.now, 'all', `${c.name} proposes a ${p.type === 'ceasefire' ? pr.mins / 60 + 'h ceasefire' : 'trade'} to ${TEAMS[OTHER(c.team)].name}.`, 'dip'); return {ok:'Proposal sent.'};
 };
 A.answer = (s, c, p) => {
@@ -1297,10 +1333,11 @@ A.setrole = (s, c, p) => {
   return {ok:'Updated.'};
 };
 A.remove = (s, c, p) => { const pl = s.players[p.name]; if(!pl || pl.team !== c.team || p.name === c.name) return {err:'Not possible.'}; delete s.players[p.name]; return {ok:'Removed.'}; };
-A.enlist = (s, c, p) => { const n = String(p.name || '').trim().slice(0, 30); if(!n) return {err:'Enter a name.'}; if(s.players[n]) return {err:'That name is taken.'}; if(!TEAMS[p.team]) return {err:'Pick a side.'}; if(!p.pw || String(p.pw).length !== 64) return {err:'Choose a password.'}; s.players[n] = {team:p.team, role:'soldier', title:'Recruit', cd:0, pw:p.pw}; log(s, c.now, 'all', `${n} enlists with ${TEAMS[p.team].name}.`); return {ok:'Welcome.'}; };
+A.enlist = (s, c, p) => { const n = String(p.name || '').trim().slice(0, 30); if(!n) return {err:'Enter a name.'}; if(s.players[n]) return {err:'That name is taken.'}; if(!TEAMS[p.team]) return {err:'Pick a side.'}; if(!p.pw || String(p.pw).length !== 64) return {err:'Choose a password.'}; s.players[n] = {team:p.team, role:'soldier', title:'Recruit', cd:0, pw:p.pw, cp:CP_START}; log(s, c.now, 'all', `${n} enlists with ${TEAMS[p.team].name}.`); return {ok:'Welcome.'}; };
 A.reset = (s, c, p) => {
   if(p.rev !== s.rev || p.origin !== s.origin || p.created !== s.created) return {err:'The room changed. Review the latest map before resetting.'};
   const players = s.players, fresh = newGame(c.now);
+  for(const pl of Object.values(players)) pl.cp = CP_START;
   if(s.ruleset) fresh.ruleset = s.ruleset;
   Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players});
   return {ok:'The map is reset.', reset:true};
@@ -1589,13 +1626,14 @@ function validFront(f){
 }
 function validSave(p){
   return p?.v === GAME_V && Number.isSafeInteger(p.rev) && p.rev > 0 && validFront(p.front) && Number.isFinite(p.created) && Number.isFinite(p.t) &&
-    record(p.players) && Object.values(p.players).every(pl => sideId(pl?.team) && Object.hasOwn(ROLES, pl.role)) &&
+    record(p.players) && Object.values(p.players).every(pl => sideId(pl?.team) && Object.hasOwn(ROLES, pl.role) &&
+      (pl.cp === undefined ? Number.isFinite(p.teams?.[pl.team]?.cp) : Number.isFinite(pl.cp) && pl.cp >= 0 && pl.cp <= CPMAX)) &&
     record(p.intel?.reich) && record(p.intel.dawn) && record(p.treach) && (!p.win || sideId(p.win.team)) && (!p.dom || sideId(p.dom.team)) &&
     Array.isArray(p.log) && p.log.every(l => Number.isFinite(l?.t) && typeof l.msg === 'string') &&
     Array.isArray(p.props) && p.props.every(q => sideId(q?.from) && (q.type === 'ceasefire' || (q.type === 'trade' &&
       [q.give, q.get].every(x => x && RK.includes(x.r) && Number.isFinite(x.n))))) &&
     ['reich','dawn'].every(t => { const T = p.teams?.[t]; return record(T?.tech) && TKEYS.every(k => levelIn(T.tech[k], 4)) &&
-      Number.isFinite(T.cp) && RK.every(r => Number.isFinite(T.res?.[r])) && validMastery(T.mastery, t); }) &&
+      (T.cp === undefined || Number.isFinite(T.cp)) && RK.every(r => Number.isFinite(T.res?.[r])) && validMastery(T.mastery, t); }) &&
     PROVINCES.every(id => { const t = p.terr?.[id]; return record(t?.u) && (sideId(t.o) || t.o === 'neutral') &&
       (t.country == null || countryId(t.country)) && Object.hasOwn(STANCES, t.st) && levelIn(t.f, 3) && Object.entries(t.u).every(([u,n]) => knownUnit(u) && Number.isSafeInteger(n) && n >= 0); });
 }
@@ -2319,6 +2357,7 @@ async function startMastery(){
     if(seed !== prepared || S || sawSavedRoom || !officerIn(prepared.state, me) || me.name !== prepared.who.name || me.ph !== prepared.who.ph) return;
     if(store.canInitialize === false) throw Error('The primary relay has not confirmed an empty room. Reconnect and retry.');
     const st = clone(prepared.state); st.ruleset = MASTERY_RULES; st.origin = TAB; st.rev = nextRevision(st.rev);
+    settleCommand(st);
     await ref.set(st); // Firebase uses the empty record's ETag; other stores use their room lock.
     if(store !== db) return;
     if(!isBetterState(S, st)) S = st;
@@ -2361,13 +2400,13 @@ function recruitButtons(team, u, unlocked, each, have){
   }).join('');
 }
 function refreshPrices(view, root = document){
-  const team = myTeam() || 'reich', T = view.teams[team];
+  const team = myTeam() || 'reich', T = view.teams[team], cp = view.players[me.name]?.cp ?? 0;
   const paused = busy || classicWithRanks(S) || (inMastery() && db?.hasLiveState === false) || (mode !== 'live' && (inMastery() || mode !== 'local'));
   root.querySelectorAll('[data-price]').forEach(el => {
     const enough = afford(view, team, el.dataset);
     // Only otherwise-eligible buttons carry a price; never unlock a role/tech/cap restriction.
     if(el.tagName === 'BUTTON'){
-      const disabled = !enough || T.cp < Number(el.dataset.cp || 0) || paused;
+      const disabled = !enough || cp < Number(el.dataset.cp || 0) || paused;
       if(el.disabled !== disabled) el.disabled = disabled;
     } else el.classList.toggle('no', !enough);
   });
@@ -2379,9 +2418,10 @@ function refreshPrices(view, root = document){
 
 /* --- header / hud --- */
 function projectedEconomy(){
-  // tick only writes teams and t. Never advance or publish the room state just to paint the UI.
-  const view = {teams:clone(S.teams), terr:S.terr, t:S.t};
-  if(!S.win) tick(view, Date.now()); return view;
+  // Only this post's balance is displayed. Never tick a shared roster entry to paint the HUD.
+  const players = myTeam() ? {[me.name]:{...S.players[me.name]}} : {};
+  const view = {teams:clone(S.teams), players, terr:S.terr, t:S.t};
+  tick(view, S.win ? S.t : Date.now()); return view;
 }
 function roomPillHtml(){
   const n = onlineList().length;
@@ -2402,9 +2442,9 @@ function renderHud(){
   $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${countOf(S, 'reich')} lands</b></span><span style="color:var(--dawn)"><b>${countOf(S, 'dawn')} lands · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / TOTAL_VP * 100}%;background:var(--reich)"></i><i style="width:${vn / TOTAL_VP * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / TOTAL_VP * 100}%;background:var(--dawn)"></i></div>`;
   const pl = authed() ? S.players[me.name] : null, post = postView(S.players,me.name);
   $('#me').innerHTML = roomPillHtml() + (pl ? `<div class="who"><b>${esc(post.name)}</b><small>${esc(post.caption)} · ${post.office ? 'Game role: ' : ''}${ROLES[pl.role]}</small></div>${icon(pl.team)}<button class="btn sm" data-act="switch">Switch</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`);
-  const T = P.teams[team], rate = r => S.win ? 'War ended' : '+' + inc[r].toFixed(1) + '/min';
+  const T = P.teams[team], cp = P.players[me.name]?.cp, rate = r => S.win ? 'War ended' : '+' + inc[r].toFixed(1) + '/min';
   $('#hud').innerHTML = (t ? '' : `<div class="hudcell"><span class="k">Spectating</span></div>`) + RK.map(r => `<div class="hudcell"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
-    `<div class="hudcell cp"><span class="k">Command</span><span class="v">${Math.floor(T.cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${T.cp / CPMAX * 100}%"></i></span></div>` +
+    (t ? `<div class="hudcell cp" title="Your personal command points"><span class="k">Your CP</span><span class="v">${Math.floor(cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${cp / CPMAX * 100}%"></i></span><span class="r">${S.win ? 'War ended' : cp >= CPMAX ? 'Full' : `+1/${CP_MS / 1000}s`}</span></div>` : '') +
     (t ? `<div class="hudcell" title="Five minutes without input marks this device away. AFK players do not count toward World front operations."><span class="k">${isAway() ? 'AFK' : 'AFK in'}</span><span>${isAway() ? 'Interact to return' : clockText(lastInput+AFK_MS-Date.now())}</span></div>` : '') +
     (busy ? `<div class="hudcell"><span class="k">Sending orders…</span></div>` : '');
   let b = '';
@@ -2555,17 +2595,17 @@ function panelOrders(){
       ord += `<button class="btn" data-act="fort" data-rank="${t.f + 1}" ${t.f >= 3 ? 'disabled' : priceAttrs(cost, 1)}>Fortify ${t.f < 3 ? `(${cost.steel}S)` : '(max)'}</button>`;
     }
     ord += '</div>';
-    if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}">${STANCES[k]}</button>`).join('')}</div>`;
+    if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}" ${k === t.st ? 'disabled' : priceAttrs({}, 1)}>${STANCES[k]}</button>`).join('')}</div>`;
     if(ord.length > 30 || can(role, 'stance')) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
     if(!can(role, 'recruit') && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. Use Diplomacy, Council and field duty.</div>`;
   } else {
     const srcs = ADJ[sel].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0);
     let a = '<div class="row">';
     if(can(role, 'attack')) a += `<button class="btn pri" data-act="open" data-m="attack" data-to="${sel}" ${srcs.length ? '' : 'disabled'}>Attack</button>`;
-    if(can(role, 'spy')) a += `<button class="btn" data-act="spy">Spy · 2cp 10G</button>`;
-    if(can(role, 'honey') && t.o !== 'neutral') a += `<button class="btn" data-act="honey">Honeytrap · 3cp 20G</button>`;
-    if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage">Sabotage · 3cp 25G</button>`;
-    if(can(role, 'decap') && t.o !== 'neutral' && S.teams[team].tech.intel >= 4) a += `<button class="btn" data-act="decap">Decapitate · 4cp 60G</button>`;
+    if(can(role, 'spy')) a += `<button class="btn" data-act="spy" ${priceAttrs({gold:10}, 2)}>Spy · 2cp 10G</button>`;
+    if(can(role, 'honey') && t.o !== 'neutral') a += `<button class="btn" data-act="honey" ${priceAttrs({gold:20}, 3)}>Honeytrap · 3cp 20G</button>`;
+    if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage" ${priceAttrs({gold:25}, 3)}>Sabotage · 3cp 25G</button>`;
+    if(can(role, 'decap') && t.o !== 'neutral' && S.teams[team].tech.intel >= 4) a += `<button class="btn" data-act="decap" title="A successful strike razes the fort and costs one enemy officer up to 6 CP" ${priceAttrs({gold:60}, 4)}>Decapitate · 4cp 60G</button>`;
     if(can(role, 'annex') && t.o === 'neutral'){
       const gold = annexCost(S, team, total(t.u));
       a += `<button class="btn" data-act="annex" ${priceAttrs({gold}, 2)}>Annex by treaty · ${gold}G</button>`;
@@ -2586,7 +2626,7 @@ function panelTroops(){
   if(team === 'dawn'){
     const b = dawnBonuses(S);
     passHtml = `<div class="card sm"><h3>SECTA VATUM AURORAE NIGRAE · Faction Passives</h3>
-      <div class="sm mut" style="margin-bottom:6px">Active modifiers (including unit bonuses): Trade <b>+${Math.round((b.tradeMult - 1) * 100)}%</b> · Influence <b>+${Math.round((b.cpMult - 1) * 100)}%</b> · Stability <b>+${Math.round((0.15 + b.synodDef) * 100)}%</b> · Research <b>-${Math.round(b.resDisc * 100)}%</b> · Gold <b>+${Math.round((b.goldMult - 1) * 100)}%</b> · Intel <b>+${Math.round(b.intelBonus * 100)}%</b></div>
+      <div class="sm mut" style="margin-bottom:6px">Active modifiers (including unit bonuses): Trade <b>+${Math.round((b.tradeMult - 1) * 100)}%</b> · Stability <b>+${Math.round((0.15 + b.synodDef) * 100)}%</b> · Research <b>-${Math.round(b.resDisc * 100)}%</b> · Gold <b>+${Math.round((b.goldMult - 1) * 100)}%</b> · Intel <b>+${Math.round(b.intelBonus * 100)}%</b></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px" class="sm">${DAWN_PASSIVES.map(([k, v]) => `<div><b>${k}:</b> <span class="mut">${v}</span></div>`).join('')}</div>
       <button class="btn sm" style="margin-top:8px" data-act="councilview" data-k="hierarchy">Official hierarchy &amp; appointments →</button>
     </div>`;
@@ -2664,10 +2704,10 @@ function panelTech(){
 }
 function panelDip(){
   const team = myTeam(), role = myRole(), ok = team && can(role, 'dip') && !S.win, now = Date.now(), cf = ceasefire(S, now);
-  let h = `<div class="card"><h3>Treaty</h3>${cf ? `<div>Ceasefire in force for <b>${Math.ceil((cf.until - now) / 60000)}</b> more minutes. Neither side may attack the other.</div>${ok ? `<button class="btn danger sm" style="margin-top:8px" data-act="breakpact">Tear it up · 25G, -10% attack for 30 min</button>` : ''}` : `<div class="mut sm">No treaty. Propose a ceasefire to buy time, like a certain non-aggression pact.</div>${ok ? `<div class="row" style="margin-top:8px">${[60, 180, 360].map(m => `<button class="btn sm" data-act="propose" data-type="ceasefire" data-mins="${m}">${m / 60}h ceasefire</button>`).join('')}</div>` : ''}`}</div>`;
-  const tr = ui.trade; h += ok ? `<div class="card"><h3>Trade offer · 1 command point</h3><div class="row"><span class="sm">Give</span><input type="number" min="1" id="tgn" value="${tr.gn}" style="width:70px" data-chg="gn"><select id="tgr" data-chg="give">${RK.map(r => `<option value="${r}" ${tr.give === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><div class="row" style="margin-top:6px"><span class="sm">Get&nbsp;</span><input type="number" min="1" id="twn" value="${tr.wn}" style="width:70px" data-chg="wn"><select id="twr" data-chg="get">${RK.map(r => `<option value="${r}" ${tr.get === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><button class="btn pri sm" style="margin-top:8px" data-act="propose" data-type="trade">Send offer</button></div>` : '';
+  let h = `<div class="card"><h3>Treaty</h3>${cf ? `<div>Ceasefire in force for <b>${Math.ceil((cf.until - now) / 60000)}</b> more minutes. Neither side may attack the other.</div>${ok ? `<button class="btn danger sm" style="margin-top:8px" data-act="breakpact">Tear it up · 25G, -10% attack for 30 min</button>` : ''}` : `<div class="mut sm">No treaty. Propose a ceasefire to buy time, like a certain non-aggression pact.</div>${ok ? `<div class="row" style="margin-top:8px">${[60, 180, 360].map(m => `<button class="btn sm" data-act="propose" data-type="ceasefire" data-mins="${m}" ${priceAttrs({}, 1)}>${m / 60}h ceasefire</button>`).join('')}</div>` : ''}`}</div>`;
+  const tr = ui.trade; h += ok ? `<div class="card"><h3>Trade offer · 1 command point</h3><div class="row"><span class="sm">Give</span><input type="number" min="1" id="tgn" value="${tr.gn}" style="width:70px" data-chg="gn"><select id="tgr" data-chg="give">${RK.map(r => `<option value="${r}" ${tr.give === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><div class="row" style="margin-top:6px"><span class="sm">Get&nbsp;</span><input type="number" min="1" id="twn" value="${tr.wn}" style="width:70px" data-chg="wn"><select id="twr" data-chg="get">${RK.map(r => `<option value="${r}" ${tr.get === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><button class="btn pri sm" style="margin-top:8px" data-act="propose" data-type="trade" ${priceAttrs({}, 1)}>Send offer</button></div>` : '';
   const open = S.props.filter(p => p.open).reverse(); h += `<div class="card"><h3>Proposals</h3>${open.length ? open.map(p => { const mineP = p.from === team; const what = p.type === 'ceasefire' ? `${p.mins / 60}h ceasefire` : `${p.give.n} ${RES[p.give.r]} for ${p.get.n} ${RES[p.get.r]}`; return `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line)"><span><b style="color:${tcol(p.from)}">${TEAMS[p.from].short}</b> offers ${what}</span>${ok ? (mineP ? `<button class="btn sm" data-act="answer" data-id="${p.id}" data-cancel="1">Withdraw</button>` : `<span class="row"><button class="btn pri sm" data-act="answer" data-id="${p.id}" data-accept="1">Accept</button><button class="btn sm" data-act="answer" data-id="${p.id}">Reject</button></span>`) : ''}</div>`; }).join('') : '<div class="mut sm">Nothing on the table.</div>'}</div>`;
-  h += `<div class="card sm mut">Diplomats can run a honeytrap on an enemy province (intel plus the enemy loses command points) and can also annex weak neutral lands (select one on the map) and run spy missions. Annexing needs a border and a garrison of 12 units or fewer.</div>`;
+  h += `<div class="card sm mut">Diplomats can run a honeytrap on an enemy province (intel, plus one enemy officer loses up to 2 CP) and can also annex weak neutral lands (select one on the map) and run spy missions. Annexing needs a border and a garrison of 12 units or fewer.</div>`;
   return h;
 }
 function dawnCharterHtml(){
@@ -2835,7 +2875,7 @@ function panelFront(){
 function panelRules(){
   const hdr = Object.keys(STANCES).map(k => `<th>${STANCES[k]}</th>`).join('');
   return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>Capture the enemy capital: <b>Berlin</b> or <b>Bucharest</b>. Instant victory.</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of all victory points for 45 minutes.</li><li>Or leave the enemy without land.</li></ul></div>
-  <div class="card sm"><h3>Resources and time</h3>Every province you own pays its resource every minute (Industry raises it). Command points refill one per 90 seconds, up to ${CPMAX}. Moves cost 1, recruiting 1, attacks 2, spies 2.</div>
+  <div class="card sm"><h3>Resources and time</h3>Every province pays resources to its faction every minute (Industry raises income). Command points (CP) belong to your post, not your faction. Each player starts with ${CP_START} and regains 1 CP every ${CP_MS / 1000} seconds, up to ${CPMAX}. A move or recruitment order costs 1 CP; an attack or spy mission costs 2.</div>
   <div class="card sm"><h3>Independent countries</h3>With one active player online, independent countries train, rebuild and try to reclaim their national capitals. Other raids require both factions. Five minutes without input marks a post AFK until its player interacts again. Open <button class="btn sm" data-act="tab" data-k="front">World front</button> for the live clock, readiness and latest dispatch. Nothing accumulates offline.</div>
   <div class="card sm"><h3>Troop mastery</h3>Faction doctrines unlock formations. In Research → Troop mastery, choose a formation to improve its Attack, Defense or Vitality. Its role talent needs Attack and Defense at the rank you want to buy; tactic talents also need the matching doctrine. Each ability has five ranks and only affects the selected formation.</div>
   <div class="card sm"><h3>Attacking</h3>Pick a source province that borders the target, choose units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Water crossings need a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
@@ -2926,8 +2966,11 @@ function renderModal(refreshBudget = true){
     else if(!from){ h += `<div class="sm mut">Target: <b>${esc(TD[to].name)}</b>. Choose where the attack launches from.</div><div class="pick">${srcs.map(id => `<button data-act="mfrom" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(id, to).sea ? ' · sea' : ''}</span></button>`).join('')}</div>`; }
   }
   if(M.mode === 'move' && !to){ h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a friendly neighbor.</div><div class="pick">${srcs.length ? srcs.map(id => `<button data-act="mto" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(from, id).sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No friendly neighbors.</span>'}</div>`; }
+  let confirmAttrs = 'disabled';
   if(from && to){
     const src = S.terr[from], grp = M.grp, n = total(grp);
+    const attack = M.mode === 'attack', oil = attack ? fuel(S, team, grp) : 0;
+    if(n) confirmAttrs = priceAttrs({oil}, attack ? 2 : 1);
     const list = divsFor(team);
     const stepperHtml = list.filter(d => d !== 'all').map(d => {
       const sub = UORDER.filter(u => src.u[u] && UNITS[u] && UNITS[u].div === d);
@@ -2935,16 +2978,16 @@ function renderModal(refreshBudget = true){
       return `<div class="divhdr">${DIVS[d]} Division</div>` + sub.map(u => `<div class="stepper" style="padding:3px 0"><span>${uname(u, team)} <span class="mut sm">of ${src.u[u]}</span></span><button class="btn sm" data-act="step" data-u="${u}" data-d="-1">−</button><span class="n">${grp[u] || 0}</span><button class="btn sm" data-act="step" data-u="${u}" data-d="1">+</button><button class="btn sm" data-act="step" data-u="${u}" data-d="max">All</button></div>`).join('');
     }).join('');
     h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${adjInfo(from, to).sea ? ' · across water' : ''}</div><div>${stepperHtml}</div>`;
-    if(M.mode === 'attack'){
+    if(attack){
       const tact = Object.keys(TACT).filter(k => hasTech(S, team, TACT[k].req)); if(!tact.includes(M.tactic)) M.tactic = 'frontal';
       h += `<div><div class="sm mut" style="margin-bottom:4px">Tactic</div><div class="pick">${Object.keys(TACT).map(k => { const has = tact.includes(k), match = !TACT[k].units.length || TACT[k].units.some(u => grp[u] > 0); return `<button ${has ? '' : 'disabled'} style="${M.tactic === k ? 'border-color:var(--acc);background:var(--panel)' : ''}${has ? '' : ';opacity:.4'}" data-act="tactic" data-k="${k}"><b>${TACT[k].n}</b><span class="mut sm">${has ? (match ? TACT[k].d : 'Needs matching units.') : 'Research ' + TECH[TACT[k].req[0]].n + ' ' + TACT[k].req[1]}</span></button>`; }).join('')}</div></div>`;
-      const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now(), from, to), DP = defPower(S, to, M.tactic, team, 1, grp) * (dEx ? 1 : 1), oil = fuel(S, team, grp);
+      const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now(), from, to), DP = defPower(S, to, M.tactic, team, 1, grp) * (dEx ? 1 : 1);
       let odds = 'Scout the target (spy) for a reliable estimate.';
       if(n){ const ratio = AP / Math.max(0.01, DP); if(dEx){ odds = ratio > 1.6 ? 'Crushing advantage' : ratio > 1.15 ? 'Favorable' : ratio > 0.87 ? 'Too close to call' : ratio > 0.6 ? 'Risky' : 'Suicidal'; odds += ` (your ${AP.toFixed(0)} vs their ${DP.toFixed(0)}, ±12% luck each)`; } else { odds = `Your strength ${AP.toFixed(0)}. Enemy strength unknown. Garrison about ${total(S.terr[to].u) ? '~' + Math.max(3, Math.round(total(S.terr[to].u) / 3) * 3) : '0'} units.`; } }
       h += `<div class="card sm"><b>${n} units</b> · fuel <b>${oil}</b> oil (have <span data-balance="oil"></span>) · 2 command points<br>${odds}</div>`;
     } else h += `<div class="card sm"><b>${n} units</b> · 1 command point</div>`;
   }
-  h += `<div class="row"><button class="btn pri" data-act="confirm" ${from && to && total(M.grp) ? '' : 'disabled'}>${M.mode === 'attack' ? 'Launch attack' : 'Move'}</button><button class="btn" data-act="closem">Cancel</button></div></div></div>`;
+  h += `<div class="row"><button class="btn pri" data-act="confirm" ${confirmAttrs}>${M.mode === 'attack' ? 'Launch attack' : 'Move'}</button><button class="btn" data-act="closem">Cancel</button></div></div></div>`;
   $('#modal').innerHTML = h;
   if(refreshBudget) refreshPrices(projectedEconomy(), $('#modal'));
 }
@@ -3050,6 +3093,7 @@ document.addEventListener('click', e => {
         if(isBetterState(S, displayed) || (remote && isBetterState(displayed, remote))) throw Error('The room changed. Review its latest revision before importing.');
         if(remote && (imp.created !== remote.created || imp.rev <= remote.rev)) throw Error('Use a newer backup of this campaign. Existing progress was not changed.');
         imp.rev = nextRevision(imp.rev); imp.origin = TAB;
+        settleCommand(imp);
         await ref.set(imp);
         if(store !== db || isBetterState(S, imp)) return;
         sawSavedRoom = true; S = imp; M = null; toast('Save imported and synced to the war room.', 'win');

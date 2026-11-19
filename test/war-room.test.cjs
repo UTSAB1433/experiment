@@ -179,7 +179,7 @@ test('a slow shared DB capability cannot delay warm paint or roll back a newer s
 for(const team of ['reich','dawn']) test(`${team} research unlocks with passive income and charges the displayed price once`, async t => {
   mockTime(t);
   const st = saved(30); st.t = now;
-  const T = st.teams[team], ctx = {team, now, name:'Test chief'}, payload = {k:'ind', rank:1, quote:factory.researchCost(st, team, 1)};
+  const T = st.teams[team], ctx = {team, now, name:team === 'reich' ? 'DEB' : 'Anish'}, payload = {k:'ind', rank:1, quote:factory.researchCost(st, team, 1)};
   const upgraded = structuredClone(st), projected = structuredClone(st);
   assert.ok(factory.A.research(upgraded, ctx, payload).ok);
   const steel = T.res.steel - upgraded.teams[team].res.steel, gold = T.res.gold - upgraded.teams[team].res.gold;
@@ -208,8 +208,8 @@ test('recruit buttons track full batch cost and command points, and a newer room
   mockTime(t);
   const st = saved(15); st.t = now;
   const T = st.teams.reich, projected = structuredClone(st); factory.tick(projected, now + 1000);
-  T.cp = 0.995; T.res.man = 50 - 2.5 * (projected.teams.reich.res.man - T.res.man);
-  const {tab, controls, relay} = purchaseRoom(st, 'reich');
+  T.res.man = 50 - 2.5 * (projected.teams.reich.res.man - T.res.man);
+  const {tab, controls, relay} = purchaseRoom(st, 'reich', 'chief', 0.95);
   const buy = (n,u = 'inf') => controls().find(el => el.dataset.act === 'recruit' && el.dataset.u === u && +el.dataset.n === n);
   tab.click('sel', {id:'BER'});
   assert.equal(buy(1).disabled, true, 'needs one command point');
@@ -217,7 +217,7 @@ test('recruit buttons track full batch cost and command points, and a newer room
   tab.click('tab', {k:'troops'}); assert.equal(buy(1).disabled, false); assert.equal(buy(5).disabled, true);
   t.mock.timers.tick(2000); assert.equal(buy(5).disabled, false); assert.equal(buy(1,'rk_maus').disabled, true, 'still tech locked');
   const order = tab.game.act('recruit', {tid:'BER', unit:'inf', n:5, quote:factory.recruitCost(st, 'reich', 'inf', 5)});
-  const spent = structuredClone(st); spent.rev++; spent.t = Date.now(); spent.teams.reich.res.man = 0; spent.teams.reich.cp = 4;
+  const spent = structuredClone(st); spent.rev++; spent.t = Date.now(); spent.teams.reich.res.man = 0; spent.players['Test chief'].cp = 4;
   relay.message('state', spent); // A teammate spent the balance while we waited for the lock.
   await finishOrder(t,order);
   assert.equal(tab.game.S.rev, spent.rev); assert.equal(tab.game.S.terr.BER.u.inf, st.terr.BER.u.inf);
@@ -277,7 +277,7 @@ test('every formation in both Troops rosters is selectable and can master all fo
 
 test('mastery rejects unmet requirements, skipped/stale ranks, invalid keys, foreign units, insufficient funds and maxed skills without spending', () => {
   const st = masterySaved(8), side = st.teams.reich, ctx = {team:'reich', name:'Test leader', now};
-  st.players[ctx.name] = {role:'leader', team:'reich'}; side.res = {steel:10000, gold:10000, oil:10000, man:10000};
+  st.players[ctx.name] = {role:'leader', team:'reich', cp:10}; side.res = {steel:10000, gold:10000, oil:10000, man:10000};
   const train = (unit, skill, rank) => factory.A.mastery(st, ctx, {unit, skill, rank, quote:ceiling});
   const reject = (u, k, rank, why) => { const before = JSON.stringify(st); assert.match(train(u,k,rank).err, why); assert.equal(JSON.stringify(st),before); };
   reject('rk_p1500','atk',1,/Requires Armor level 4/); reject('bd_init','atk',1,/faction/);
@@ -313,7 +313,7 @@ function skirmish({team='reich', foe='neutral', grp={inf:1000}, garrison={inf:10
   st.terr[from] = {o:team, u:{...grp}, f:0, st:'bunker'}; st.terr[to] = {o:foe, u:{...garrison}, f:0, st:'bunker'};
   Object.assign(st.teams[team].tech, {inf:2, art:2, arm:2, air:2}); st.teams[team].res.oil = 10000;
   st.teams[team].mastery = study; if(foe !== 'neutral') st.teams[foe].mastery = enemyStudy;
-  const r = factory.A.attack(st, {team, name:'Tester', now}, {grp, from, to, tactic}); assert.ok(r.ok, r.err);
+  const r = factory.A.attack(st, {team, name:team === 'reich' ? 'DEB' : 'Anish', now}, {grp, from, to, tactic}); assert.ok(r.ok, r.err);
   return structuredClone({att:st.terr[r.battle ? to : from].u, def:r.battle ? {} : st.terr[to].u});
 }
 test('core ranks only affect the trained formation and the side using it', () => {
@@ -337,7 +337,7 @@ test('formation talents modify matching tactics, coastal defense or specialist r
   assert.deepEqual(skirmish({...nav,enemyStudy}), skirmish(nav));
   const fee = (unit, mastery) => {
     const st = masterySaved(1), T = st.teams.dawn, gold = T.res.gold; T.mastery = mastery;
-    assert.ok(factory.A.recruit(st,{team:'dawn',name:'Tester',now},{unit,n:1,tid:'BUC',quote:ceiling}).ok); return gold - T.res.gold;
+    assert.ok(factory.A.recruit(st,{team:'dawn',name:'Anish',now},{unit,n:1,tid:'BUC',quote:ceiling}).ok); return gold - T.res.gold;
   };
   assert.equal(fee('bd_arch',{bd_arch:{talent:5}}),Math.round(fee('bd_arch',{}) * 0.75));
   assert.equal(fee('bd_whis',{bd_arch:{talent:5}}),fee('bd_whis',{}));

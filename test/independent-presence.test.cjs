@@ -17,7 +17,7 @@ function campaign(rules, rev = 80) {
   const st = saved(rev);
   if (rules) st.ruleset = rules;
   for (const team of ['reich', 'dawn'])
-    st.players['Fixture ' + team] = {team, role: 'soldier', pw: team + '-only', cd: 0};
+    st.players['Fixture ' + team] = {team, role: 'soldier', pw: team + '-only', cd: 0, cp: 10};
   st.terr.MOS.u = {inf: 1};
   return st;
 }
@@ -123,7 +123,9 @@ for (const rules of [undefined, RULES])
       assert.equal(first.log[0].kind, 'front');
       assert.equal(first.log[0].recovery, true);
       assert.equal(first.terr.MOS.country, 'USSR');
-      assert.deepEqual(first.players, copy(st.players));
+      const expected = copy(st);
+      r.tab.game.tick(expected, first.t); // only passive CP accrues on the roster
+      assert.deepEqual(first.players, expected.players);
       assert.equal(first.v, 6);
       for (const c of [r, r2, spec, bad]) assert.equal(c.tab.game.S.rev, 81);
       const signals = net.messages.filter(m => m.sub === 'muster');

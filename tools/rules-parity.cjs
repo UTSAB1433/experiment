@@ -31,9 +31,16 @@ assert.ok(
   Number.isSafeInteger(seed) && Number.isSafeInteger(cases) && cases > 0,
   'Use an integer seed and a positive battle count.'
 );
+// The one intentional economy difference: each post starts with its faction's old CP.
+function asPersonal(s) {
+  for (const pl of Object.values(s.players)) pl.cp = s.teams[pl.team].cp;
+  for (const side of Object.values(s.teams)) delete side.cp;
+  return s;
+}
+const officer = team => (team === 'reich' ? 'DEB' : 'Anish');
 const st = old.newGame(now),
   random = rng(seed);
-assert.deepEqual(structuredClone(st), structuredClone(next.newGame(now)));
+assert.deepEqual(asPersonal(structuredClone(st)), structuredClone(next.newGame(now)));
 for (const t of Object.values(st.teams)) {
   for (const k in t.res) t.res[k] = 100000;
   for (const k in t.tech) t.tech[k] = 4;
@@ -46,17 +53,18 @@ let recruits = 0,
   studies = 0,
   battles = 0;
 for (const team of ['reich', 'dawn']) {
-  const ctx = {team, now, name: 'Officer'},
+  const ctx = {team, now, name: officer(team)},
     tid = team === 'reich' ? 'BER' : 'BUC';
   for (const unit of old.unitsFor(team))
     for (let n = 1; n <= 20; n++) {
       const a = copy(st),
-        b = copy(a);
+        b = asPersonal(copy(a));
       const p = {unit, tid, n};
       const ra = old.A.recruit(a, ctx, p),
         rb = next.A.recruit(b, ctx, {...p, quote: ceiling});
       equal(rb, ra, unit + ' ' + n);
-      equal(b.teams[team], a.teams[team]);
+      assert.equal(b.players[ctx.name].cp, a.teams[team].cp);
+      equal(b.teams[team], asPersonal(a).teams[team]);
       equal(b.terr[tid], a.terr[tid]);
       recruits++;
     }
@@ -66,11 +74,11 @@ for (const team of ['reich', 'dawn']) {
         const a = copy(st);
         a.terr.BUC.u.bd_arch = count;
         a.teams[team].tech[k] = rank - 1;
-        const b = copy(a);
+        const b = asPersonal(copy(a));
         const ra = old.A.research(a, ctx, {k}),
           rb = next.A.research(b, ctx, {k, rank, quote: ceiling});
         equal(rb, ra);
-        equal(b.teams, a.teams);
+        equal(b.teams, asPersonal(a).teams);
         studies++;
       }
 }
@@ -115,10 +123,10 @@ for (let i = 0; i < cases; i++) {
     f: Math.floor(random() * 4),
     st: pick(['elastic', 'counter', 'bunker'])
   };
-  const b = copy(a);
+  const b = asPersonal(copy(a));
   if (i % 2) b.ruleset = 'mastery-1';
   const p = {from, to, grp, tactic},
-    ctx = {now, team, name: 'Officer'};
+    ctx = {now, team, name: officer(team)};
   old.rolls(i);
   next.rolls(i);
   const ra = old.A.attack(a, ctx, p),
@@ -130,9 +138,12 @@ for (let i = 0; i < cases; i++) {
   old.checkWin(a, now + 60000);
   next.checkWin(b, now + 60000);
   delete b.ruleset;
+  asPersonal(a);
+  for (const [name, pl] of Object.entries(a.players))
+    pl.cp = st.teams[pl.team].cp + 3 - (name === ctx.name ? 2 : 0); // one minute, one attack
   equal(b, a, 'after battle, income and victory check ' + i);
   battles++;
 }
 console.log(
-  `PASS: unchanged initial v6 save, ${recruits} recruitment orders, ${studies} doctrine orders and ${battles} seeded mixed-formation battles versus the pre-mastery engine (seed ${seed}).`
+  `PASS: initial v6 save with personal CP, ${recruits} recruitment orders, ${studies} doctrine orders and ${battles} seeded mixed-formation battles versus the pre-mastery engine (seed ${seed}).`
 );

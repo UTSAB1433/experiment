@@ -8,6 +8,14 @@ Classic still uses the existing v6 save and room addresses. To play with mastery
 - In a live order, the displayed rank and per-resource prices are limits. Recheck them, permissions, prerequisites and available funds on the locked game. Accept a lower price; reject a higher one without spending. Recruitment quotes cover the **whole batch**.
 - A real save on the wrong rules, an unreadable record and an unconfirmed empty room are **not** permission to initialize. Importing an older backup must not replace a newer campaign. No `GAME_V` bump or automatic reset.
 
+## Personal command points (Classic and Mastery)
+
+Each post starts a new war with **10 CP**, regains **1 CP every 20 seconds** of elapsed game time and can hold **20 CP**. This includes offline posts. Neither faction nor formations change the rate. Orders spend the issuing post’s points; two devices signed into the same post use the same balance. Manpower, steel, oil and gold remain faction resources. A successful honeytrap or decapitation takes up to 2 or 6 whole CP, respectively, from **one** randomly chosen opposing post with points to lose.
+
+Refresh the game on all devices before issuing orders. Existing v6 rooms and backups do not need a reset: each post without a personal balance inherits its faction’s saved CP at the save’s timestamp. The HUD and order controls project the balance without writing; the next accepted save stores personal balances instead of faction CP. New enlistees start at 10, and continuing from Classic to Mastery carries balances forward.
+
+`node --test test/personal-cp.test.cjs` checks the refill boundary, cap, every CP cost, independent teammates, same-post devices, read-only HUD updates and legacy saves. The 90-second World front clock below is separate.
+
 ## Independent countries (Classic and Mastery)
 
 No new room, save version or migration is needed. Refresh the game on each participating device. Open **World front** for the operation clock, occupied national capitals, country ranks and latest dispatch. A new room still needs its first explicit player order: opening an invite, spectating or displaying a cache never creates a campaign.
@@ -17,7 +25,7 @@ No new room, save version or migration is needed. Refresh the game on each parti
 - **Other raids still need both factions.** At most one battle happens per operation. Ready capital recoveries rotate between countries; if regular border raids are also eligible, alternate operations are available for them. Ordinary expeditions take troops from a connected garrison and alternate defending player factions when possible. Their stricter two-way check still requires a full paired interval and a fresh, post-deadline Dawn reply to a Reich challenge. Multiple clients share the same turn, not one turn per device.
 - **AFK after five minutes without input.** The HUD shows the countdown. Pointer, touch, keyboard, click, wheel or form input on *this device* restarts it; a heartbeat, incoming game state or HUD repaint does not. An AFK player stays signed in and can watch, but does not count. The last eligible player going AFK, leaving or disconnecting pauses independent turns. Returning after a gap starts a fresh interval; no missed upgrades, reserves or battles are banked. No AFK clock or presence record goes in the save. This does not change normal resource income.
 - **Live authority:** eligible clients check in every five seconds. MQTT requires this tab's current non-retained echo on the selected, state-confirmed broker (never BroadcastChannel); document stores require a successful live muster read. Check-ins expire after 18 seconds. Before a turn the client also needs the room lock, the same confirmed campaign/revision/origin/turn, valid credentials on the locked roster, an unexpired lease and an active local deadline. Victory, stale cache, incompatible rules and missing saves fail closed. A verified pair gets a short opportunity to run its raid before a solo writer proceeds. The normal income/HUD clock does not run the simulation.
-- Firebase uses `/muster/{reich,dawn}` beside state/lock and conditional state writes. The shared DB uses `muster-reich`/`muster-dawn` in the game's collection. With custom permissions, allow players to read and write the signal slots. MQTT uses the broker-echoed cooperative lease and confirmed state publication. Presence is cooperative, **not** server-side authentication; signals carry no passwords or verifiers. Older clients can play against the persisted garrisons but do not understand AFK or the updated muster. Sleeping tabs and badly mismatched clocks may pause rather than simulate unconfirmed turns. MQTT is not transactional.
+- Firebase uses `/muster/{reich,dawn}` beside state/lock and conditional state writes. The shared DB uses `muster-reich`/`muster-dawn` in the game's collection. With custom permissions, allow players to read and write the signal slots. MQTT uses the broker-echoed cooperative lease and confirmed state publication. Presence is cooperative, **not** server-side authentication; signals carry no passwords or verifiers. Older builds do not implement personal CP, AFK or the updated muster; use the current build throughout the room. Sleeping tabs and badly mismatched clocks may pause rather than simulate unconfirmed turns. MQTT is not transactional.
 
 ## Log → map
 
@@ -58,7 +66,7 @@ node tools/rules-parity.cjs
 EOT_PARITY_SEED=4135 EOT_PARITY_BATTLES=10000 node tools/rules-parity.cjs
 ```
 
-This checks the initial save, all legitimate map connections, 1,460 recruitment attempts (including caps), 168 doctrine purchases and 1,200 reproducible land/sea battles, including subsequent income and victory checks. The v6 save has **one** `PER` province (Lima); removing its duplicate map node/self-route must not rename it or change the existing economy and score weights.
+This checks the initial save (with only the CP representation changed), all legitimate map connections, 1,460 recruitment attempts (including caps), 168 doctrine purchases and 1,200 reproducible land/sea battles, including subsequent faction income, the new personal CP accrual and victory checks. The v6 save has **one** `PER` province (Lima); removing its duplicate map node/self-route must not rename it or change the existing economy and score weights.
 
 ## Mixed-build browser test (optional, Linux x86-64)
 

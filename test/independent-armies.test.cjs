@@ -173,7 +173,7 @@ test('a minor island cannot sortie without a fleet; survivors occupy a connected
     y.teams.reich.tech.nav = 4;
     const result = e.A[how](
       y,
-      {team: 'reich', name: 'Fixture', now},
+      {team: 'reich', name: 'DEB', now},
       {from, to, tid: to, grp: {inf: 100, nav: 5}, tactic: 'frontal', quote: ceiling}
     );
     assert.ok(result.ok, result.err);
