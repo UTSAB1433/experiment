@@ -93,7 +93,12 @@ for (const team of ['reich', 'dawn']) {
         const b = asPersonal(copy(a));
         const ra = old.A.research(a, ctx, {k}),
           rb = next.A.research(b, ctx, {k, rank, quote: ceiling});
-        equal(rb, ra);
+        // Dawn's receipt now describes Dawn unlocks; the rank, charge and shared log must still match.
+        if (team === 'dawn') {
+          assert.ok(ra.ok && rb.ok);
+          assert.equal(rb.ok.split(':')[0], ra.ok.split(':')[0]);
+          equal(b.log, a.log);
+        } else equal(rb, ra);
         equal(b.teams, asPersonal(a).teams);
         studies++;
       }

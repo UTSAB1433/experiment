@@ -229,6 +229,7 @@ test('recruit buttons track full batch cost and command points, and a newer room
   const {tab, controls, relay} = purchaseRoom(st, 'reich', 'chief', 0.97);
   const buy = (n,u = 'inf') => controls().find(el => el.dataset.act === 'recruit' && el.dataset.u === u && +el.dataset.n === n);
   tab.click('sel', {id:'BER'});
+  tab.click('recruitlist');
   assert.equal(buy(1).disabled, true, 'needs one command point');
   t.mock.timers.tick(1000); assert.equal(buy(1).disabled, false); assert.equal(buy(5).disabled, true);
   tab.click('tab', {k:'troops'}); assert.equal(buy(1).disabled, false); assert.equal(buy(5).disabled, true);
