@@ -32,7 +32,7 @@ test('warm first paint; parallel discovery chooses the freshest responding broke
   assert.ok(tab.sockets.every(s => publications(s).some(p => p.topic === prefix + 'sync' && p.data.type === 'req')));
   checkReadOnly(tab);
 
-  const order = tab.game.act('enlist', enlist); t.mock.timers.tick(75); await order;
+  const order = tab.game.act('enlist', enlist); await finishOrder(t,order);
   const writes = tab.sockets.flatMap(publications).filter(p => p.retain);
   assert.equal(writes.length, 1);
   assert.equal(writes[0].topic, prefix + 'state');
@@ -72,7 +72,7 @@ test('broker silence never retains a cache or new game; a late first snapshot st
     assert.deepEqual(tab.sockets.map(s => s.readyState), [1, 3, 3], 'stable tie-break for empty relays');
     assert.equal(tab.game.S.rev, cached ? 2 : 1);
     tab.sockets[0].message('sync', {type:'req', from:'peer'});
-    const noop = tab.game.act('noop'); t.mock.timers.tick(75); await noop;
+    const noop = tab.game.act('noop'); await finishOrder(t,noop);
     assert.ok(!tab.sockets.flatMap(publications).some(p => p.data.type === 'res'));
     if(!cached) assert.equal(tab.storage.get(key), undefined);
     const remote = saved(cached ? 8 : 1); remote.created = now + 10000;
@@ -86,11 +86,11 @@ test('an empty room is playable: only the first explicit order persists the star
   mockTime(t);
   const tab = launch({cached:'{broken'}); tab.sockets.forEach(s => s.subscribe());
   t.mock.timers.tick(650); checkReadOnly(tab);
-  const tooSoon = tab.game.act('enlist', enlist); t.mock.timers.tick(75); await tooSoon;
+  const tooSoon = tab.game.act('enlist', enlist); await finishOrder(t,tooSoon);
   checkReadOnly(tab); assert.ok(!tab.game.S.players[enlist.name], 'a timeout alone is not a read barrier');
   const request = publications(tab.sockets[0]).find(p => p.data.type === 'req');
   tab.sockets[0].message('sync', request.data); // A real MQTT 3.1.1 subscriber receives its own request.
-  const order = tab.game.act('enlist', enlist); t.mock.timers.tick(75); await order;
+  const order = tab.game.act('enlist', enlist); await finishOrder(t,order);
   assert.equal(tab.game.S.rev, 2); assert.ok(tab.game.S.players[enlist.name]);
   assert.equal(publications(tab.sockets[0]).filter(p => p.retain).length, 1);
 });
@@ -161,7 +161,7 @@ test('a stalled broker does not delay the map; live updates from another tab are
   assert.match(tab.$('#me').innerHTML, /Live/); assert.equal(tab.sockets.length, 3);
   tab.channels[0].onmessage({data:{sub:'state', obj:saved(16)}});
   good.message('state', saved(14)); checkReadOnly(tab);
-  const order = tab.game.act('enlist', enlist); t.mock.timers.tick(75); await order;
+  const order = tab.game.act('enlist', enlist); await finishOrder(t,order);
   assert.equal(tab.game.S.rev, 17);
   assert.equal(tab.game.S.players.Veteran.title, 'Saved post #16');
 });
@@ -195,8 +195,8 @@ for(const team of ['reich','dawn']) test(`${team} research unlocks with passive 
   assert.equal(button().disabled, false); assert.equal(label.classList.no, false);
   assert.equal(tab.game.S.t, now); assert.equal(tab.game.S.teams[team].res.steel, T.res.steel); checkReadOnly(tab);
 
-  const order = tab.game.act('research', payload); t.mock.timers.tick(75); await order;
-  const expected = structuredClone(st); factory.tick(expected, Date.now());
+  const order = tab.game.act('research', payload); await finishOrder(t,order);
+  const expected = structuredClone(st); factory.tick(expected, tab.game.S.t);
   assert.equal(tab.game.S.teams[team].res.steel, expected.teams[team].res.steel - steel);
   assert.equal(tab.game.S.teams[team].res.gold, expected.teams[team].res.gold - gold);
   assert.equal(tab.game.S.teams[team].tech.ind, 1); assert.equal(tab.game.S.rev, 31);
@@ -219,7 +219,7 @@ test('recruit buttons track full batch cost and command points, and a newer room
   const order = tab.game.act('recruit', {tid:'BER', unit:'inf', n:5, quote:factory.recruitCost(st, 'reich', 'inf', 5)});
   const spent = structuredClone(st); spent.rev++; spent.t = Date.now(); spent.teams.reich.res.man = 0; spent.teams.reich.cp = 4;
   relay.message('state', spent); // A teammate spent the balance while we waited for the lock.
-  t.mock.timers.tick(75); await order;
+  await finishOrder(t,order);
   assert.equal(tab.game.S.rev, spent.rev); assert.equal(tab.game.S.terr.BER.u.inf, st.terr.BER.u.inf);
   assert.equal(buy(1).disabled, true); checkReadOnly(tab);
 });

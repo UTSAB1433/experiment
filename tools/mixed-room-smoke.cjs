@@ -11,9 +11,9 @@ const {chromium} = require('playwright-core');
 const binary = require('@sparticuz/chromium');
 const {factory} = require('../test-support/war-room.cjs');
 const html = fs.readFileSync(join(__dirname, '../index.html'));
-if (!process.env.EOT_CLASSIC_HTML)
+if (!process.env.EOT_ONLY_FRONT && !process.env.EOT_CLASSIC_HTML)
   throw Error('Set EOT_CLASSIC_HTML to index.html from before troop mastery.');
-const legacy = fs.readFileSync(process.env.EOT_CLASSIC_HTML);
+const legacy = process.env.EOT_ONLY_FRONT ? null : fs.readFileSync(process.env.EOT_CLASSIC_HTML);
 const room = 'mixed-test',
   prefix = 'lands-eot/v1/' + room,
   classic = prefix + '/state',
@@ -51,9 +51,9 @@ function fixture() {
   st.terr[to] = {o: 'dawn', u: {bd_init: 10}, f: 0, st: 'bunker'};
   return st;
 }
-const publish = (topic, st) =>
+const publish = (topic, st, broker = brokers[0]) =>
   new Promise((resolve, reject) =>
-    brokers[0].publish({topic, payload: Buffer.from(JSON.stringify(st)), qos: 0, retain: true}, e =>
+    broker.publish({topic, payload: Buffer.from(JSON.stringify(st)), qos: 0, retain: true}, e =>
       e ? reject(e) : resolve()
     )
   );
@@ -129,6 +129,13 @@ const battle = p =>
       ctx.on('page', p => p.on('pageerror', e => errors.push(e.message)));
       return ctx;
     }
+    const worldFront = () =>
+      require('./front-room-check.cjs')({origin, context, brokers, fixture, publish, latest, writes, live});
+    if (process.env.EOT_ONLY_FRONT) {
+      await worldFront();
+      assert.deepEqual(errors, []);
+      return;
+    }
     const a = await context('dawn'),
       b = await context('reich'),
       dawn = await a.newPage(),
@@ -138,6 +145,18 @@ const battle = p =>
     await Promise.all([live(dawn), live(old)]);
     assert.match(await dawn.locator('#me').textContent(), /Fixture dawn/);
     assert.match(await old.locator('#me').textContent(), /Fixture reich/);
+    // Long officer lists must not flex-shrink the Council view switch out of reach.
+    await click(dawn, 'tab', '[data-k="council"]');
+    await click(dawn, 'councilview', '[data-k="hierarchy"]');
+    assert.equal(await dawn.locator('.charter-seats li h4').count(), 8);
+    assert.match(await dawn.locator('.charter-authority').textContent(), /equal deputy status/);
+    await dawn.setViewportSize({width: 320, height: 844});
+    assert.ok(await dawn.locator('#panel').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+    await dawn.getByRole('button', {name: 'Posts & field duty'}).focus();
+    await dawn.keyboard.press('Enter');
+    assert.equal(await dawn.locator('.council-roster').count(), 2);
+    await dawn.setViewportSize({width: 1440, height: 900});
+    assert.equal(writes.length, 0);
     await research(dawn);
     await click(dawn, 'preparemastery');
     await dawn.waitForSelector('[data-act="startmastery"]');
@@ -317,6 +336,9 @@ const battle = p =>
     console.log(
       'PASS: both independent-device orders survived a 160 ms uplink delay (distinct revisions and both debits).'
     );
+    await Promise.all([a, b, separate].map(ctx => ctx.close()));
+    await worldFront();
+    assert.deepEqual(errors, []);
   } finally {
     if (browser) await browser.close();
     for (const c of ws.clients) c.terminate();

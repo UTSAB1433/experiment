@@ -5,7 +5,11 @@ const {join} = require('node:path');
 const vm = require('node:vm');
 
 const html = readFileSync(join(__dirname, '../index.html'), 'utf8');
-const app = new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1], {filename: 'index.html'});
+const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const app = new vm.Script(inline, {filename: 'index.html'});
+// Read engine internals in disposable VMs without publishing a manual AI-turn button/API.
+const inspect = names =>
+  new vm.Script(inline.replace('window.__eot = {', `window.__eot = {${names.join(',')},`));
 const room = 'sync-test',
   key = 'eot-live-state:' + room;
 const prefix = 'lands-eot/v1/' + room + '/';
@@ -141,10 +145,7 @@ function launch({
       this.sent.push(buf);
       if (!this.noEcho && buf[0] >> 4 === 3) {
         const [msg] = publications({sent: [buf]});
-        if (
-          msg.topic.endsWith(':mastery-1/lock') ||
-          (msg.topic.endsWith(':mastery-1/state') && !this.dropStateEcho)
-        )
+        if (msg.topic.endsWith('/lock') || (msg.topic.endsWith('/state') && !this.dropStateEcho))
           setTimeout(() => this.receive(publication(msg.topic, msg.data)), 12);
       }
     }
@@ -309,6 +310,7 @@ module.exports = {
   publications,
   launch,
   factory,
+  inspect,
   saved,
   masterySaved,
   checkReadOnly,
