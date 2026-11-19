@@ -96,6 +96,7 @@ test('discount is rounded once per order and charged identically on both recruit
       const {tab, controls} = purchaseRoom(st, 'dawn', 'chief', 1);
       tab.click('sel', {id: 'BUC'});
       if (section === 'troops') tab.click('tab', {k: 'troops'});
+      else tab.click('recruitlist');
       const b = controls().find(x => x.dataset.u === 'bd_whis' && x.dataset.n === '5');
       assert.deepEqual(priceOf(b), {man, gold});
       assert.ok(!b.disabled);
@@ -119,6 +120,7 @@ test('a stock or command point just below the batch minimum, or a live loss of r
   st.teams.dawn.mastery = {bd_whis: {talent: 1}};
   const {tab, controls, relay} = purchaseRoom(st, 'dawn');
   tab.click('sel', {id: 'BUC'});
+  tab.click('recruitlist');
   const button = (u, n) => controls().find(e => e.dataset.u === u && +e.dataset.n === n);
   for (const [man, gold, cp] of [
     [18.99, 24, 1],

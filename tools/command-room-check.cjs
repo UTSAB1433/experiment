@@ -70,6 +70,7 @@ module.exports = async function commandRoom({origin, context, fixture, publish, 
     assert.equal(await btn(dhruv, 'Attack from here').count(), 0);
     await admin.getByLabel('Game role for Dhruv').selectOption('chief');
     await revision(dhruv, 554);
+    await dhruv.getByRole('button', {name: /Recruit here/}).tap();
     const recruit = dhruv.locator('[data-act="recruit"][data-u="inf"][data-n="1"]');
     assert.ok(await recruit.isEnabled());
     await recruit.tap();

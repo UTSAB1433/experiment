@@ -16,9 +16,9 @@ Dhruv starts as a **Reich soldier**. Only the password verifier is stored. An ol
 
 ### Command appointments
 
-- The faction leader can appoint up to **four chiefs of staff** in **Council → Posts & field duty**. Only chiefs recruit, in **any faction-owned province**. The leader can order attacks but is not a fifth recruiter.
+- The faction leader can appoint up to **four chiefs of staff** in **Council → Posts & field duty**. Only chiefs recruit, in **any faction-owned province**. Open **Recruit here** below the province’s orders, or use the full **Troops** roster. Both count each deployed formation once per saved province, including at Lima. The leader can order attacks but is not a fifth recruiter.
 - **Six non-leader attack seats plus the leader.** Each chief automatically occupies one seat. The leader can assign or release the remaining seats without changing a soldier's or diplomat's other duties. Promoting an attack-seat holder to chief uses the same seat, not two. Demoting a chief releases it. In an already over-cap v6 roster, original office holders take precedence, then account-key order; extra office holders keep their accounts, titles and CP as soldiers.
-- Every player attack crosses **one map line** from a friendly garrison to an enemy or neutral province. This applies equally to leaders, chiefs and appointed attackers. Start at either end: the picker lists only connected targets or connected friendly garrisons with troops. Dashed sea links also require a group that can cross, just as for friendly moves. Range, crossing ability, personal CP, oil, ceasefires, unit availability and tactics are checked on the locked state before an attack takes effect. Peaceful annexation and independent operations keep their own rules.
+- Every player attack crosses **one map line** from a friendly garrison to an enemy or neutral province. This applies equally to leaders, chiefs and appointed attackers. Start at either end: the picker lists only connected targets or connected friendly garrisons with troops. Dashed sea links also require a group that can cross, just as for friendly moves. Range, crossing ability, personal CP, oil, ceasefires, unit availability and tactics are checked on the locked state before an attack takes effect. A ceasefire removes opposing-faction options, not neutral targets. Move and attack previews explain an illegal crossing before confirmation. Peaceful annexation and independent operations keep their own rules.
 
 ## Re-entering the same campaign
 
@@ -109,6 +109,8 @@ LD_LIBRARY_PATH="$work/libs/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" node tools
 ```
 
 The script starts an ephemeral loopback HTTP server and **three separate real MQTT/WebSocket brokers**. Synthetic officers use the previous v6 Mastery build and the current build in Chromium. App sockets are redirected to the local brokers; external requests are blocked. No public room code, login or Firebase URL is needed.
+
+Set `EOT_ONLY_INTERFACE=1` to run the current-build interface scenario without legacy HTML. Three profiles check every directory entry and region preset, mobile Orders versus Troops, two capped recruits at Lima, sign-in during a teammate’s order, masked enlistment, trade field labels/drafts, keyboard containment and return from Room, blocked versus legal crossings and Dawn’s actual treaty penalty. `node --test test/campaign-interface.test.cjs` also covers treaty expiry with an attack already open, stale quotes and faction-specific doctrine unlocks.
 
 The re-entry scenario gives Classic, Mastery and a divergent relay different oil and garrisons. A phone leaves; its teammate recruits while it's gone. On a bare revisit, the phone must show **no stock or troops** while the broker's state delivery is suppressed, then the correct HUD and map in Orders on reconnect. The run checks all three retained records: only the teammate's deliberate recruitment changed one. Use `EOT_ONLY_REENTRY=1` to run just this scenario without legacy HTML.
 

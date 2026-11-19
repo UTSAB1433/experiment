@@ -217,7 +217,7 @@ test(`Mastery Log: links center and select, keep the log, respect visibility and
     assert.ok(links(panel.innerHTML).some(([id, label]) => id === 'OSA' && label === 'Japan'));
     assert.ok(!links(panel.innerHTML).some(([id]) => id === 'TOK'));
     tab.click('tab', {k: 'orders'});
-    assert.match(panel.innerHTML, /class="tname">Osaka/);
+    assert.match(panel.innerHTML, /<h2\b[^>]*\bid="province-name"[^>]*>Osaka<\/h2>/);
     assert.deepEqual(copy(tab.game.S), next);
     checkReadOnly(tab);
   }

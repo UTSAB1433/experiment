@@ -12,7 +12,10 @@ const binary = require('@sparticuz/chromium');
 const {factory} = require('../test-support/war-room.cjs');
 const html = fs.readFileSync(join(__dirname, '../index.html'));
 const currentOnly =
-  process.env.EOT_ONLY_FRONT || process.env.EOT_ONLY_REENTRY || process.env.EOT_ONLY_COMMAND;
+  process.env.EOT_ONLY_FRONT ||
+  process.env.EOT_ONLY_REENTRY ||
+  process.env.EOT_ONLY_COMMAND ||
+  process.env.EOT_ONLY_INTERFACE;
 if (!currentOnly && !process.env.EOT_V6_HTML)
   throw Error('Set EOT_V6_HTML to index.html from the previous v6 Mastery build.');
 const legacy = currentOnly ? null : fs.readFileSync(process.env.EOT_V6_HTML);
@@ -149,6 +152,21 @@ const battle = p =>
       await worldFront();
       assert.deepEqual(errors, []);
       return;
+    }
+    if (!currentOnly || process.env.EOT_ONLY_INTERFACE) {
+      await require('./interface-room-check.cjs')({
+        origin,
+        context,
+        fixture,
+        publish,
+        latest,
+        writes,
+        live,
+        rev,
+        factory
+      });
+      assert.deepEqual(errors, []);
+      if (process.env.EOT_ONLY_INTERFACE) return;
     }
     if (!process.env.EOT_ONLY_REENTRY)
       await require('./command-room-check.cjs')({origin, context, fixture, publish, latest, writes, live});
@@ -298,6 +316,7 @@ const battle = p =>
     assert.equal(await dawn.evaluate(() => document.activeElement.dataset.id), 'BUC');
     for (const section of ['orders', 'troops']) {
       await click(dawn, 'tab', `[data-k="${section}"]`);
+      if (section === 'orders') await click(dawn, 'recruitlist');
       const batch = dawn.locator('[data-act="recruit"][data-u="bd_whis"][data-n="5"]');
       assert.match(await batch.textContent(), /19 man · 24 gold/);
       assert.ok(await batch.isEnabled());
