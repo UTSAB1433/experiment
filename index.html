@@ -832,8 +832,10 @@ function attackRoutes(s,team,id,now = Date.now()){
 
 /* ============================ ENGINE ============================ */
 function stanceOf(id){ return ['bunker','elastic','counter'][(id.charCodeAt(0) + id.charCodeAt(2)) % 3]; }
-function startUnits(t){
-  const g = t.g, o = t.owner0;
+// owner0 records the historical layout, not a claim on territory in a live save.
+const openingOwner = (t, capitalStart) => capitalStart && !t.fcap ? 'neutral' : t.owner0;
+function startUnits(t, o){
+  const g = t.g;
   if(o === 'neutral') return {inf:g, arm:Math.floor(g/9)};
   if(o === 'dawn'){
     const u = {
@@ -863,14 +865,19 @@ function startUnits(t){
   return u;
 }
 const LEGACY_V = 6, GAME_V = 7;
-function newGame(now){
+function newGame(now, capitalStart = true){
   const s = {v:GAME_V, ruleset:MASTERY_RULES, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
-  TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.fcap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
+  if(capitalStart) s.capitalStart = true; // absent in existing campaigns; never infer a start from current borders
+  for(const id of PROVINCES){
+    const t = TD[id], o = openingOwner(t,capitalStart);
+    s.terr[id] = {o, u:startUnits(t,o), f:t.fcap ? 1 : 0, st:o === 'neutral' ? stanceOf(id) : 'bunker'};
+  }
   s.teams.reich = {res:{man:80, steel:80, oil:60, gold:50}, tech:{inf:1, art:0, arm:1, air:1, nav:0, intel:0, ind:0}};
   s.teams.dawn = {res:{man:80, steel:80, oil:60, gold:50}, tech:{inf:1, art:1, arm:0, air:0, nav:0, intel:1, ind:0}};
   ROSTER.forEach(([team, name, role, title]) => s.players[name] = {team, role, title, cd:0, cp:CP_START});
   s.players.Dhruv.pw = DHRUV_VERIFIER;
-  log(s, now, 'all', 'The war begins across the globe. Use the region buttons (World, Americas, Europe, Africa, Mid East, Asia, Oceania) or the nation directory to reach every front.', 'sys');
+  const opening = capitalStart ? 'The Reich starts in Berlin and Black Dawn in Nigeria. All other provinces are neutral.' : 'The war begins across the globe.';
+  log(s, now, 'all', opening + ' Use the region buttons (World, Americas, Europe, Africa, Mid East, Asia, Oceania) or the nation directory to reach every front.', 'sys');
   return s;
 }
 function log(s, now, vis, msg, kind, extra){ s.log.unshift(Object.assign({t:now, vis, msg, kind:kind || 'info'}, extra || {})); if(s.log.length > 80) s.log.length = 80; }
@@ -1400,7 +1407,7 @@ A.remove = (s, c, p) => { const pl = s.players[p.name]; if(!pl || pl.team !== c.
 A.enlist = (s, c, p) => { const n = String(p.name || '').trim().slice(0, 30); if(!n) return {err:'Enter a name.'}; if(s.players[n]) return {err:'That name is taken.'}; if(!TEAMS[p.team]) return {err:'Pick a side.'}; if(!p.pw || String(p.pw).length !== 64) return {err:'Choose a password.'}; s.players[n] = {team:p.team, role:'soldier', title:'Recruit', cd:0, pw:p.pw, cp:CP_START}; log(s, c.now, 'all', `${n} enlists with ${TEAMS[p.team].name}.`); return {ok:'Welcome.'}; };
 A.reset = (s, c, p) => {
   if(p.rev !== s.rev || p.origin !== s.origin || p.created !== s.created) return {err:'The room changed. Review the latest map before resetting.'};
-  const players = s.players, fresh = newGame(c.now);
+  const players = s.players, fresh = newGame(c.now, s.capitalStart === true);
   for(const pl of Object.values(players)) pl.cp = CP_START;
   Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players});
   return {ok:'The map is reset.', reset:true};
@@ -1586,7 +1593,7 @@ const pickOne = list => list[Math.floor(Math.random() * list.length)];
 function trainingPace(s){
   return ['reich','dawn'].some(t => Object.values(s.teams[t].tech).some(n => n >= 3) ||
     Object.values(s.teams[t].mastery || {}).some(skills => Object.values(skills).some(n => n >= 3)) ||
-    PROVINCES.filter(id => TD[id].owner0 === 'neutral' && s.terr[id].o === t).length >= 8) ? 2 : 1;
+    PROVINCES.filter(id => openingOwner(TD[id],s.capitalStart === true) === 'neutral' && s.terr[id].o === t).length >= 8) ? 2 : 1;
 }
 // One live post funds upkeep and capital recovery. Only a fresh two-faction
 // muster may enable unrelated expeditions. Both use the same turn budget.
@@ -1826,6 +1833,7 @@ function validAppointments(players){
 }
 function validSave(p){
   return (p?.v === LEGACY_V || (p?.v === GAME_V && p.ruleset === MASTERY_RULES)) && Number.isSafeInteger(p.rev) && p.rev > 0 &&
+    (p.capitalStart == null || typeof p.capitalStart === 'boolean') &&
     validFront(p.front) && validTraffic(p.frontTraffic) && Number.isFinite(p.created) && Number.isFinite(p.t) &&
     record(p.players) && Object.values(p.players).every(pl => sideId(pl?.team) && Object.hasOwn(ROLES, pl.role) &&
       (pl.cp === undefined ? p.v === LEGACY_V && Number.isFinite(p.teams?.[pl.team]?.cp) : Number.isFinite(pl.cp) && pl.cp >= 0 && pl.cp <= CPMAX)) &&
@@ -2691,7 +2699,8 @@ function renderHud(){
   refreshPrices(P);
   document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#c9c3ae');
   const vr = vpOf(S, 'reich'), vd = vpOf(S, 'dawn'), vn = TOTAL_VP - vr - vd;
-  $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${countOf(S, 'reich')} lands</b></span><span style="color:var(--dawn)"><b>${countOf(S, 'dawn')} lands · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / TOTAL_VP * 100}%;background:var(--reich)"></i><i style="width:${vn / TOTAL_VP * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / TOTAL_VP * 100}%;background:var(--dawn)"></i></div>`;
+  const lands = team => { const n = countOf(S,team); return `${n} ${n === 1 ? 'province' : 'provinces'}`; };
+  $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${lands('reich')}</b></span><span style="color:var(--dawn)"><b>${lands('dawn')} · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / TOTAL_VP * 100}%;background:var(--reich)"></i><i style="width:${vn / TOTAL_VP * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / TOTAL_VP * 100}%;background:var(--dawn)"></i></div>`;
   const pl = authed() ? S.players[me.name] : null, post = postView(S.players,me.name);
   updateMe(roomPillHtml() + (pl ? `<div class="who"><b>${esc(post.name)}</b><small>${esc(post.caption)} · ${post.office ? 'Game role: ' : ''}${ROLES[pl.role]}</small></div>${icon(pl.team)}<button class="btn sm" data-act="switch">Switch</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`));
   const T = P.teams[team], cp = P.players[me.name]?.cp, rate = r => S.win ? 'War ended' : !liveBoard() ? 'Last save' : !sawSavedRoom ? 'Starting stock' : '+' + inc[r].toFixed(1) + '/min';
@@ -3232,7 +3241,7 @@ function renderModal(refreshBudget = true){
       <div class="sm mut">Source: <b>${esc(NET.transport)}</b>${canShare ? ` · Live · Revision #${S.rev}` : startingMap ? ' · Confirmed empty' : ` · ${esc(syncText())}`}</div>
       <div class="card sm" id="room-presence">${roomPresenceHtml()}</div>
       <div class="card sm"><h3>Invite friends</h3><div class="row"><input type="text" readonly id="roomlink" aria-label="Room invite link" value="${canShare ? esc(roomUrl()) : ''}" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn pri sm" data-act="copyroom" ${canShare ? '' : 'disabled'}>Copy link</button></div><div class="mut sm" style="margin-top:6px">${canShare ? 'Share this exact link. It selects the same room, rules and data source on every device.' : 'Share the link once the saved campaign is live.'}</div></div>
-      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" aria-label="Room code" value="${esc(ROOM)}" placeholder="room-code" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New Mastery room</button></div></div>
+      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" aria-label="Room code" value="${esc(ROOM)}" placeholder="room-code" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New Mastery room</button></div><p class="mut sm" style="margin:6px 0 0">In a new room, the Reich starts with Berlin and Black Dawn with Nigeria. Every other province starts neutral. Joining an existing room keeps its saved borders.</p></div>
       <details class="card sm" id="room-backup"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
         <div class="mut sm" style="margin:6px 0">Public relays can lose retained saves. Export a backup you want to keep. Selecting a Firebase database opens a different data source; it does not move or upload this campaign.</div>
         <div class="row" style="margin-bottom:8px"><input type="text" id="fbin" aria-label="Firebase database URL" value="${esc(FB_URL)}" placeholder="https://your-app-default-rtdb.firebaseio.com" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn sm" data-act="savefb">Use</button>${FB_URL ? '<button class="btn sm" data-act="clearfb">Clear</button>' : ''}</div>

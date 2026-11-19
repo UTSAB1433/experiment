@@ -46,7 +46,7 @@ for (const b of brokers)
 const to = 'LOR',
   from = factory.ADJ[to].find(n => !n.sea).id;
 function fixture() {
-  const st = factory.newGame(Date.now());
+  const st = factory.newGame(Date.now(), false); // historical board shared by the saved-room and v6 scenarios
   st.rev = 80;
   st.players.Utkarsh.role = 'soldier'; // make room for the synthetic Reich chief
   for (const team of ['reich', 'dawn']) {
