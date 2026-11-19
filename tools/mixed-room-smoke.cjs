@@ -44,7 +44,7 @@ function fixture() {
   const st = factory.newGame(Date.now());
   st.rev = 80;
   for (const team of ['reich', 'dawn']) {
-    st.players['Fixture ' + team] = {team, role: 'chief', pw: 'fixture-only', cd: 0, title: 'E2E'};
+    st.players['Fixture ' + team] = {team, role: 'chief', pw: 'fixture-only', cd: 0, title: 'E2E', cp: 10};
     for (const r in st.teams[team].res) st.teams[team].res[r] = 5000;
   }
   st.terr[from] = {o: 'reich', u: {inf: 14}, f: 0, st: 'bunker'};
@@ -83,7 +83,11 @@ const battle = p =>
 (async () => {
   let browser;
   try {
-    await publish(classic, fixture());
+    const original = fixture(); // Both builds open a real pre-personal-CP Classic save.
+    for (const pl of Object.values(original.players)) delete pl.cp;
+    original.teams.reich.cp = 8;
+    original.teams.dawn.cp = 4.5;
+    await publish(classic, original);
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const origin = 'http://127.0.0.1:' + server.address().port;
@@ -163,6 +167,10 @@ const battle = p =>
     assert.equal(writes.length, 0);
     await click(dawn, 'startmastery');
     await rev(dawn, 81);
+    const continued = latest.get(mastery);
+    for (const pl of Object.values(continued.players)) assert.equal(pl.cp, original.teams[pl.team].cp);
+    assert.ok(Object.values(continued.teams).every(side => !('cp' in side)));
+    assert.match(await dawn.locator('#hud .cp').textContent(), /Your CP\d+\/20/);
     await click(dawn, 'room');
     const invite = await dawn.locator('#roomlink').inputValue();
     assert.equal(new URL(invite).searchParams.get('rules'), 'mastery-1');

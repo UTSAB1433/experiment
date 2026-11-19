@@ -87,6 +87,7 @@ test('an explicit leader edit preserves a custom room title alongside the appoin
   mockTime(t);
   const st = masterySaved(90);
   st.players.Debjiit.cd = now + 80000;
+  st.players.Debjiit.cp = 20; // no passive change while the title edit is in flight
   const {tab} = purchaseRoom(st, 'dawn', 'leader');
   const before = structuredClone(tab.game.S.players.Debjiit);
   tab.click('tab', {k: 'council'});
@@ -114,7 +115,7 @@ test('an explicit leader edit preserves a custom room title alongside the appoin
 test('a similarly named enlistee, reassignment or removal in a newer save never transfers an office or restores a missing post', t => {
   mockTime(t);
   const st = saved(114);
-  st.players.Debjit = {team:'dawn',role:'soldier',title:'Reserve',cd:0};
+  st.players.Debjit = {team:'dawn',role:'soldier',title:'Reserve',cd:0,cp:10};
   st.players.Souvik.team = 'reich';
   const tab = launch({cached: st}), relay = connect(tab, st);
   assert.match(modal(tab), /data-n="Debjiit"><b>Debjit \(Debjiit\)<\/b>[^<]*<span[^>]*>Warden of the Dominions/);

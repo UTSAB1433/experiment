@@ -24,7 +24,7 @@ const {
 const MP = 'lands-eot/v1/' + masterWire + '/';
 const identity = {name: 'Fixture officer', ph: 'room-fixture'};
 const officer = st => {
-  st.players[identity.name] = {team: 'dawn', role: 'chief', pw: identity.ph, cd: 0};
+  st.players[identity.name] = {team: 'dawn', role: 'chief', pw: identity.ph, cd: 0, cp: 10};
   return st;
 };
 const retained = tab => tab.sockets.flatMap(publications).filter(p => p.retain);
@@ -42,6 +42,7 @@ function targetRelay(tab, i = 0) {
 test('explicit Classic → Mastery: copy the confirmed snapshot once; invites, locks, writes and caches stay isolated', async t => {
   mockTime(t);
   const st = saved(83);
+  st.players.Anish.cp = 3.5; st.players.Sattyaki.cp = 0; // continuing is not a CP reset
   st.props.push({id: 3, open: true, from: 'reich', type: 'ceasefire', mins: 60});
   const {tab, controls} = purchaseRoom(st, 'dawn');
   tab.click('showmastery', {u: 'bd_init'});
@@ -483,6 +484,7 @@ test('backup imports reject old/equal revisions, a different campaign or rules, 
     s => delete s.ruleset,
     s => s.v++,
     s => (s.terr.TRA.u = {bd_arch: -1}),
+    s => (s.players.Anish.cp = 21),
     s => (s.rev = Number.MAX_SAFE_INTEGER)
   ]) {
     const backup = structuredClone(st);
@@ -497,6 +499,9 @@ test('backup imports reject old/equal revisions, a different campaign or rules, 
   const backup = structuredClone(st);
   backup.rev = 120;
   backup.teams.dawn.mastery = {bd_whis: {atk: 2}};
+  for (const pl of Object.values(backup.players)) delete pl.cp; // backup predates personal CP
+  backup.teams.reich.cp = 0;
+  backup.teams.dawn.cp = 3.75;
   const race = open(backup);
   await flush();
   st.rev = 111;
@@ -509,6 +514,8 @@ test('backup imports reject old/equal revisions, a different campaign or rules, 
   assert.equal(retained(tab).length, 1);
   assert.equal(tab.game.S.rev, 121);
   assert.equal(tab.game.S.teams.dawn.mastery.bd_whis.atk, 2);
+  for (const pl of Object.values(tab.game.S.players)) assert.equal(pl.cp, backup.teams[pl.team].cp);
+  assert.ok(Object.values(tab.game.S.teams).every(side => !('cp' in side)));
   const chief = purchaseRoom(masterySaved(110), 'reich');
   assert.equal(filePicker(chief.tab)(backup), null);
   checkReadOnly(chief.tab);

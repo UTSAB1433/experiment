@@ -36,6 +36,7 @@ test('location-bearing orders record their actual map IDs; earlier plain-text co
   for (const [name, p, r] of cases) {
     roll = r ?? 0.5;
     const s = saved(12);
+    s.players.Berlin = {...s.players.DEB};
     s.teams.reich.tech.intel = 4;
     s.teams.reich.res.gold = 1000;
     s.terr.RIO.o = s.terr.BSB.o = s.terr.NYC.o = 'reich';
@@ -132,7 +133,7 @@ for (const make of [saved, masterySaved])
   test(`${make === saved ? 'Classic' : 'Mastery'} Log: links center and select, keep the log, respect visibility and never write`, t => {
     mockTime(t);
     const st = make(50);
-    st.players.Reader = {team: 'dawn', role: 'soldier', pw: 'fixture'};
+    st.players.Reader = {team: 'dawn', role: 'soldier', pw: 'fixture', cp: 10};
     st.log = [
       {kind: 'battle', vis: 'all', t: now, tid: 'MOS', msg: 'Battle at Moscow.'},
       {kind: 'intel', vis: 'reich', t: now, tid: 'WDC', msg: 'Private report from Washington D.C.'},

@@ -93,8 +93,7 @@ test('discount is rounded once per order and charged identically on both recruit
       T.mastery = {bd_whis: {atk: 5, def: 5, talent: rank}};
       const [man, gold] = fees[rank];
       Object.assign(T.res, {man, gold});
-      T.cp = 1;
-      const {tab, controls} = purchaseRoom(st, 'dawn');
+      const {tab, controls} = purchaseRoom(st, 'dawn', 'chief', 1);
       tab.click('sel', {id: 'BUC'});
       if (section === 'troops') tab.click('tab', {k: 'troops'});
       const b = controls().find(x => x.dataset.u === 'bd_whis' && x.dataset.n === '5');
@@ -128,7 +127,7 @@ test('a stock or command point just below the batch minimum, or a live loss of r
     [19, 24, 1]
   ]) {
     Object.assign(st.teams.dawn.res, {man, gold});
-    st.teams.dawn.cp = cp;
+    st.players['Test chief'].cp = cp;
     st.rev++;
     relay.message('state', st);
     assert.equal(button('bd_whis', 5).disabled, man < 19 || gold < 24 || cp < 1);
@@ -183,7 +182,7 @@ test('exhaustive roster prices: all 73 formations × 6 ranks × quantities 1..20
 test('invalid quantity, missing/malformed ceilings and missing rank-two oil reject without any debit', () => {
   const st = primed(false),
     actor = {team: 'dawn', name: 'Tester', now};
-  st.players.Tester = {team: 'dawn', role: 'chief'};
+  st.players.Tester = {team: 'dawn', role: 'chief', cp: 10};
   for (const n of [0, -1, 1.5, NaN, Infinity, 21, undefined, '5']) {
     const before = JSON.stringify(st);
     assert.ok(
@@ -234,7 +233,7 @@ test('real map routes are distinct and symmetric; no CP for a self-move and no a
     assert.ok(list.every(n => n.id !== id && factory.ADJ[n.id].some(r => r.id === id && r.sea === n.sea)));
   }
   const s = primed(false),
-    ctx = {team: 'reich', now, name: 'Fixture'};
+    ctx = {team: 'reich', now, name: 'DEB'};
   s.terr.PER = {o: 'reich', u: {inf: 12}, f: 0, st: 'bunker'};
   const old = JSON.stringify(s);
   assert.ok(factory.A.move(s, ctx, {from: 'PER', to: 'PER', grp: {inf: 2}}).err);

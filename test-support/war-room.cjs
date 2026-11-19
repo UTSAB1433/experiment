@@ -264,7 +264,7 @@ function saved(rev) {
   const st = factory.newGame(now - 60000);
   st.v = 6;
   st.rev = rev;
-  st.players.Veteran = {team: 'dawn', role: 'soldier', title: 'Saved post #' + rev, cd: 1234};
+  st.players.Veteran = {team: 'dawn', role: 'soldier', title: 'Saved post #' + rev, cd: 1234, cp: 10};
   st.teams.dawn.res.gold = 200 + rev;
   return st;
 }
@@ -281,9 +281,9 @@ const enlist = {name: 'New player', team: 'dawn', pw: 'a'.repeat(64)};
 
 // The VM DOM normally just records innerHTML. Expose the rendered panel's price tags
 // as elements so the app's real clock can change their disabled state and cost color.
-function purchaseRoom(st, team, role = 'chief') {
+function purchaseRoom(st, team, role = 'chief', cp = 10) {
   const identity = {name: 'Test chief', ph: 'fixture-only'};
-  st.players[identity.name] = {team, role, pw: identity.ph, title: 'Test', cd: 0};
+  st.players[identity.name] = {team, role, pw: identity.ph, title: 'Test', cd: 0, cp};
   const tab = launch({cached: st, identity, rules: st.ruleset}),
     panel = tab.$('#panel');
   let html, elements;
