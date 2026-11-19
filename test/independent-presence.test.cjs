@@ -50,31 +50,39 @@ function mqtt(st) {
     for (const c of clients) if (c.online && c.socket.readyState === 1) c.socket.receive(raw);
   }
   function join(who, opts = {}) {
-    const tab = launch({identity: who, rules: st.ruleset, timers: {Date: WallClock}, ...opts}),
-      [socket, b, c] = tab.sockets;
-    b.onerror();
-    c.onerror();
+    const tab = launch({identity: who, rules: st.ruleset, relay: 'emqx', timers: {Date: WallClock}, ...opts}),
+      [socket] = tab.sockets;
     socket.subscribe();
     socket.message('state', net.state);
     const client = {tab, socket, online: true};
     clients.push(client);
-    socket.noEcho = true;
-    const original = socket.send.bind(socket);
-    socket.send = bytes => {
-      original(bytes);
-      if (bytes[0] >> 4 !== 3 || !client.online) return;
-      const [{topic, data, retain}] = publications({sent: [Buffer.from(bytes)]}),
-        sub = topic.slice(pfx.length);
-      messages.push({sub, data, retain});
-      if (sub === 'state') {
-        writes.push(copy(data));
-        net.state = copy(data);
-      }
-      if (net.filter?.(sub, data, client) === false) return;
-      queueMicrotask(() => {
-        net.before?.(sub, data, client);
-        deliver(sub, data);
-      });
+    function attach(socket) {
+      client.socket = socket;
+      socket.noEcho = true;
+      const original = socket.send.bind(socket);
+      socket.send = bytes => {
+        original(bytes);
+        if (bytes[0] >> 4 !== 3 || !client.online) return;
+        const [{topic, data, retain}] = publications({sent: [Buffer.from(bytes)]}),
+          sub = topic.slice(pfx.length);
+        messages.push({sub, data, retain});
+        if (sub === 'state') {
+          writes.push(copy(data));
+          net.state = copy(data);
+        }
+        if (net.filter?.(sub, data, client) === false) return;
+        queueMicrotask(() => {
+          net.before?.(sub, data, client);
+          deliver(sub, data);
+        });
+      };
+    }
+    attach(socket);
+    client.rejoin = () => {
+      const s = tab.sockets.at(-1);
+      s.subscribe();
+      s.message('state', net.state);
+      attach(s);
     };
     return client;
   }
@@ -184,7 +192,7 @@ test('cached/offline/spectating, peer-only, and silent or corrupt selected relay
       if (state === 'cached' || i !== 0) s.onerror();
       else s.subscribe();
     const s = tab.sockets[0];
-    if (state === 'peer') tab.channels[0].onmessage({data: {sub: 'state', obj: st}});
+    if (state === 'peer') s.message('sync', {type: 'res', state: st});
     if (state === 'corrupt') s.message('state', {...st, front: {turn: -1}});
     await elapsed(t, 600);
     s.message('pres', {tab: 'dawn', team: 'dawn', name: 'Fixture dawn'});
@@ -228,7 +236,14 @@ test('a pre-deadline, retained, BC, malformed or expired opposing reply cannot p
     r = net.join(identity('reich'));
   await elapsed(t, 5000);
   const challenge = () => net.messages.filter(m => m.sub === 'muster' && m.data.to === 'dawn').at(-1).data;
-  const reply = q => ({...q, at: Date.now(), tab: 'other-tab', name: 'Fixture dawn', team: 'dawn', to: q.tab});
+  const reply = q => ({
+    ...q,
+    at: Date.now(),
+    tab: 'other-tab',
+    name: 'Fixture dawn',
+    team: 'dawn',
+    to: q.tab
+  });
   for (let i = 0; i < 17; i++) {
     net.deliver('muster', reply(challenge()));
     await elapsed(t, 5000);
@@ -434,7 +449,9 @@ for (const type of ['firebase', 'shared'])
         [...f.records.keys()].sort(),
         [f.lock, f.state, f.slots('reich'), f.slots('dawn')].sort()
       );
-      assert.ok([...f.records.values()].filter(m => m.token).every(m => !JSON.stringify(m).includes('-only')));
+      assert.ok(
+        [...f.records.values()].filter(m => m.token).every(m => !JSON.stringify(m).includes('-only'))
+      );
       d.tab.click('spectate');
       d2.tab.click('spectate');
       r.tab.click('spectate');
@@ -673,6 +690,7 @@ test('pagehide stops even a still-ticking tab; pageshow or waking after suspensi
   await elapsed(t, 125000);
   assert.equal(net.writes.length, 0);
   d.tab.dispatchWindow('pageshow');
+  d.rejoin(); // restored tab must read its pinned relay again before resuming
   await elapsed(t, 85000);
   assert.equal(net.writes.length, 0);
   net.sleepOffset += 86400000;

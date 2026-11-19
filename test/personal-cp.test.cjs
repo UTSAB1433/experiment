@@ -163,11 +163,9 @@ test('v6 accepts a legacy source balance only for missing personal CP; malformed
 
 const identity = (name) => ({name, ph: 'test-only'});
 function connect(st, who) {
-  const tab = launch({cached: st, rules: st.ruleset, identity: who}),
-    [relay, b, c] = tab.sockets;
+  const tab = launch({cached: st, rules: st.ruleset, identity: who, relay: 'emqx'}),
+    [relay] = tab.sockets;
   relay.subscribe();
-  b.onerror();
-  c.onerror();
   relay.message('state', st);
   return {tab, relay};
 }

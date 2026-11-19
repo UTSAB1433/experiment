@@ -2,32 +2,37 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {key,prefix,RULES,masterKey,ceiling,flush,now,mockTime,finishOrder,publication,publications,launch,factory,saved,masterySaved,checkReadOnly,enlist,purchaseRoom} = require('../test-support/war-room.cjs');
 
-test('warm first paint; parallel discovery chooses the freshest responding broker, not the fastest handshake', async t => {
+test('no phantom board during discovery; conflicting saved relays require an explicit selection', async t => {
   mockTime(t);
   const tab = launch({cached:saved(12)}), [fast, slower, empty] = tab.sockets;
   assert.equal(tab.sockets.length, 3);
   assert.equal(new Set(tab.sockets.map(s => s.url)).size, 3);
-  assert.equal(tab.game.S.rev, 12);
-  assert.match(tab.$('#map').innerHTML, /class="node"/);
+  assert.equal(tab.game.S, null);
+  assert.doesNotMatch(tab.$('#map').innerHTML, /class="node"/);
   assert.match(tab.$('#me').innerHTML, /Syncing/);
   await tab.game.act('enlist', enlist);
-  assert.ok(!tab.game.S.players[enlist.name]);
+  assert.equal(tab.game.S, null);
 
   fast.subscribe(); empty.subscribe(); slower.open();
   // Interleaved, fragmented packets must not share a receive buffer.
   const old = publication(prefix + 'state', saved(4));
   fast.receive(old.subarray(0, 8)); slower.receive([0x20]); fast.receive(old.subarray(8));
-  assert.equal(tab.game.S.rev, 12, 'a stale retained state did not regress the cache');
+  assert.equal(tab.game.S, null, 'a stale retained state did not become the board');
   slower.receive([2, 0, 0]); slower.receive([0x90, 3, 0, 1, 0]);
   slower.message('state', saved(40));
-  assert.equal(tab.game.S.rev, 40, 'rendered without waiting for the empty relay');
+  assert.equal(tab.game.S, null, 'no provisional troops while comparing independent databases');
   empty.message('sync', {type:'req', from:'other-tab'});
   t.mock.timers.tick(650);
-  assert.deepEqual(tab.sockets.map(s => s.readyState), [3, 1, 3]);
+  assert.match(tab.$('#panel').innerHTML, /Choose the shared copy/);
+  assert.equal(tab.game.S, null); checkReadOnly(tab);
+  assert.equal(JSON.parse(tab.storage.get(key)).rev, 12, 'original cache left untouched');
+  tab.click('pickrelay', {id:'hivemq'});
+  const chosen = tab.sockets.at(-1); assert.equal(chosen.url, slower.url);
+  chosen.subscribe(); chosen.message('state', saved(40));
   assert.match(tab.$('#me').innerHTML, /Live/);
   assert.equal(tab.game.S.players.Veteran.title, 'Saved post #40');
-  assert.equal(JSON.parse(tab.storage.get(key)).teams.dawn.res.gold, 240);
-  slower.message('sync', {type:'res', state:saved(24)});
+  assert.equal(JSON.parse(tab.storage.get(key+'|mqtt|hivemq')).teams.dawn.res.gold, 240);
+  chosen.message('sync', {type:'res', state:saved(24)});
   assert.equal(tab.game.S.rev, 40);
   assert.ok(tab.sockets.every(s => publications(s).some(p => p.topic === prefix + 'sync' && p.data.type === 'req')));
   checkReadOnly(tab);
@@ -48,7 +53,7 @@ test('a bare websocket, a refused subscription and an unreachable relay fail ove
   stalled.open(); refused.open(); refused.receive([0x20, 2, 0, 0]); refused.receive([0x90, 3, 0, 1, 128]);
   down.onerror(); lateClose();
   t.mock.timers.tick(2000);
-  assert.ok(tab.game.S, 'offline starting map without seeding a live room');
+  assert.equal(tab.game.S, null, 'no invented offline campaign');
   assert.match(tab.$('#me').innerHTML, /Offline/);
   assert.equal(tab.storage.get(key), undefined);
   t.mock.timers.tick(350);
@@ -57,25 +62,31 @@ test('a bare websocket, a refused subscription and an unreachable relay fail ove
   a.onerror(); b.subscribe(); c.onerror(); b.message('state', saved(33));
   lateClose(); lateMessage({data:Uint8Array.from(publication(prefix + 'state', saved(100))).buffer});
   t.mock.timers.tick(3000);
-  assert.equal(tab.sockets.length, 6); assert.equal(b.readyState, 1);
-  assert.equal(tab.game.S.rev, 33);
-  b.close(); t.mock.timers.tick(350);
-  assert.equal(tab.sockets.length, 9, 'loss of the active connection starts a fresh race');
+  assert.equal(tab.sockets.length, 6); assert.equal(tab.game.S, null);
+  assert.match(tab.$('#panel').innerHTML, /Choose the shared copy/);
+  tab.click('pickrelay',{id:'hivemq'});
+  const pinned = tab.sockets.at(-1); pinned.subscribe(); pinned.message('state',saved(33));
+  assert.equal(tab.game.S.rev, 33); checkReadOnly(tab);
+  pinned.close(); t.mock.timers.tick(350);
+  assert.equal(tab.sockets.length, 8, 'reconnect only to the confirmed relay');
+  assert.equal(tab.sockets.at(-1).url, b.url);
   assert.equal(tab.game.S.rev, 33); checkReadOnly(tab);
 });
 
-test('broker silence never retains a cache or new game; a late first snapshot still replaces the preview', async t => {
+test('broker silence never retains a cache or new game; a late verified snapshot supplies the first board', async t => {
   mockTime(t);
   for(const cached of [undefined, saved(2)]){
     const tab = launch({cached}); tab.sockets.forEach(s => s.subscribe());
     t.mock.timers.tick(1000);
-    assert.deepEqual(tab.sockets.map(s => s.readyState), [1, 3, 3], 'stable tie-break for empty relays');
-    assert.equal(tab.game.S.rev, cached ? 2 : 1);
+    assert.deepEqual(tab.sockets.map(s => s.readyState), [1, 1, 1], 'silence cannot select an empty fallback');
+    assert.equal(tab.game.S, null);
     tab.sockets[0].message('sync', {type:'req', from:'peer'});
     const noop = tab.game.act('noop'); await finishOrder(t,noop);
     assert.ok(!tab.sockets.flatMap(publications).some(p => p.data.type === 'res'));
     if(!cached) assert.equal(tab.storage.get(key), undefined);
     const remote = saved(cached ? 8 : 1); remote.created = now + 10000;
+    // Verify the other brokers are empty, rather than silently picking the first reachable one.
+    for(const s of tab.sockets.slice(1)) s.message('sync',publications(s).find(p => p.data.type === 'req').data);
     tab.sockets[0].message('state', remote);
     assert.equal(tab.game.S.created, remote.created, 'even a same-revision real state beats a synthetic starting map');
     assert.ok(tab.game.S.players.Veteran); checkReadOnly(tab);
@@ -87,9 +98,8 @@ test('an empty room is playable: only the first explicit order persists the star
   const tab = launch({cached:'{broken'}); tab.sockets.forEach(s => s.subscribe());
   t.mock.timers.tick(650); checkReadOnly(tab);
   const tooSoon = tab.game.act('enlist', enlist); await finishOrder(t,tooSoon);
-  checkReadOnly(tab); assert.ok(!tab.game.S.players[enlist.name], 'a timeout alone is not a read barrier');
-  const request = publications(tab.sockets[0]).find(p => p.data.type === 'req');
-  tab.sockets[0].message('sync', request.data); // A real MQTT 3.1.1 subscriber receives its own request.
+  checkReadOnly(tab); assert.equal(tab.game.S, null, 'a timeout alone is not a read barrier');
+  for(const s of tab.sockets){ const request = publications(s).find(p => p.data.type === 'req'); s.message('sync',request.data); } // A real MQTT 3.1.1 subscriber receives its own request.
   const order = tab.game.act('enlist', enlist); await finishOrder(t,order);
   assert.equal(tab.game.S.rev, 2); assert.ok(tab.game.S.players[enlist.name]);
   assert.equal(publications(tab.sockets[0]).filter(p => p.retain).length, 1);
@@ -101,8 +111,9 @@ test('manual retry and room changes cancel pending probes, handlers and retry ti
   tab.click('reconnect'); assert.equal(tab.sockets.length, 6);
   tab.sockets.slice(3).forEach(s => s.onerror());
   tab.$('#roomin').value = 'another-test'; tab.click('joinroom');
-  assert.ok(tab.channels[0].closed); assert.equal(tab.game.S, null);
-  const s = tab.sockets.slice(6); s[0].subscribe(); s[1].onerror(); s[2].onerror();
+  assert.ok(tab.channels.every(c => c.closed)); assert.equal(tab.game.S, null);
+  const s = tab.sockets.slice(6); s.forEach(r => r.subscribe());
+  s.slice(1).forEach(r => r.message('sync',publications(r).find(p => p.data.type === 'req').data));
   s[0].receive(publication('lands-eot/v1/another-test/state', saved(9)));
   old({data:Uint8Array.from(publication(prefix + 'state', saved(99))).buffer});
   t.mock.timers.tick(5000);
@@ -117,11 +128,11 @@ test('an older-format live room is not migrated, reset, or replaced with the cac
   tab.sockets.forEach(s => { s.subscribe(); s.message('state', legacy); });
   assert.match(tab.$('#banner').innerHTML, /Incompatible/);
   await tab.game.act('enlist', enlist);
-  assert.ok(!tab.game.S.players[enlist.name]); checkReadOnly(tab);
+  assert.equal(tab.game.S, null); checkReadOnly(tab);
   assert.equal(JSON.parse(tab.storage.get(key)).rev, 3);
 });
 
-test('Firebase paints cache before the read; a conflicting conditional write cannot overwrite newer progress', async t => {
+test('Firebase waits for the server; a conflicting conditional write cannot overwrite newer progress', async t => {
   mockTime(t);
   const calls = []; let finishRead;
   const ok = data => ({ok:true, json:async () => data, headers:{get:name => name === 'etag' ? '"rev-42"' : null}});
@@ -133,44 +144,50 @@ test('Firebase paints cache before the read; a conflicting conditional write can
     return new Promise(resolve => { finishRead = resolve; });
   };
   const tab = launch({cached:saved(5), fb:true, fetch});
-  assert.equal(tab.game.S.rev, 5); assert.match(tab.$('#me').innerHTML, /Syncing/);
+  assert.equal(tab.game.S, null); assert.match(tab.$('#me').innerHTML, /Syncing/);
   await tab.game.act('enlist', enlist); assert.equal(calls.length, 1);
   finishRead(ok(saved(42))); await flush();
   assert.equal(tab.game.S.rev, 42); assert.equal(calls.length, 1);
   await tab.game.act('enlist', enlist);
-  assert.equal(calls.at(-1).headers['if-match'], '"rev-42"');
+  assert.equal(calls.findLast(c => c.method === 'PUT' && c.url.endsWith('/state.json')).headers['if-match'], '"rev-42"');
   assert.equal(tab.game.S.rev, 42); assert.ok(!tab.game.S.players[enlist.name]);
-  assert.equal(JSON.parse(tab.storage.get(key)).rev, 42); checkReadOnly(tab);
+  assert.equal(JSON.parse(tab.storage.get(key+'|https://fixture.firebaseio.com')).rev, 42); checkReadOnly(tab);
 });
 
 test('Firebase read failures are not empty rooms and do not trigger writes', async t => {
   mockTime(t);
   const calls = [], tab = launch({fb:true, cached:saved(8), fetch:async (url, options) => { calls.push(options); return {ok:false, status:403}; }});
   await flush(); t.mock.timers.tick(2600); await flush();
-  assert.equal(tab.game.S.rev, 8); assert.match(tab.$('#me').innerHTML, /Offline/);
+  assert.equal(tab.game.S, null); assert.match(tab.$('#me').innerHTML, /Offline/);
   assert.ok(calls.length >= 2 && calls.every(o => !o.method || o.method === 'GET')); checkReadOnly(tab);
 });
 
-test('a stalled broker does not delay the map; live updates from another tab are valid order bases', async t => {
+test('a stalled broker times out; peer updates can pause, but never authorize an order', async t => {
   mockTime(t);
   const tab = launch({cached:{v:6, terr:{}, teams:{}}}), [good, refused] = tab.sockets;
   assert.equal(tab.game.S, null, 'an incomplete cache is a miss, not a boot failure');
   good.subscribe(); good.message('state', saved(15)); refused.open(); refused.receive([0x20, 2, 0, 5]);
-  assert.equal(tab.game.S.rev, 15, 'cold paint while the last handshake is still outstanding');
+  assert.equal(tab.game.S, null, 'candidate has not been selected');
   t.mock.timers.tick(2000);
-  assert.match(tab.$('#me').innerHTML, /Live/); assert.equal(tab.sockets.length, 3);
+  assert.match(tab.$('#panel').innerHTML, /Choose the shared copy/);
+  tab.click('pickrelay',{id:'emqx'});
+  const pinned = tab.sockets.at(-1); pinned.subscribe(); pinned.message('state',saved(15));
+  assert.match(tab.$('#me').innerHTML, /Live/);
   tab.channels[0].onmessage({data:{sub:'state', obj:saved(16)}});
-  good.message('state', saved(14)); checkReadOnly(tab);
+  pinned.message('state', saved(14)); checkReadOnly(tab);
+  await finishOrder(t,tab.game.act('enlist',enlist)); checkReadOnly(tab);
+  assert.equal(tab.game.S.rev,15, 'last confirmed board, not peer 16 or stale 14');
+  pinned.message('state',saved(16));
   const order = tab.game.act('enlist', enlist); await finishOrder(t,order);
   assert.equal(tab.game.S.rev, 17);
   assert.equal(tab.game.S.players.Veteran.title, 'Saved post #16');
 });
 
-test('a slow shared DB capability cannot delay warm paint or roll back a newer snapshot', async t => {
+test('a slow shared DB capability does not display an unscoped cache or roll back a newer snapshot', async t => {
   mockTime(t);
   let resolveCapability, emit;
   const tab = launch({cached:saved(10), claude:{use:() => new Promise(resolve => { resolveCapability = resolve; })}});
-  assert.equal(tab.game.S.rev, 10); assert.match(tab.$('#me').innerHTML, /Syncing/);
+  assert.equal(tab.game.S, null); assert.match(tab.$('#me').innerHTML, /Syncing/);
   resolveCapability({doc:() => ({onSnapshot:cb => { emit = cb; }})}); await flush();
   for(const rev of [31, 12]) emit({exists:true, data:() => saved(rev)});
   assert.equal(tab.game.S.rev, 31); assert.equal(tab.sockets.length, 0); checkReadOnly(tab);
@@ -247,7 +264,9 @@ for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} fo
   assert.equal(result.rev, 43); assert.equal(result.v, 6); const next = button().dataset;
   assert.equal(next.rank, '2'); assert.deepEqual([next.gold, next.steel, next.oil], team === 'reich' ? ['12','18','6'] : ['10','15','5']);
   assert.equal(tab.sockets.flatMap(publications).filter(p => p.retain).length, 1);
-  const restored = launch({cached:tab.storage.get(masterKey), rules:RULES}); assert.equal(restored.game.S.teams[team].mastery[unit].atk, 1); checkReadOnly(restored);
+  const restored = launch({storage:tab.storage, url:tab.location.href}); assert.equal(restored.game.S, null);
+  const socket = restored.sockets[0]; socket.subscribe(); socket.message('state',JSON.parse(tab.storage.get(masterKey)));
+  assert.equal(restored.game.S.teams[team].mastery[unit].atk, 1); checkReadOnly(restored);
   const locked = team === 'reich' ? 'rk_p1500' : 'bd_gsyn'; tab.change('masteryunit', locked);
   assert.equal(abilities().length, 4); assert.ok(abilities().every(el => el.dataset.u === locked && el.disabled));
   tab.click('researchbranch', {k:'doctrine'}); assert.ok(controls().some(el => el.dataset.act === 'research'));

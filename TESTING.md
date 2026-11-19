@@ -4,9 +4,20 @@
 
 Classic still uses the existing v6 save and room addresses. To play with mastery, a leader or chief opens **Research → Troop mastery → Continue from Classic**, checks the source revision, and starts the separate session. **Share the Mastery invite with both factions.** Officers, troops, resources and research come from that snapshot; subsequent moves do not cross between the games. If a Mastery session already exists, it wins over the proposed starting snapshot. Opening an invite must never create a save.
 
-- Mastery invites pin the backend. A browser cache is a read-only preview, not authority to initialize, buy a rank, or roll back a higher server revision.
+- Both Classic and Mastery invites identify the data source and a minimum revision. A browser backup is not a starting board. Re-entering or reconnecting never publishes a cached save.
 - In a live order, the displayed rank and per-resource prices are limits. Recheck them, permissions, prerequisites and available funds on the locked game. Accept a lower price; reject a higher one without spending. Recruitment quotes cover the **whole batch**.
 - A real save on the wrong rules, an unreadable record and an unconfirmed empty room are **not** permission to initialize. Importing an older backup must not replace a newer campaign. No `GAME_V` bump or automatic reset.
+
+## Re-entering the same campaign
+
+On the device showing the right army, refresh to the current build, wait for **Live · #revision**, then use the room button → **Copy link**. Open that exact link on the other devices. Compare the campaign (Classic or Mastery), room, data source and revision. Compare oil **within the same faction**; the sides have separate stockpiles. Normal passive income continues from the confirmed save's timestamp. The map still rounds unscouted enemy garrisons.
+
+- Returning to the site without an invite resumes this browser’s last confirmed campaign. With no history it asks which campaign to open. An old room-code bookmark that could mean Classic or the user's Mastery session asks instead of guessing. You can open the other campaign directly from the room button without entering Research. This only changes the view, not either save.
+- A cold load shows no balances or troop markers until the chosen room confirms its own record. If a connection drops while playing, the last confirmed map is read-only, income projection stops, and the client checks **the same source** again. A higher revision in a link or backup is a **floor**, never a request to restore old numbers. A freshly confirmed empty Classic room shows a labeled starting map; it still takes an explicit player order to persist it.
+- Public MQTT brokers are independent, not replicas. With an old unpinned link, differing copies or an incomplete choice of saved relays require a selection. Ask an active player for the exact invite rather than picking the largest revision. A peer response is not a retained save, and absence on an unreachable relay is not an empty campaign.
+- If the selected source is missing, behind, or disagrees with its backup at the same revision, don't reset or import to make the numbers agree. Check the invite with the other player. **Room → Backup** can export available copies separately. Pre-update local backups are left in place; there is no automatic merge or cross-room restore. For a valuable campaign, keep a separate export: public relays and browser storage are not guaranteed backups.
+
+`node --test test/room-sync.test.cjs` exercises those paths with independent profiles and clocks, distinct oil and garrisons, old bookmarks, partial reads, offline locks and a room switch during a pending write. The browser check below repeats re-entry on real loopback brokers.
 
 ## Personal command points (Classic and Mastery)
 
@@ -86,7 +97,9 @@ LD_LIBRARY_PATH="$work/libs/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" node tools
 
 The script starts an ephemeral loopback HTTP server and **three separate real MQTT/WebSocket brokers**. Synthetic officers use the original Classic HTML and the current build in Chromium. App sockets are redirected to the local brokers; external requests are blocked. No public room code, login or Firebase URL is needed.
 
-The test checks that identical combat rolls produce different outcomes **only in the intended room**; reconnects an old client via the new invite; races two tabs for the same rank; and races two independent browser contexts, including an emulated phone with a 160 ms uplink delay, for different ranks. It checks retained revisions, rank changes and debits. It also visits every dossier, runs full-page axe checks with Research open for both factions, exercises keyboard and touch navigation, checks 320–1440 px panel widths, and buys a discounted batch on mobile.
+The re-entry scenario gives Classic, Mastery and a divergent relay different oil and garrisons. A phone leaves; its teammate recruits while it's gone. On a bare revisit, the phone must show **no stock or troops** while the broker's state delivery is suppressed, then the correct HUD and map in Orders on reconnect. The run checks all three retained records: only the teammate's deliberate recruitment changed one. Use `EOT_ONLY_REENTRY=1` to run just this scenario without legacy HTML.
+
+The test also checks that identical combat rolls produce different outcomes **only in the intended room**; reconnects an old client via the new invite; races two tabs for the same rank; and races two independent browser contexts, including an emulated phone with a 160 ms uplink delay, for different ranks. It checks retained revisions, rank changes and debits. It also visits every dossier, runs full-page axe checks with Research open for both factions, exercises keyboard and touch navigation, checks 320–1440 px panel widths, and buys a discounted batch on mobile.
 
 These are regression checks, not a guarantee against all failures of public brokers. Mastery uses a broker-echoed cooperative lease and confirms state publications; MQTT is not a transactional database. For server-side conditional writes, the Firebase path uses ETags. Browser automation here covers Chromium, not every browser or assistive technology.
 

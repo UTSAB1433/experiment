@@ -19,8 +19,8 @@ const text = html => html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 const panel = tab => tab.$('#panel').innerHTML;
 const modal = tab => tab.$('#modal').innerHTML;
 function connect(tab, st) {
-  const [relay, b, c] = tab.sockets;
-  relay.subscribe(); b.onerror(); c.onerror(); relay.message('state', st);
+  const [relay] = tab.sockets;
+  relay.subscribe(); relay.message('state', st);
   return relay;
 }
 
@@ -29,7 +29,7 @@ for (const make of [saved, masterySaved]) {
     mockTime(t);
     const st = make(209);
     st.front = {turn: 7, at: now, drill: {USSR: 4}};
-    const tab = launch({cached: st, rules: st.ruleset, identity: {name: '__spectator'}});
+    const tab = launch({relay:'emqx', cached: st, rules: st.ruleset, identity: {name: '__spectator'}});
     connect(tab, st);
     tab.click('tab', {k: 'council'});
     assert.match(panel(tab), /Black Dawn hierarchy/);
@@ -63,7 +63,7 @@ for (const make of [saved, masterySaved]) {
 
 test('the post picker and password prompt show the office but use the original login key for every appointee', t => {
   mockTime(t);
-  const st = saved(72), tab = launch({cached: st});
+  const st = saved(72), tab = launch({relay:'emqx', cached: st});
   connect(tab, st);
   const picker = modal(tab), ids = Array.from(picker.matchAll(/data-act="join" data-n="([^"]+)"/g), m => m[1]);
   assert.deepEqual(ids.filter(k => st.players[k].team === 'dawn'), [
@@ -117,7 +117,7 @@ test('a similarly named enlistee, reassignment or removal in a newer save never 
   const st = saved(114);
   st.players.Debjit = {team:'dawn',role:'soldier',title:'Reserve',cd:0,cp:10};
   st.players.Souvik.team = 'reich';
-  const tab = launch({cached: st}), relay = connect(tab, st);
+  const tab = launch({relay:'emqx', cached: st}), relay = connect(tab, st);
   assert.match(modal(tab), /data-n="Debjiit"><b>Debjit \(Debjiit\)<\/b>[^<]*<span[^>]*>Warden of the Dominions/);
   assert.match(modal(tab), /data-n="Debjit"><b>Debjit<\/b>[^<]*<span[^>]*>Reserve/);
   assert.match(modal(tab), /data-n="Souvik"><b>Souvik<\/b>[^<]*<span[^>]*>Soldier/);
