@@ -286,7 +286,7 @@ for (const team of ['dawn', 'reich'])
     assert.ok(!g.validSave(bad));
   });
 
-test('a concurrent appointment gets the last slot, not a stale Council order; a revoked attacker cannot hit a distant target', async t => {
+test('a concurrent appointment gets the last slot, not a stale Council order; revoking an attack seat cancels a pending border attack', async t => {
   mockTime(t);
   const st = saved(45);
   st.t = now;
@@ -317,9 +317,12 @@ test('a concurrent appointment gets the last slot, not a stale Council order; a 
   assert.match(fighter.tab.$('#panel').innerHTML, /Attack from here/);
   assert.doesNotMatch(fighter.tab.$('#panel').innerHTML, /Recruit here|Move units/);
   fighter.tab.click('open', {m: 'attack'});
-  assert.match(fighter.tab.$('#modal').innerHTML, /<option value="TOK">/);
+  assert.deepEqual(pickerIds(fighter.tab), ['DEN']); // Berlin has just one foreign neighbor.
   fighter.tab.change('attackplace', 'TOK');
+  assert.deepEqual(pickerIds(fighter.tab), ['DEN']);
+  fighter.tab.change('attackplace', 'DEN');
   fighter.tab.click('step', {u: 'inf', d: '1'});
+  assert.match(fighter.tab.$('#modal').innerHTML, /data-act="confirm" data-price/);
   const battle = fighter.tab.click('confirm');
   const revoked = copy(granted);
   revoked.rev++;
@@ -329,60 +332,157 @@ test('a concurrent appointment gets the last slot, not a stale Council order; a 
   checkReadOnly(fighter.tab);
   assert.equal(fighter.tab.$('#modal').innerHTML, '');
   same(fighter.tab.game.S, revoked);
+  assert.match(fighter.tab.$('#toasts').children.at(-1).textContent, /permissions changed/);
 });
 
-test('global attacks launch from the selected friendly garrison, not an invented route; moves, ceasefires, costs and garrison checks still apply', async t => {
+function pickerIds(tab) {
+  return [...tab.$('#modal').innerHTML.matchAll(/<option value="([^"]+)">/g)].map(m => m[1]).sort();
+}
+
+test('leaders, chiefs and appointed attackers cannot skip a map line, even with Air 4; rejected orders publish nothing', async t => {
+  mockTime(t);
+  const st = saved(36);
+  st.t = now;
+  st.players.Dhruv.attackSeat = true;
+  st.teams.reich.tech.air = 4;
+  st.terr.BER.u = {air: 4};
+  const order = {from: 'BER', to: 'TOK', grp: {air: 4}, tactic: 'frontal'},
+    before = copy(st);
+  for (const name of ['DEB', 'Sattyaki', 'Dhruv']) {
+    // Stockholm is two hops away via friendly Prussia; Tokyo is an ocean away.
+    for (const to of ['SWE', 'TOK']) {
+      assert.match(g.A.attack(st, ctx('reich', name), {...order, to}).err, /not connected/);
+      same(st, before);
+    }
+  }
+  const {tab} = connect(st, {name: 'Dhruv', ph: st.players.Dhruv.pw});
+  tab.click('sel', {id: 'TOK'});
+  assert.match(tab.$('#panel').innerHTML, /data-to="TOK" disabled>Attack/);
+  assert.match(tab.$('#panel').innerHTML, /No friendly troops border/);
+  tab.click('sel', {id: 'POW'}); // A nonempty garrison surrounded by friendly provinces.
+  assert.match(tab.$('#panel').innerHTML, /data-m="attack" disabled>Attack from here/);
+  await finishOrder(t, tab.game.act('attack', order)); // submit directly, without the picker
+  assert.match(tab.$('#toasts').children.at(-1).textContent, /not connected/);
+  checkReadOnly(tab);
+  same(tab.game.S, before);
+});
+
+test('a land attack launches from the chosen bordering garrison; permissions, ceasefires, costs and unit checks still apply', async t => {
   mockTime(t);
   const st = saved(37);
   st.t = now;
   st.players.Dhruv.attackSeat = true;
   st.terr.BER.u = {inf: 42, arm: 4};
-  st.terr.TOK.u = {};
-  assert.ok(!g.ADJ.BER.some(n => n.id === 'TOK'));
+  st.terr.DEN.u = {};
+  st.terr.RUH.u = {}; // Linked to Copenhagen, but not a launching garrison.
   const who = {name: 'Dhruv', ph: st.players.Dhruv.pw},
-    order = {from: 'BER', to: 'TOK', grp: {inf: 40, arm: 4}, tactic: 'frontal'};
-  for (const [mutation, fields] of [
-    [s => (s.terr.BER.o = 'dawn'), {}],
-    [s => (s.terr.TOK.o = 'reich'), {}],
-    [s => (s.teams.reich.res.oil = 0), {}],
-    [s => (s.players.Dhruv.cp = 1), {}],
+    order = {from: 'BER', to: 'DEN', grp: {inf: 40, arm: 4}, tactic: 'frontal'};
+  for (const [mutation, fields, reason] of [
+    [s => (s.terr.BER.o = 'dawn'), {}, /one of your territories/],
+    [s => (s.terr.DEN.o = 'reich'), {}, /already yours/],
+    [s => (s.teams.reich.res.oil = 0), {}, /oil/],
+    [s => (s.players.Dhruv.cp = 1), {}, /command points/],
     [
       s => {
-        s.terr.TOK.o = 'dawn';
+        s.terr.DEN.o = 'dawn';
         s.pact = {until: now + 50000};
       },
-      {}
+      {},
+      /ceasefire/
     ],
-    [s => delete s.players.Dhruv.attackSeat, {}],
-    [() => {}, {grp: {inf: 43}}]
+    [s => delete s.players.Dhruv.attackSeat, {}, /attack seat/],
+    [() => {}, {grp: {inf: 43}}, /Pick units/],
+    [() => {}, {tactic: 'blitz'}, /not researched/]
   ]) {
     const s = copy(st);
     mutation(s);
     const before = copy(s);
-    assert.ok(g.A.attack(s, ctx('reich', 'Dhruv'), {...order, ...fields}).err);
+    assert.match(g.A.attack(s, ctx('reich', 'Dhruv'), {...order, ...fields}).err, reason);
     same(s, before);
   }
   const moved = copy(st);
   moved.terr.TOK.o = 'reich';
-  assert.match(g.A.move(moved, ctx('reich', 'Sattyaki'), order).err, /not connected/);
+  assert.match(g.A.move(moved, ctx('reich', 'Sattyaki'), {...order, to: 'TOK'}).err, /not connected/);
   const {tab} = connect(st, who);
-  tab.click('sel', {id: 'TOK'});
-  assert.match(tab.$('#panel').innerHTML, /data-m="attack" data-to="TOK"/);
-  tab.click('open', {m: 'attack', to: 'TOK'});
-  assert.match(tab.$('#modal').innerHTML, /<option value="BER">/);
+  tab.click('sel', {id: 'RUH'});
+  assert.match(tab.$('#panel').innerHTML, /data-m="attack" disabled>Attack from here/);
+  tab.click('sel', {id: 'DEN'});
+  tab.click('open', {m: 'attack', to: 'DEN'});
+  assert.deepEqual(pickerIds(tab), ['BER', 'OSL']);
+  assert.match(tab.$('#modal').innerHTML, /<option value="OSL">[^<]* · sea<\/option>/);
+  tab.change('attackplace', 'PRU'); // friendly and occupied, but not linked to Copenhagen
+  assert.deepEqual(pickerIds(tab), ['BER', 'OSL']);
   tab.change('attackplace', 'BER');
   tab.click('step', {u: 'arm', d: 'max'});
-  const op = tab.click('confirm');
-  await finishOrder(t, op);
-  assert.equal(tab.game.S.terr.TOK.o, 'reich');
+  await finishOrder(t, tab.click('confirm'));
+  assert.equal(tab.game.S.terr.DEN.o, 'reich');
   assert.ok(!tab.game.S.terr.BER.u.arm);
-  assert.equal(tab.game.S.log[0].tid, 'TOK');
+  assert.equal(tab.game.S.log[0].tid, 'DEN');
   const before = copy(st);
   factory.tick(before, tab.game.S.t);
   assert.equal(tab.game.S.players.Dhruv.cp, before.players.Dhruv.cp - 2);
   assert.equal(tab.game.S.teams.reich.res.oil, before.teams.reich.res.oil - 2);
   same(tab.game.S.players.Sattyaki, before.players.Sattyaki);
   assert.equal(writes(tab).length, 1);
+});
+
+test('sea links are marked in both directions; only the selected force can cross, including with an auto-picked source', async t => {
+  mockTime(t);
+  const st = saved(38);
+  st.t = now;
+  st.players.Dhruv.attackSeat = true;
+  st.terr.PRU.u = {inf: 10, nav: 1};
+  st.teams.reich.tech.nav = 2;
+  st.terr.SWE.o = 'dawn';
+  // Only Prussia has troops bordering Stockholm, despite other Reich garrisons farther away.
+  for (const id of ['SWE', 'OSL', 'NAR']) st.terr[id].u = {};
+  const {tab} = connect(st, {name: 'Dhruv', ph: st.players.Dhruv.pw});
+  tab.click('sel', {id: 'PRU'});
+  tab.click('open', {m: 'attack'});
+  assert.deepEqual(pickerIds(tab), ['BAL', 'SWE']);
+  assert.match(tab.$('#modal').innerHTML, /<option value="SWE">[^<]* · sea<\/option>/);
+  tab.click('closem');
+  tab.click('sel', {id: 'SWE'});
+  tab.click('open', {m: 'attack', to: 'SWE'});
+  const modal = () => tab.$('#modal').innerHTML;
+  assert.doesNotMatch(modal(), /attackplace/);
+  assert.match(modal(), /across water/);
+  tab.click('step', {u: 'inf', d: 'max'});
+  assert.match(modal(), /Crossing water/);
+  assert.match(modal(), /data-act="confirm" disabled/);
+  await finishOrder(t, tab.game.act('attack', {from: 'PRU', to: 'SWE', grp: {inf: 10}, tactic: 'frontal'}));
+  assert.match(tab.$('#toasts').children.at(-1).textContent, /Crossing water/);
+  checkReadOnly(tab);
+  same(tab.game.S, st);
+  tab.click('step', {u: 'nav', d: '1'});
+  assert.match(modal(), /data-act="confirm" data-price/);
+  await finishOrder(t, tab.click('confirm'));
+  assert.equal(tab.game.S.terr.SWE.o, 'reich');
+  same(tab.game.S.terr.PRU.u, {});
+  assert.equal(writes(tab).length, 1);
+});
+
+test('a linked sea attack keeps the existing aircraft, doctrine and specialist crossing rules', () => {
+  for (const [group, air, nav, allowed] of [
+    [{bd_init: 5, bd_sail: 1}, 0, 1, false],
+    [{bd_rave: 4}, 0, 0, true],
+    [{bd_init: 5, bd_rave: 1}, 3, 0, false],
+    [{bd_init: 5, bd_rave: 1}, 4, 0, true],
+    [{bd_init: 5, bd_vair: 1}, 1, 0, true]
+  ]) {
+    const st = saved(39);
+    st.terr.PRU.o = 'dawn';
+    st.terr.PRU.u = {...group};
+    st.terr.SWE.u = {};
+    Object.assign(st.teams.dawn.tech, {air, nav});
+    const before = copy(st);
+    const result = g.A.attack(st, ctx('dawn'), {from: 'PRU', to: 'SWE', grp: group, tactic: 'frontal'});
+    if (allowed) assert.equal(result.battle, true, result.err);
+    else {
+      assert.match(result.err, /Crossing water/);
+      same(st, before);
+    }
+  }
 });
 
 test('World front backoff is bounded and shared: four orders in 15 s or a 1.2 s lock doubles the interval, then quiet restores it', () => {

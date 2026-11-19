@@ -819,7 +819,11 @@ function seats(players,team){
   const side = Object.values(players).filter(pl => pl.team === team);
   return {chiefs:side.filter(pl => pl.role === 'chief').length, attackers:side.filter(usesAttackSeat).length, leaders:side.filter(pl => pl.role === 'leader').length};
 }
-const attackSources = (s,team) => PROVINCES.filter(id => s.terr[id].o === team && total(s.terr[id].u) > 0);
+// From a garrison, offer its foreign neighbors; from a target, offer its friendly garrisons.
+function attackRoutes(s,team,id){
+  if(s.terr[id].o === team) return total(s.terr[id].u) ? ADJ[id].filter(n => s.terr[n.id].o !== team) : [];
+  return ADJ[id].filter(n => s.terr[n.id].o === team && total(s.terr[n.id].u) > 0);
+}
 
 /* ============================ ENGINE ============================ */
 function stanceOf(id){ return ['bunker','elastic','counter'][(id.charCodeAt(0) + id.charCodeAt(2)) % 3]; }
@@ -1100,6 +1104,7 @@ function validGroup(s, src, grp){
   }
   return n > 0;
 }
+const SEA_CROSSING = 'Crossing water requires an air-only group, a ship with Naval 2, aircraft with Air 4, or a unit with its own crossing ability.';
 function seaOK(s, team, grp){
   const airCnt = Object.keys(grp).reduce((a, u) => a + (grp[u] && UNITS[u] && UNITS[u].div === 'air' ? grp[u] : 0), 0);
   const onlyAir = Object.keys(grp).every(u => !grp[u] || (UNITS[u] && UNITS[u].div === 'air'));
@@ -1205,7 +1210,7 @@ A.mastery = (s, c, p) => {
 A.move = (s, c, p) => {
   const a = s.terr[p.from], b = s.terr[p.to]; if(!a || !b || a.o !== c.team || b.o !== c.team) return {err:'Both territories must be yours.'};
   const ln = adjInfo(p.from, p.to); if(!ln) return {err:'Those territories are not connected.'};
-  if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to move.'}; if(ln.sea && !seaOK(s, c.team, p.grp)) return {err:'Crossing water needs a fleet (Naval 2) or an air group.'};
+  if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to move.'}; if(ln.sea && !seaOK(s, c.team, p.grp)) return {err:SEA_CROSSING};
   if(!spendCP(s, c, 1)) return {err:'No command points left.'};
   for(const u in p.grp){ if(!p.grp[u]) continue; a.u[u] -= p.grp[u]; if(a.u[u] <= 0) delete a.u[u]; b.u[u] = (b.u[u] || 0) + p.grp[u]; }
   log(s, c.now, c.team, `${total(p.grp)} units moved ${T_(p.from)} to ${T_(p.to)}.`, 'info', {tid:p.to,from:p.from}); return {ok:`Moved ${total(p.grp)} units to ${T_(p.to)}.`};
@@ -1213,11 +1218,13 @@ A.move = (s, c, p) => {
 A.attack = (s, c, p) => {
   const issuer = s.players[c.name];
   if(issuer?.team !== c.team || !postCan(issuer,'attack')) return {err:'This post has no attack seat.'};
-  if(!Object.hasOwn(TD,p.from) || !Object.hasOwn(TD,p.to)) return {err:'Choose a map province.'};
+  if(!provinceId(p.from) || !provinceId(p.to)) return {err:'Choose a map province.'};
   const a = s.terr[p.from], d = s.terr[p.to]; if(!a || !d || a.o !== c.team) return {err:'Attack from one of your territories.'};
   if(d.o === c.team) return {err:'That territory is already yours.'};
+  const route = adjInfo(p.from,p.to); if(!route) return {err:'Those territories are not connected.'};
   if(d.o === OTHER(c.team) && ceasefire(s, c.now)) return {err:'A ceasefire is in force. Break it from the Diplomacy tab first.'};
   if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to send.'};
+  if(route.sea && !seaOK(s,c.team,p.grp)) return {err:SEA_CROSSING};
   const tc = Object.hasOwn(TACT,p.tactic) && TACT[p.tactic]; if(!tc || !hasTech(s, c.team, tc.req)) return {err:'That tactic is not researched.'};
   if(tc.units.length && !tc.units.some(u => p.grp[u] > 0)) return {err:'That tactic needs matching units in the group.'};
   const oil = fuel(s, c.team, p.grp); if(s.teams[c.team].res.oil < oil) return {err:`Not enough oil. This force burns ${oil}.`};
@@ -2772,6 +2779,7 @@ function panelOrders(){
   h += unitsHtml(sel) + `<div class="sm mut" style="margin-top:10px">Connected to (≈ across water):</div><div class="chips" style="margin-top:4px">${nb}</div></div>`;
   if(S.win) return h;
   if(!team) return h + `<div class="card sm mut">Choose your post (top right) to give orders.</div>`;
+  const routes = attackRoutes(S,team,sel);
   if(mine){
     if(can(role, 'recruit')){
       const list = divsFor(team), curDiv = list.includes(ui.div) ? ui.div : 'all';
@@ -2792,19 +2800,19 @@ function panelOrders(){
     }
     let ord = '<div class="row">';
     if(can(role, 'move')) ord += `<button class="btn pri" data-act="open" data-m="move">Move units</button>`;
-    if(postCan(S.players[me.name], 'attack')) ord += `<button class="btn pri" data-act="open" data-m="attack" ${total(t.u) ? '' : 'disabled'}>Attack from here</button>`;
+    if(postCan(S.players[me.name], 'attack')) ord += `<button class="btn pri" data-act="open" data-m="attack" ${routes.length ? '' : 'disabled'}>Attack from here</button>`;
     if(can(role, 'fort')){
       const cost = fortCost(t.f);
       ord += `<button class="btn" data-act="fort" data-rank="${t.f + 1}" ${t.f >= 3 ? 'disabled' : priceAttrs(cost, 1)}>Fortify ${t.f < 3 ? `(${cost.steel}S)` : '(max)'}</button>`;
     }
     ord += '</div>';
+    if(postCan(S.players[me.name],'attack') && !routes.length) ord += `<div class="sm mut">${total(t.u) ? 'No foreign province is connected to this garrison.' : 'This garrison has no troops to send.'}</div>`;
     if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}" ${k === t.st ? 'disabled' : priceAttrs({}, 1)}>${STANCES[k]}</button>`).join('')}</div>`;
     if(ord.length > 30 || can(role, 'stance')) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
     if(!postCan(S.players[me.name],'attack') && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. Use Diplomacy, Council and field duty.</div>`;
   } else {
-    const srcs = attackSources(S,team);
     let a = '<div class="row">';
-    if(postCan(S.players[me.name],'attack')) a += `<button class="btn pri" data-act="open" data-m="attack" data-to="${sel}" ${srcs.length ? '' : 'disabled'}>Attack</button>`;
+    if(postCan(S.players[me.name],'attack')) a += `<button class="btn pri" data-act="open" data-m="attack" data-to="${sel}" ${routes.length ? '' : 'disabled'}>Attack</button>`;
     if(can(role, 'spy')) a += `<button class="btn" data-act="spy" ${priceAttrs({gold:10}, 2)}>Spy · 2cp 10G</button>`;
     if(can(role, 'honey') && t.o !== 'neutral') a += `<button class="btn" data-act="honey" ${priceAttrs({gold:20}, 3)}>Honeytrap · 3cp 20G</button>`;
     if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage" ${priceAttrs({gold:25}, 3)}>Sabotage · 3cp 25G</button>`;
@@ -2814,7 +2822,7 @@ function panelOrders(){
       a += `<button class="btn" data-act="annex" ${priceAttrs({gold}, 2)}>Annex by treaty · ${gold}G</button>`;
     }
     a += '</div>';
-    if(!srcs.length) a += `<div class="sm mut" style="margin-top:8px">No friendly troops border this territory. Move an army up first.</div>`;
+    if(!routes.length) a += `<div class="sm mut" style="margin-top:8px">No friendly troops border this territory. Move an army up first.</div>`;
     h += `<div class="card"><h3>Operations</h3>${a}</div>`;
   }
   return h;
@@ -2927,7 +2935,7 @@ function panelCouncil(){
   if(team){ const pl = S.players[me.name], cd = Math.max(0, pl.cd - Date.now()); h += `<div class="card"><h3>Field duty · free, no command points</h3><div class="row"><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="drill">Drill +6 Manpower</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="scavenge">Scavenge +5 Steel</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="prospect">Prospect +4 Oil</button></div><div class="mut sm" style="margin-top:6px">${cd ? `Ready in ${Math.ceil(cd / 1000)}s.` : 'Every player can do one duty every 3 minutes. Soldiers keep the war machine fed.'}</div></div>`; }
   ['reich','dawn'].forEach(tm => {
     const ps = roomPosts(S,tm,true), nSeats = seats(S.players,tm);
-    h += `<div class="card council-roster" style="--post-color:${TEAMS[tm].css}"><h3>${TEAMS[tm].name} · ${ps.length}</h3><p class="sm">Staff chiefs: <b>${nSeats.chiefs}/${MAX_CHIEFS}</b> · Attack seats: <b>${nSeats.attackers}/${MAX_ATTACKERS}</b> + leader. Chiefs use one attack seat each.</p>`;
+    h += `<div class="card council-roster" style="--post-color:${TEAMS[tm].css}"><h3>${TEAMS[tm].name} · ${ps.length}</h3><p class="sm">Staff chiefs: <b>${nSeats.chiefs}/${MAX_CHIEFS}</b> · Attack seats: <b>${nSeats.attackers}/${MAX_ATTACKERS}</b> + leader. Chiefs use one attack seat each. All attacks from these posts follow one map line.</p>`;
     if(tm === 'dawn') h += '<p class="mut sm">Official appointments follow the Black Dawn hierarchy. Room titles are optional; game roles control orders.</p>';
     h += ps.map(([n,p]) => {
       const post = postView(S.players,n), label = esc(post.name), key = esc(n);
@@ -2936,7 +2944,7 @@ function panelCouncil(){
       if(lead && tm === team) return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)">
         <span class="council-name"><b>${label}</b>${post.office ? `<small>${esc(post.office.title)}</small>` : ''}</span>
         <select aria-label="Game role for ${label}" data-chg="role" data-n="${key}">${Object.keys(ROLES).map(r => `<option value="${r}" ${roleOption(r)}>${ROLES[r]}</option>`).join('')}</select>
-        ${p.role === 'chief' || p.role === 'leader' ? '<span class="mut sm">Can attack worldwide</span>' : `<button class="btn sm" data-act="attackseat" data-n="${key}" data-grant="${p.attackSeat ? '0' : '1'}" aria-label="${p.attackSeat ? 'Release' : 'Assign'} attack seat: ${label}" ${!p.attackSeat && nSeats.attackers >= MAX_ATTACKERS ? 'disabled' : ''}>${p.attackSeat ? 'Release attack seat' : 'Assign attack seat'}</button>`}
+        ${p.role === 'chief' || p.role === 'leader' ? '<span class="mut sm">Can order attacks</span>' : `<button class="btn sm" data-act="attackseat" data-n="${key}" data-grant="${p.attackSeat ? '0' : '1'}" aria-label="${p.attackSeat ? 'Release' : 'Assign'} attack seat: ${label}" ${!p.attackSeat && nSeats.attackers >= MAX_ATTACKERS ? 'disabled' : ''}>${p.attackSeat ? 'Release attack seat' : 'Assign attack seat'}</button>`}
         <input type="text" aria-label="Room title for ${label}" placeholder="Room title" maxlength="40" value="${esc(post.roomTitle)}" data-chg="title" data-n="${key}" style="flex:1;min-width:90px">
         ${n === me.name ? '' : `<button class="btn sm danger" aria-label="Remove ${label}" data-act="remove" data-n="${key}">×</button>`}</div>`;
       return `<div class="row sb" style="padding:3px 0"><span class="council-name"><b>${label}</b> <small>${esc(post.caption)}</small></span><span class="mut sm">${ROLES[p.role]}${p.attackSeat ? ' · Attack seat' : ''}</span></div>`;
@@ -3080,10 +3088,10 @@ function panelRules(){
   <div class="card sm"><h3>Resources and time</h3>Every province pays resources to its faction every minute (Industry raises income). Command points (CP) belong to your post, not your faction. Each player starts with ${CP_START} and regains 1 CP every ${CP_MS / 1000} seconds, up to ${CPMAX}. A move or recruitment order costs 1 CP; an attack or spy mission costs 2.</div>
   <div class="card sm"><h3>Independent countries</h3>With one active player online, independent countries train, rebuild and try to reclaim their national capitals. Other raids require both factions. Operations normally run every 90 seconds and slow to 3 minutes when orders are arriving quickly or the room lock is slow. Five minutes without input marks a post AFK until its player interacts again. Open <button class="btn sm" data-act="tab" data-k="front">World front</button> for the live clock, readiness and latest dispatch. Nothing accumulates offline.</div>
   <div class="card sm"><h3>Troop mastery</h3>Faction doctrines unlock formations. In Research → Troop mastery, choose a formation to improve its Attack, Defense or Vitality. Its role talent needs Attack and Defense at the rank you want to buy; tactic talents also need the matching doctrine. Each ability has five ranks and only affects the selected formation.</div>
-  <div class="card sm"><h3>Attacking</h3>Launch from any friendly garrison against any foreign province. Choose your units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Friendly moves still require a connection; moving across water needs a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
+  <div class="card sm"><h3>Attacking</h3>Attack from a friendly garrison into an enemy or neutral province joined to it by one map line. Choose your units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Friendly moves also follow one map line. ${SEA_CROSSING} Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
   <div class="card sm"><h3>Tactics beat postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div><p class="mut" style="margin:6px 0 0">A tactic multiplies only the matching units. A defender's posture is hidden until you scout. Neutral lands have a fixed hidden posture.</p></div>
   <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Nigeria); ◆ marks national capitals.</div>
-  <div class="card sm"><h3>Roles</h3><b>Leader</b>: commands attacks worldwide and appoints posts. Only the four staff chiefs can recruit, in any friendly province. The leader can fill six non-leader attack seats; chiefs count toward the six. Attack-only appointments keep their normal game role. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
+  <div class="card sm"><h3>Roles</h3><b>Leader</b>: commands attacks and appoints posts. Only the four staff chiefs can recruit, in any friendly province. The leader can fill six non-leader attack seats; chiefs count toward the six. Attack-only appointments keep their normal game role. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
 }
 function renderPanel(refreshBudget = true){
   if(badAddress){
@@ -3100,13 +3108,6 @@ function renderPanel(refreshBudget = true){
 
 /* --- modal --- */
 function closeModal(){ M = null; $('#modal').innerHTML = ''; }
-function regionsForPicker(ids){
-  const groups = new Map();
-  for(const id of [...ids].sort((a,b) => TD[a].name.localeCompare(TD[b].name))){
-    const reg = TD[id].reg; if(!groups.has(reg)) groups.set(reg,[]); groups.get(reg).push(id);
-  }
-  return [...groups].sort(([a],[b]) => a.localeCompare(b));
-}
 function roomUrl(){
   const u = new URL(location.href);
   u.search = u.hash = ''; // share only the campaign address, never unrelated URL parameters
@@ -3164,41 +3165,45 @@ function renderModal(refreshBudget = true){
     $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Choose your post"><h2>Choose your post</h2><div class="sm mut">Pick your name, then enter the password for that post. Each post has its own password. New to the group? Enlist in the Council tab after joining, or watch as a spectator.</div><h3 style="color:var(--reich)">The Reich</h3><div class="pick">${col('reich')}</div><h3 style="color:var(--dawn)">Black Dawn</h3><div class="pick">${col('dawn')}</div><div class="row"><button class="btn" data-act="spectate">Just watch</button><button class="btn" data-act="room">Room: ${esc(ROOM)}</button>${S.players[me.name] ? '<button class="btn" data-act="closem">Cancel</button>' : ''}</div></div></div>`; return;
   }
   if(!M || M === 'join'){ $('#modal').innerHTML = ''; return; }
-  const to = M.to, from = M.from;
-  if(S.win || !team || !postCan(S.players[me.name], M.mode) || (from && S.terr[from].o !== team) || (to && (M.mode === 'attack' ? S.terr[to].o === team : S.terr[to].o !== team))){ closeModal(); return; }
+  const {from,to} = M, attack = M.mode === 'attack', route = from && to && adjInfo(from,to);
+  if(S.win || !team || !postCan(S.players[me.name], M.mode) ||
+     (from && (S.terr[from].o !== team || (attack && !total(S.terr[from].u)))) ||
+     (to && (attack ? S.terr[to].o === team : S.terr[to].o !== team)) || (from && to && !route)){ closeModal(); return; }
   // A teammate can move/recruit/fight while the picker is open. Never preview or send absent units.
   if(from) for(const u of Object.keys(M.grp)){
     const available = S.terr[from].u[u] || 0;
     if(!available) delete M.grp[u]; else M.grp[u] = Math.min(M.grp[u], available);
   }
-  const srcs = M.mode === 'attack' ? (to ? attackSources(S,team) : []) : (from ? ADJ[from].filter(n => S.terr[n.id].o === team).map(n => n.id) : []);
-  let h = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Orders"><h2>${M.mode === 'attack' ? 'Attack' : 'Move units'}</h2>`;
-  if(M.mode === 'attack'){
-    if(!to || !from){
-      const targets = !to, ids = targets ? PROVINCES.filter(id => S.terr[id].o !== team) : srcs;
-      h += `<div class="sm mut">${targets ? 'From' : 'Target'}: <b>${esc(TD[from || to].name)}</b>. ${targets ? 'Choose any foreign province.' : 'Choose one of your garrisons.'}</div>
-        <label>${targets ? 'Target province' : 'Launching garrison'} <select data-chg="attackplace"><option value="">Select a province…</option>${regionsForPicker(ids).map(([reg,group]) => `<optgroup label="${esc(reg)}">${group.map(id => `<option value="${id}">${esc(TD[id].name)} · ${targets ? TEAMS[S.terr[id].o]?.short || 'Neutral' : total(S.terr[id].u)+' units'}</option>`).join('')}</optgroup>`).join('')}</select></label>`;
-    }
+  let h = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Orders"><h2>${attack ? 'Attack' : 'Move units'}</h2>`;
+  if(attack && (!to || !from)){
+    const targets = !to, routes = attackRoutes(S,team,from || to);
+    if(!routes.length){ closeModal(); return; }
+    h += `<div class="sm mut">${targets ? 'From' : 'Target'}: <b>${esc(TD[from || to].name)}</b>. ${targets ? 'Choose a connected enemy or neutral province.' : 'Choose a connected friendly garrison.'}</div>
+      <label>${targets ? 'Target province' : 'Launching garrison'} <select data-chg="attackplace"><option value="">Select a province…</option>${routes.map(({id,sea}) => `<option value="${id}">${esc(TD[id].name)} · ${targets ? TEAMS[S.terr[id].o]?.short || 'Neutral' : total(S.terr[id].u)+' units'}${sea ? ' · sea' : ''}</option>`).join('')}</select></label>`;
   }
-  if(M.mode === 'move' && !to){ h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a friendly neighbor.</div><div class="pick">${srcs.length ? srcs.map(id => `<button data-act="mto" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(from, id).sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No friendly neighbors.</span>'}</div>`; }
+  if(M.mode === 'move' && !to){
+    const neighbors = ADJ[from].filter(n => S.terr[n.id].o === team);
+    h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a friendly neighbor.</div><div class="pick">${neighbors.length ? neighbors.map(({id,sea}) => `<button data-act="mto" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No friendly neighbors.</span>'}</div>`;
+  }
   let confirmAttrs = 'disabled';
   if(from && to){
     const src = S.terr[from], grp = M.grp, n = total(grp);
-    const attack = M.mode === 'attack', oil = attack ? fuel(S, team, grp) : 0;
-    if(n) confirmAttrs = priceAttrs({oil}, attack ? 2 : 1);
+    const oil = attack ? fuel(S, team, grp) : 0, blockedAtSea = attack && route.sea && n > 0 && !seaOK(S,team,grp);
+    if(n && !blockedAtSea) confirmAttrs = priceAttrs({oil}, attack ? 2 : 1);
     const list = divsFor(team);
     const stepperHtml = list.filter(d => d !== 'all').map(d => {
       const sub = UORDER.filter(u => src.u[u] && UNITS[u] && UNITS[u].div === d);
       if(!sub.length) return '';
       return `<div class="divhdr">${DIVS[d]} Division</div>` + sub.map(u => `<div class="stepper" style="padding:3px 0"><span>${uname(u, team)} <span class="mut sm">of ${src.u[u]}</span></span><button class="btn sm" data-act="step" data-u="${u}" data-d="-1">−</button><span class="n">${grp[u] || 0}</span><button class="btn sm" data-act="step" data-u="${u}" data-d="1">+</button><button class="btn sm" data-act="step" data-u="${u}" data-d="max">All</button></div>`).join('');
     }).join('');
-    h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${!attack && adjInfo(from,to)?.sea ? ' · across water' : ''}</div><div>${stepperHtml}</div>`;
+    h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${route.sea ? ' · across water' : ''}</div><div>${stepperHtml}</div>`;
     if(attack){
       const tact = Object.keys(TACT).filter(k => hasTech(S, team, TACT[k].req)); if(!tact.includes(M.tactic)) M.tactic = 'frontal';
       h += `<div><div class="sm mut" style="margin-bottom:4px">Tactic</div><div class="pick">${Object.keys(TACT).map(k => { const has = tact.includes(k), match = !TACT[k].units.length || TACT[k].units.some(u => grp[u] > 0); return `<button ${has ? '' : 'disabled'} style="${M.tactic === k ? 'border-color:var(--acc);background:var(--panel)' : ''}${has ? '' : ';opacity:.4'}" data-act="tactic" data-k="${k}"><b>${TACT[k].n}</b><span class="mut sm">${has ? (match ? TACT[k].d : 'Needs matching units.') : 'Research ' + TECH[TACT[k].req[0]].n + ' ' + TACT[k].req[1]}</span></button>`; }).join('')}</div></div>`;
       const dEx = visible(S, team, to); const AP = attackPower(S, team, grp, M.tactic, dEx ? S.terr[to].st : 'unknown', 1, Date.now(), from, to), DP = defPower(S, to, M.tactic, team, 1, grp) * (dEx ? 1 : 1);
       let odds = 'Scout the target (spy) for a reliable estimate.';
-      if(n){ const ratio = AP / Math.max(0.01, DP); if(dEx){ odds = ratio > 1.6 ? 'Crushing advantage' : ratio > 1.15 ? 'Favorable' : ratio > 0.87 ? 'Too close to call' : ratio > 0.6 ? 'Risky' : 'Suicidal'; odds += ` (your ${AP.toFixed(0)} vs their ${DP.toFixed(0)}, ±12% luck each)`; } else { odds = `Your strength ${AP.toFixed(0)}. Enemy strength unknown. Garrison about ${total(S.terr[to].u) ? '~' + Math.max(3, Math.round(total(S.terr[to].u) / 3) * 3) : '0'} units.`; } }
+      if(blockedAtSea) odds = SEA_CROSSING;
+      else if(n){ const ratio = AP / Math.max(0.01, DP); if(dEx){ odds = ratio > 1.6 ? 'Crushing advantage' : ratio > 1.15 ? 'Favorable' : ratio > 0.87 ? 'Too close to call' : ratio > 0.6 ? 'Risky' : 'Suicidal'; odds += ` (your ${AP.toFixed(0)} vs their ${DP.toFixed(0)}, ±12% luck each)`; } else { odds = `Your strength ${AP.toFixed(0)}. Enemy strength unknown. Garrison about ${total(S.terr[to].u) ? '~' + Math.max(3, Math.round(total(S.terr[to].u) / 3) * 3) : '0'} units.`; } }
       h += `<div class="card sm"><b>${n} units</b> · fuel <b>${oil}</b> oil (have <span data-balance="oil"></span>) · 2 command points<br>${odds}</div>`;
     } else h += `<div class="card sm"><b>${n} units</b> · 1 command point</div>`;
   }
@@ -3339,10 +3344,17 @@ document.addEventListener('click', e => {
   if(a === 'spectate'){ frontWatch?.depart(); me.name = '__spectator'; me.ph = null; try{ localStorage.setItem('eot-me', me.name); localStorage.removeItem('eot-ph'); }catch(_){} PWASK = null; M = null; NET.announce(); renderAll(); return; }
   if(a === 'closem'){ closeModal(); renderAll(); return; }
   if(!S) return;
-  if(a === 'open'){ const team = myTeam(); if(d.m === 'move') M = {mode:'move', from:sel, to:null, grp:{}, tactic:'frontal'}; else M = d.to ? {mode:'attack', from:null, to:d.to, grp:{}, tactic:'frontal'} : {mode:'attack', from:sel, to:null, grp:{}, tactic:'frontal'};
-    if(M.mode === 'attack' && M.to){ const best = attackSources(S,team); if(best.length === 1){ M.from = best[0]; } } renderModal(); return; }
-  if(a === 'mto'){ M.to = d.id; renderModal(); return; }
-  if(a === 'mfrom'){ M.from = d.id; renderModal(); return; }
+  if(a === 'open' && (d.m === 'attack' || d.m === 'move')){
+    const to = d.m === 'attack' ? d.to || null : null;
+    if(!provinceId(to || sel)) return;
+    M = {mode:d.m, from:to ? null : sel, to, grp:{}, tactic:'frontal'};
+    if(to){
+      const sources = attackRoutes(S,myTeam(),to);
+      if(sources.length === 1) M.from = sources[0].id;
+    }
+    renderModal(); return;
+  }
+  if(a === 'mto' && M?.mode === 'move' && provinceId(d.id)){ M.to = d.id; renderModal(); return; }
   if(a === 'step'){ const u = d.u, have = S.terr[M.from].u[u] || 0; let v = M.grp[u] || 0; v = d.d === 'max' ? have : Math.max(0, Math.min(have, v + +d.d)); if(v) M.grp[u] = v; else delete M.grp[u]; renderModal(); return; }
   if(a === 'tactic'){ M.tactic = d.k; renderModal(); return; }
   if(a === 'confirm') return act(M.mode, {from:M.from, to:M.to, grp:clone(M.grp), tactic:M.tactic});
@@ -3394,7 +3406,12 @@ document.addEventListener('change', e => {
   if(k === 'masteryunit' && unitsFor(myTeam() || 'reich').includes(el.value)){
     ui.masteryUnit = el.value; renderPanel(); $('#mastery-unit').focus({preventScroll:true}); return;
   }
-  if(k === 'attackplace' && M?.mode === 'attack' && Object.hasOwn(TD,el.value)){ if(!M.to) M.to = el.value; else if(!M.from) M.from = el.value; renderModal(); return; }
+  if(k === 'attackplace' && S && M?.mode === 'attack' && (!M.to || !M.from)){
+    if(attackRoutes(S,myTeam(),M.from || M.to).some(n => n.id === el.value)){
+      if(!M.to) M.to = el.value; else M.from = el.value;
+    }
+    renderModal(); return;
+  }
   if(k === 'give' || k === 'get') ui.trade[k] = el.value; else if(k === 'gn' || k === 'wn') ui.trade[k] = +el.value;
   else if(k === 'role') act('setrole', {name:el.dataset.n, role:el.value}); else if(k === 'title') act('setrole', {name:el.dataset.n, title:el.value});
 });
