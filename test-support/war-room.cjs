@@ -81,7 +81,8 @@ function launch({
   const sockets = [],
     channels = [],
     nodes = new Map(),
-    events = new Map();
+    events = new Map(),
+    windowEvents = new Map();
   const wire = rules ? room + ':' + rules : room,
     cacheKey = rules
       ? 'eot-live-state:' + wire + '|' + (claude ? 'shared' : fb ? 'https://example.test' : 'mqtt')
@@ -123,13 +124,30 @@ function launch({
     if (!nodes.has(s)) nodes.set(s, element());
     return nodes.get(s);
   }
-  const window = {claude, addEventListener() {}, removeEventListener() {}};
+  function listen(map, type, fn, options) {
+    if (!map.has(type)) map.set(type, []);
+    map.get(type)[options?.capture ? 'unshift' : 'push'](fn);
+  }
+  function dispatch(map, type, e = {}) {
+    let result;
+    for (const fn of map.get(type) || []) result = fn(e) ?? result;
+    return result;
+  }
+  const window = {
+    claude,
+    addEventListener: (t, f, o) => listen(windowEvents, t, f, o),
+    removeEventListener: (t, f) =>
+      windowEvents.set(
+        t,
+        (windowEvents.get(t) || []).filter(fn => fn !== f)
+      )
+  };
   const document = {
     querySelector: $,
     querySelectorAll: () => [],
     documentElement: element(),
     createElement: element,
-    addEventListener: (e, f) => events.set(e, f)
+    addEventListener: (t, f, o) => listen(events, t, f, o)
   };
   class Socket {
     constructor(url, protocol) {
@@ -234,8 +252,11 @@ function launch({
     storage,
     document,
     location,
-    click: (act, data = {}) => events.get('click')({target: {closest: () => ({dataset: {act, ...data}})}}),
-    change: (chg, value) => events.get('change')({target: {closest: () => ({dataset: {chg}, value})}})
+    dispatch: (type, e) => dispatch(events, type, e),
+    dispatchWindow: (type, e) => dispatch(windowEvents, type, e),
+    click: (act, data = {}) =>
+      dispatch(events, 'click', {target: {closest: () => ({dataset: {act, ...data}})}}),
+    change: (chg, value) => dispatch(events, 'change', {target: {closest: () => ({dataset: {chg}, value})}})
   };
 }
 const {game: factory} = launch({timers: {setTimeout() {}, setInterval() {}}, random: () => 0.5});

@@ -20,7 +20,9 @@ const script = inspect([
 const e = launch({script, random: () => 0.5, timers: {setInterval() {}, setTimeout() {}}}).game;
 const cp = structuredClone;
 const total = units => Object.values(units).reduce((a, b) => a + b, 0);
-const turn = (s, ts = (s.front?.at || now) + e.FRONT_MS) => e.advanceFront(s, ts, s.front?.turn || 0);
+const turn = (s, ts = (s.front?.at || now) + e.FRONT_MS, paired = true) =>
+  e.advanceFront(s, ts, s.front?.turn || 0, paired);
+const solo = s => turn(s, undefined, false);
 function quiet() {
   const s = saved(50);
   for (const [id, t] of Object.entries(s.terr)) if (!e.TD[id].fcap) t.o = 'neutral';
@@ -218,21 +220,31 @@ test('1,000 seeded turns: correct target faction, routes, alternating fronts, HQ
     for (let i = 0; i < 40; i++) {
       const prev = Object.fromEntries(Object.entries(s.terr).map(([id, t]) => [id, t.o]));
       const last = s.front?.target;
-      assert.ok(g.advanceFront(s, now + i * g.FRONT_MS, s.front?.turn || 0));
+      const before = Object.fromEntries(g.PROVINCES.map(id => [id, g.countryAt(s, id)]));
+      assert.ok(g.advanceFront(s, now + i * g.FRONT_MS, s.front?.turn || 0, true));
       const r = s.log[0];
-      if (r.from) {
+      if (r.tid) {
         battles++;
         if (r.win) wins++;
         else losses++;
         countries.add(r.country);
-        attacked.add(prev[r.tid]);
-        assert.equal(prev[r.from], 'neutral');
-        assert.notEqual(prev[r.tid], 'neutral');
-        assert.ok(g.ADJ[r.from].some(n => n.id === r.tid));
+        if (prev[r.tid] !== 'neutral') attacked.add(prev[r.tid]);
+        if (r.from) {
+          assert.equal(before[r.from], r.country);
+          assert.ok(g.ADJ[r.from].some(n => n.id === r.tid));
+        } else assert.ok(r.recovery, 'only local resistance can fight without an adjacent army');
+        if (r.recovery) {
+          assert.equal(r.tid, g.COUNTRIES[r.country].homes[0]);
+          assert.notEqual(before[r.tid], r.country);
+        } else {
+          assert.notEqual(prev[r.tid], 'neutral');
+          assert.equal(s.front.target, prev[r.tid]);
+        }
         assert.equal(s.terr[r.tid].o, r.win ? 'neutral' : prev[r.tid]);
         assert.ok(!g.TD[r.tid].fcap);
         if (r.win) assert.equal(g.countryAt(s, r.tid), r.country);
-        if (i === 1) assert.notEqual(s.front.target, last, 'both faction frontiers available on second turn');
+        if (i < 8 && !r.recovery && last)
+          assert.notEqual(s.front.target, last, 'alternate regular raids when both fronts are available');
       }
       assert.equal(s.front.turn, i + 1);
       assert.ok(g.validSave(s));
@@ -245,11 +257,12 @@ test('1,000 seeded turns: correct target faction, routes, alternating fronts, HQ
   assert.equal(attacked.size, 2);
   assert.ok(countries.has('USSR') && countries.has('USA'));
 });
-test('conquest, victory, malformed front metadata and overflow fail closed; explicit reset discards fronts but retains officers', () => {
+test('total occupation allows local resistance, but victory, malformed metadata and overflow fail closed; reset retains officers', () => {
   const s = island();
   s.terr.ICE.o = 'dawn';
-  assert.equal(turn(s), false);
-  assert.equal(s.front, undefined);
+  assert.ok(solo(s));
+  assert.ok(s.front.resistance.ISL > 0);
+  assert.equal(s.terr.ICE.o, 'dawn');
   const st = saved(60);
   assert.ok(turn(st));
   const snap = cp(st);
@@ -261,6 +274,10 @@ test('conquest, victory, malformed front metadata and overflow fail closed; expl
     {...snap.front, at: Infinity},
     {...snap.front, drill: {USSR: -1}},
     {...snap.front, drill: {JPN: 99}},
+    {...snap.front, resistance: {ISL: 19}},
+    {...snap.front, resistance: {unknown: 2}},
+    {...snap.front, resistance: {ISL: -1}},
+    {...snap.front, lastRecovery: 'unknown'},
     {...snap.front, raider: ['USA']}
   ])
     assert.ok(!e.validSave({...snap, front: f}));
@@ -285,4 +302,71 @@ test('Japan launches a real first-turn naval expedition when a player reaches it
   assert.ok(log.win);
   assert.ok(s.terr[log.tid].u.nav >= 1);
   assert.equal(s.terr[log.tid].country, 'JPN');
+});
+
+for (const owner of ['reich', 'dawn', 'neutral'])
+  test(`a solo operation can reclaim Moscow from ${owner} with a bordering Soviet army, without touching HQs or other player lands`, () => {
+    const s = quiet();
+    s.terr.MOS = {o: owner, u: {inf: 1}, f: 2, st: 'bunker', ...(owner === 'neutral' ? {country: 'USA'} : {})};
+    for (const {id} of e.ADJ.MOS) if (e.countryAt(s, id) === 'USSR') s.terr[id].u = {arm: 100};
+    s.terr.LOR.o = 'reich'; // an unrelated, empty border is NOT a solo objective
+    s.terr.LOR.u = {};
+    const before = cp(s.terr);
+    s.intel.dawn.MOS = s.intel.reich.MOS = now + 999999;
+    assert.ok(solo(s));
+    const r = s.log[0];
+    assert.equal(r.country, 'USSR');
+    assert.equal(r.tid, 'MOS');
+    assert.equal(r.recovery, true);
+    assert.equal(r.win, true);
+    assert.ok(e.ADJ.MOS.some(n => n.id === r.from));
+    assert.ok(s.terr[r.from].u.arm < before[r.from].u.arm);
+    assert.equal(e.countryAt(s, 'MOS'), 'USSR');
+    assert.ok(s.terr.MOS.u.arm > 0);
+    assert.equal(s.terr.MOS.f, 1);
+    assert.equal(s.intel.dawn.MOS, undefined);
+    assert.equal(s.intel.reich.MOS, undefined);
+    assert.match(r.msg, /reclaimed its capital/);
+    for (let i = 0; i < 5; i++) assert.ok(solo(s));
+    assert.equal(s.log.filter(l => l.kind === 'front' && l.tid).length, 1);
+    for (const id of ['BUC', 'BER', 'LOR']) assert.deepEqual(cp(s.terr[id]), before[id]);
+    assert.ok(e.validSave(s));
+  });
+
+test('a dispossessed one-province country musters only on turns, takes real losses, and can liberate its own capital', () => {
+  const s = quiet();
+  s.terr.ICE = {o: 'dawn', u: {bd_init: 1000}, f: 2, st: 'bunker'};
+  const untilAttempt = () => {
+    for (let i = 0; i < 15; i++) {
+      assert.ok(solo(s));
+      if (s.log[0].recovery) return s.log[0];
+      assert.equal(s.terr.ICE.o, 'dawn');
+    }
+    assert.fail('no resistance attempt');
+  };
+  assert.ok(solo(s));
+  assert.equal(s.front.resistance.ISL, 1);
+  assert.equal(s.terr.ICE.u.bd_init, 1000, 'mustering does not spend the occupying army');
+  assert.equal(e.advanceFront(s, s.front.at + 400, s.front.turn), false);
+  assert.equal(s.front.resistance.ISL, 1);
+  const r = untilAttempt();
+  assert.equal(r.tid, 'ICE');
+  assert.equal(r.from, undefined);
+  assert.equal(r.win, false);
+  assert.match(r.msg, /Local resistance/);
+  const [sent, lost, defLost] = r.msg
+    .match(/(\d+) sent, (\d+) lost; (\d+) defenders lost/)
+    .slice(1)
+    .map(Number);
+  assert.ok(lost > 0 && defLost > 0);
+  assert.equal(s.front.resistance.ISL, sent - lost);
+  assert.equal(s.terr.ICE.u.bd_init, 1000 - defLost);
+  s.terr.ICE.u = {}; // occupier withdrew its garrison
+  const liberated = untilAttempt();
+  assert.ok(liberated.win);
+  assert.equal(liberated.country, 'ISL');
+  assert.equal(e.countryAt(s, 'ICE'), 'ISL');
+  assert.ok(s.terr.ICE.u.inf > 0);
+  assert.equal(s.front.resistance.ISL, undefined);
+  assert.ok(e.validSave(s));
 });

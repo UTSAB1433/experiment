@@ -5,8 +5,6 @@ const {
   saved,
   RULES,
   room,
-  prefix,
-  key,
   publication,
   publications,
   now,
@@ -82,68 +80,97 @@ function mqtt(st) {
   }
   return Object.assign(net, {deliver, join, clients, writes, messages});
 }
+function allCapitalsHome(st) {
+  for (const id of ['PAR', 'BSB', 'DEL']) st.terr[id].o = 'neutral';
+  return st;
+}
+function challengeableCapital(st) {
+  allCapitalsHome(st);
+  st.terr.MOS.o = 'dawn';
+  st.terr.MOS.u = {};
+  st.terr.LEN.u = {arm: 100};
+  return st;
+}
 for (const rules of [undefined, RULES])
-  test(`MQTT ${rules || 'Classic'}: needs one signed-in player of EACH faction; three tabs, one revision, real losses, no absentee turns or offline catch-up`, async t => {
-    mockTime(t);
-    const st = campaign(rules),
-      net = mqtt(st);
-    const r1 = net.join(identity('reich')),
-      r2 = net.join(identity('reich'));
-    const spec = net.join({name: '__spectator', ph: 'anything'}),
-      bad = net.join({...identity('dawn'), ph: 'wrong'});
-    net.deliver('pres', {tab: 'idle', team: 'dawn', name: 'Fixture dawn'});
-    await elapsed(t, 100000);
-    assert.equal(net.writes.length, 0);
-    assert.deepEqual(copy(r1.tab.game.S.terr), copy(st.terr));
-    for (const c of [r1, r2, spec, bad]) assert.equal(c.tab.game.S.front, undefined);
-    const dawn = net.join(identity('dawn'));
-    await elapsed(t, 25000);
-    r1.tab.click('tab', {k: 'front'});
-    assert.match(r1.tab.$('#panel').innerHTML, /Both factions online/);
-    await elapsed(t, 60000);
-    assert.equal(net.writes.length, 0, 'not due yet');
-    await elapsed(t, 25000);
-    assert.deepEqual(
-      net.writes.map(s => s.rev),
-      [81]
-    );
-    const first = copy(net.state);
-    assert.equal(first.front.turn, 1);
-    assert.ok(first.front.drill.USSR);
-    assert.ok(Object.values(first.terr.MOS.u).reduce((a, b) => a + b, 0) > 1);
-    assert.equal(first.log[0].kind, 'front');
-    assert.ok(first.log[0].from);
-    assert.deepEqual(first.players, copy(st.players));
-    assert.equal(first.v, 6);
-    assert.match(r1.tab.$('#panel').innerHTML, /OP \/ 001/);
-    assert.equal(
-      net.clients.every(c => c.tab.game.S.rev === 81),
-      true
-    );
-    const signals = net.messages.filter(m => m.sub === 'muster');
-    assert.ok(signals.length > 2);
-    assert.ok(signals.every(m => !m.retain && !JSON.stringify(m.data).includes('-only')));
-    dawn.online = false; // Abrupt disappearance, deliberately NO leave packet.
-    await elapsed(t, 200000);
-    assert.equal(net.writes.length, 1);
-    assert.deepEqual(net.state, first);
-    r1.tab.click('tab', {k: 'front'});
-    assert.match(r1.tab.$('#panel').innerHTML, /On standby/);
-    // A suspended tab returns after a day. A fresh full interval must pass first.
-    net.sleepOffset += 86400000;
-    dawn.online = true;
-    await elapsed(t, 85000);
-    assert.equal(net.writes.length, 1);
-    await elapsed(t, 35000);
-    assert.deepEqual(
-      net.writes.map(s => s.front.turn),
-      [1, 2]
-    );
-    // The reverse direction: Dawn alone cannot run a turn either.
-    r1.online = r2.online = false;
-    await elapsed(t, 140000);
-    assert.equal(net.writes.length, 2);
-  });
+  for (const team of ['reich', 'dawn'])
+    test(`MQTT ${rules || 'Classic'}: one ${team} soldier activates training and capital recovery, even with duplicate tabs; no one, no turn`, async t => {
+      mockTime(t);
+      const st = challengeableCapital(campaign(rules)),
+        net = mqtt(st);
+      const spec = net.join({name: '__spectator'}),
+        bad = net.join({...identity(team), ph: 'wrong'});
+      net.deliver('pres', {tab: 'advertised', team, name: 'Fixture ' + team});
+      await elapsed(t, 100000);
+      assert.equal(net.writes.length, 0);
+      const r = net.join(identity(team)),
+        r2 = net.join(identity(team));
+      await elapsed(t, 90000);
+      assert.equal(net.writes.length, 0, 'first confirmed check-in starts the clock');
+      r.tab.click('tab', {k: 'front'});
+      assert.match(r.tab.$('#panel').innerHTML, /Active player online/);
+      await elapsed(t, 5000);
+      assert.deepEqual(
+        net.writes.map(s => s.rev),
+        [81]
+      );
+      const first = copy(net.state);
+      assert.equal(first.front.turn, 1);
+      assert.ok(first.front.drill.USA);
+      assert.ok(
+        Object.values(first.terr.WDC.u).reduce((n, x) => n + x, 0) >
+          Object.values(st.terr.WDC.u).reduce((n, x) => n + x, 0)
+      );
+      assert.equal(first.log[0].kind, 'front');
+      assert.equal(first.log[0].recovery, true);
+      assert.equal(first.terr.MOS.country, 'USSR');
+      assert.deepEqual(first.players, copy(st.players));
+      assert.equal(first.v, 6);
+      for (const c of [r, r2, spec, bad]) assert.equal(c.tab.game.S.rev, 81);
+      const signals = net.messages.filter(m => m.sub === 'muster');
+      assert.ok(
+        signals.length > 2 && signals.every(m => !m.retain && !JSON.stringify(m.data).includes('-only'))
+      );
+      r.tab.click('spectate');
+      assert.equal(r.tab.storage.get('eot-me'), '__spectator');
+      assert.equal(r.tab.storage.has('eot-ph'), false);
+      r2.online = false; // abrupt loss; no broker echoes from the second tab
+      await elapsed(t, 120000);
+      assert.deepEqual(net.state, first);
+      net.sleepOffset += 86400000; // suspension, not a day's worth of replayed intervals
+      r2.online = true;
+      r2.tab.dispatch('pointerdown');
+      await elapsed(t, 90000);
+      assert.equal(net.writes.length, 1);
+      await elapsed(t, 5000);
+      assert.deepEqual(
+        net.writes.map(s => s.front.turn),
+        [1, 2]
+      );
+      assert.equal(net.state.log[0].tid, undefined, 'no unrelated raids once the capital is home');
+    });
+
+test('paired players can still enable ordinary raids; losing one side keeps the other side’s upkeep clock running', async t => {
+  mockTime(t);
+  const net = mqtt(allCapitalsHome(campaign())),
+    r = net.join(identity('reich')),
+    d = net.join(identity('dawn'));
+  await elapsed(t, 90000);
+  assert.equal(net.writes.length, 0);
+  await elapsed(t, 10000);
+  assert.deepEqual(
+    net.writes.map(s => s.rev),
+    [81]
+  );
+  assert.ok(net.state.log[0].from && !net.state.log[0].recovery);
+  r.tab.click('tab', {k: 'front'});
+  assert.match(r.tab.$('#panel').innerHTML, /Both factions online/);
+  r.tab.click('spectate');
+  await elapsed(t, 90000);
+  assert.equal(net.writes.length, 2);
+  assert.equal(net.state.log[0].tid, undefined);
+  d.tab.click('tab', {k: 'front'});
+  assert.match(d.tab.$('#panel').innerHTML, /Active player online/);
+});
 test('cached/offline/spectating, peer-only, and silent or corrupt selected relays never authorize even a muster; join cannot initialize a board', async t => {
   mockTime(t);
   const st = campaign();
@@ -164,25 +191,47 @@ test('cached/offline/spectating, peer-only, and silent or corrupt selected relay
   for (const tab of tabs)
     assert.ok(tab.sockets.flatMap(publications).every(p => !p.retain && !p.topic.endsWith('/muster')));
 });
-test('retained/BC replies, self, bad team, stale revision or campaign, replayed or pre-deadline responses are not turn authority', async t => {
+test('cached, absent, retained and BroadcastChannel self-echoes cannot establish a solo live streak', async t => {
   mockTime(t);
-  const st = campaign(),
-    net = mqtt(st),
+  const net = mqtt(campaign()),
+    r = net.join(identity('dawn'));
+  net.filter = sub => sub !== 'muster'; // drop actual broker check-ins
+  let early;
+  for (let i = 0; i < 25; i++) {
+    await elapsed(t, 5000);
+    const q = net.messages.filter(m => m.sub === 'muster').at(-1).data;
+    early ||= q;
+    net.deliver('muster', q, true);
+    r.tab.channels[0].onmessage({data: {sub: 'muster', obj: q}});
+    if (Date.now() - early.at > 18000) net.deliver('muster', early);
+    for (const bad of [
+      {...q, tab: 'elsewhere'},
+      {...q, rev: 17},
+      {...q, created: 0},
+      {...q, origin: 'old'},
+      {...q, name: 'Spectator'}
+    ])
+      net.deliver('muster', bad);
+  }
+  assert.equal(net.writes.length, 0);
+  net.filter = null;
+  await elapsed(t, 90000);
+  assert.equal(net.writes.length, 0);
+  await elapsed(t, 25000); // allow the last unconfirmed pulse to expire before a fresh check-in
+  assert.equal(net.writes.length, 1);
+});
+test('a pre-deadline, retained, BC, malformed or expired opposing reply cannot promote a solo turn to an ordinary raid', async t => {
+  mockTime(t);
+  const net = mqtt(allCapitalsHome(campaign())),
     r = net.join(identity('reich'));
   await elapsed(t, 5000);
-  const reply = q => ({...q, at: Date.now(), tab: 'only-peer', name: 'Fixture dawn', team: 'dawn', to: q.tab});
-  const challenge = () => net.messages.filter(m => m.sub === 'muster' && m.data.team === 'reich').at(-1).data;
-  // Refresh ordinary heartbeats until just BEFORE the first legal turn. Replaying
-  // one should not turn receipt time into an authorization for a later attack.
+  const challenge = () => net.messages.filter(m => m.sub === 'muster' && m.data.to === 'dawn').at(-1).data;
+  const reply = q => ({...q, at: Date.now(), tab: 'other-tab', name: 'Fixture dawn', team: 'dawn', to: q.tab});
   for (let i = 0; i < 17; i++) {
     net.deliver('muster', reply(challenge()));
     await elapsed(t, 5000);
   }
   const early = reply(challenge());
-  await elapsed(t, 5000);
-  net.deliver('muster', early);
-  await flush();
-  assert.equal(net.writes.length, 0);
   for (let i = 0; i < 25; i++) {
     await elapsed(t, 5000);
     const q = challenge(),
@@ -192,20 +241,24 @@ test('retained/BC replies, self, bad team, stale revision or campaign, replayed 
     for (const bad of [
       early,
       {...ack, tab: q.tab},
-      {...ack, to: 'different'},
+      {...ack, to: 'another'},
+      {...ack, v: 1},
       {...ack, rev: 21},
       {...ack, created: now - 400000},
       {...ack, name: 'Joining…'},
       {...ack, team: 'reich'},
-      {...ack, turn: 1},
-      {...ack, at: now}
+      {...ack, turn: 99},
+      {...ack, at: now},
+      {...ack, until: Date.now()}
     ])
       net.deliver('muster', bad);
   }
-  await flush();
-  assert.equal(net.writes.length, 0);
-  assert.equal(r.tab.game.S.rev, 80);
-  assert.deepEqual(copy(r.tab.game.S.terr), copy(st.terr));
+  await elapsed(t, 25000); // an answer to another tab may briefly yield the lock, never authorize a raid
+  assert.deepEqual(
+    net.writes.map(s => s.front.turn),
+    [1, 2]
+  );
+  assert.ok(net.writes.every(s => !s.log[0].tid));
 });
 for (const scene of ['newer', 'removed', 'victory', 'leave', 'disconnect', 'unconfirmed'])
   test(`due turn rechecks live authority during the lock: ${scene}`, async t => {
@@ -213,21 +266,19 @@ for (const scene of ['newer', 'removed', 'victory', 'leave', 'disconnect', 'unco
     const st = campaign(),
       net = mqtt(st),
       r = net.join(identity('reich'));
-    net.join(identity('dawn'));
     let interrupted = false;
     net.before = (sub, msg) => {
       if (sub !== 'lock' || interrupted) return;
       interrupted = true;
       if (scene === 'disconnect') return r.socket.close();
       if (scene === 'leave') {
-        const d = net.messages.filter(m => m.sub === 'muster' && m.data.team === 'dawn').at(-1).data;
-        net.deliver('pres', {...d, bye: true});
+        r.tab.click('spectate');
         return;
       }
       const fresh = copy(st);
       fresh.rev = 109;
       fresh.teams.reich.res.gold = 1234;
-      if (scene === 'removed') delete fresh.players['Fixture dawn'];
+      if (scene === 'removed') delete fresh.players['Fixture reich'];
       if (scene === 'victory') fresh.win = {team: 'dawn', why: 'Fixture', t: Date.now()};
       if (scene === 'unconfirmed') r.tab.channels[0].onmessage({data: {sub: 'state', obj: fresh}});
       else net.deliver('state', fresh);
@@ -354,44 +405,45 @@ function documents(type, rules, st = campaign(rules)) {
 }
 for (const type of ['firebase', 'shared'])
   for (const rules of [undefined, RULES])
-    test(`${type} ${rules || 'Classic'}: only paired campaigns train, no state initialization by presence, no ghost mailbox turn after sign-out or reload`, async t => {
+    test(`${type} ${rules || 'Classic'}: solo Dawn can liberate a capital; duplicate tabs cannot double-write, and ghost mailboxes cannot keep the room running`, async t => {
       mockTime(t);
-      const f = documents(type, rules),
-        r = f.join(identity('reich')),
-        r2 = f.join(identity('reich'));
-      const spec = f.join({name: '__spectator'});
+      const f = documents(type, rules, challengeableCapital(campaign(rules)));
+      const d = f.join(identity('dawn')),
+        d2 = f.join(identity('dawn')),
+        spec = f.join({name: '__spectator'});
       await flush();
-      await elapsed(t, 115000);
+      await elapsed(t, 90000);
       assert.equal(f.writes.length, 0);
-      const dawn = f.join(identity('dawn'));
-      await flush();
-      await elapsed(t, 85000);
-      assert.equal(f.writes.length, 0);
-      await elapsed(t, 45000);
+      await elapsed(t, 10000);
       assert.deepEqual(
         f.writes.map(s => s.rev),
         [81]
       );
       assert.equal(f.writes[0].front.turn, 1);
-      for (const c of [r, r2, dawn, spec]) assert.equal(c.tab.game.S.rev, 81);
+      assert.equal(f.writes[0].terr.MOS.country, 'USSR');
+      for (const c of [d, d2, spec]) assert.equal(c.tab.game.S.rev, 81);
+      if (type === 'firebase')
+        assert.ok(f.calls.some(([k, m, h]) => k === f.state && m === 'PUT' && h['if-match'] === '"80"'));
+      const r = f.join(identity('reich'));
+      await flush();
+      await elapsed(t, 25000);
       for (const side of ['reich', 'dawn']) assert.ok(f.records.has(f.slots(side)));
       assert.deepEqual(
         [...f.records.keys()].sort(),
         [f.lock, f.state, f.slots('reich'), f.slots('dawn')].sort()
       );
       assert.ok([...f.records.values()].filter(m => m.token).every(m => !JSON.stringify(m).includes('-only')));
-      if (type === 'firebase')
-        assert.ok(f.calls.some(([k, m, h]) => k === f.state && m === 'PUT' && h['if-match'] === '"80"'));
+      d.tab.click('spectate');
+      d2.tab.click('spectate');
+      r.tab.click('spectate');
       const frozen = copy(f.records.get(f.state));
-      dawn.tab.click('spectate');
-      await flush();
-      await elapsed(t, 190000);
+      await elapsed(t, 150000);
       assert.deepEqual(f.records.get(f.state), frozen);
-      f.join(identity('dawn'));
+      f.join(identity('reich'));
       await flush();
-      await elapsed(t, 85000);
+      await elapsed(t, 90000);
       assert.equal(f.writes.length, 1);
-      await elapsed(t, 45000);
+      await elapsed(t, 5000);
       assert.deepEqual(
         f.writes.map(s => s.front.turn),
         [1, 2]
@@ -401,11 +453,10 @@ test('Firebase refuses a conflicting front save, adopts the higher revision and 
   mockTime(t);
   const f = documents('firebase', RULES),
     updated = campaign(RULES, 190);
-  delete updated.players['Fixture dawn'];
+  delete updated.players['Fixture reich'];
   updated.teams.dawn.res.gold = 982;
   f.conflict = updated;
   const r = f.join(identity('reich'));
-  f.join(identity('dawn'));
   await flush();
   await elapsed(t, 230000);
   assert.deepEqual(f.records.get(f.state), prune(updated));
@@ -416,8 +467,7 @@ test('Firebase refuses a conflicting front save, adopts the higher revision and 
 test('a delayed shared locked read cannot use an expired lease, a newer unseen save or a departed player', async t => {
   mockTime(t);
   const f = documents('shared', RULES);
-  const r = f.join(identity('reich')),
-    d = f.join(identity('dawn'));
+  const r = f.join(identity('dawn'));
   await flush();
   let release;
   f.onCheck = () =>
@@ -429,7 +479,7 @@ test('a delayed shared locked read cannot use an expired lease, a newer unseen s
   const updated = campaign(RULES, 208);
   delete updated.players['Fixture dawn'];
   f.records.set(f.state, updated); // not yet in onSnapshot
-  d.tab.click('spectate');
+  r.tab.click('spectate');
   await elapsed(t, 10000);
   release();
   await flush();
@@ -438,22 +488,28 @@ test('a delayed shared locked read cannot use an expired lease, a newer unseen s
   assert.equal(r.tab.game.S.front, undefined);
 });
 for (const type of ['firebase', 'shared'])
-  test(`${type}: a read-only or offline opposite client cannot signal, and mailbox errors never produce a solo attack`, async t => {
+  test(`${type}: failed live reads pause the local streak; another healthy post can still run upkeep`, async t => {
     mockTime(t);
-    const f = documents(type),
+    const f = documents(type, undefined, allCapitalsHome(campaign())),
       d = f.join(identity('dawn'));
     d.deny = true;
+    await flush();
+    await elapsed(t, 120000);
+    assert.equal(f.writes.length, 0);
     const r = f.join(identity('reich'));
     await flush();
-    await elapsed(t, 140000);
-    assert.equal(f.writes.length, 0);
-    assert.equal(r.tab.game.S.front, undefined);
-    d.deny = false;
-    await elapsed(t, 125000);
+    await elapsed(t, 100000);
     assert.equal(f.writes.length, 1);
+    assert.equal(f.writes[0].log[0].tid, undefined);
     r.blocked = true;
-    await elapsed(t, 145000);
+    await elapsed(t, 100000);
     assert.equal(f.writes.length, 1);
+    d.deny = false;
+    d.tab.dispatch('pointerdown');
+    await elapsed(t, 90000);
+    assert.equal(f.writes.length, 1);
+    await elapsed(t, 5000);
+    assert.equal(f.writes.length, 2);
   });
 test('a higher shared snapshot arriving AFTER the locked read but during the final quorum check is never overwritten', async t => {
   mockTime(t);
@@ -529,7 +585,6 @@ for (const type of ['firebase', 'shared'])
 test('an expired shared lease alone stops a due operation even if the roster, proof and revision remain unchanged', async t => {
   mockTime(t);
   const f = documents('shared');
-  f.join(identity('reich'));
   f.join(identity('dawn'));
   await flush();
   let release;
@@ -544,4 +599,151 @@ test('an expired shared lease alone stops a due operation even if the roster, pr
   await flush();
   assert.equal(f.writes.length, 0);
   assert.equal(f.records.get(f.state).front, undefined);
+});
+
+test('the visible five-minute timer follows input, not heartbeats, other tabs or renders; AFK pauses and keyboard return starts a fresh interval', async t => {
+  mockTime(t);
+  const net = mqtt(allCapitalsHome(campaign())),
+    d = net.join(identity('dawn')),
+    spec = net.join({name: '__spectator'});
+  d.tab.click('tab', {k: 'front'});
+  spec.tab.click('room');
+  assert.doesNotMatch(spec.tab.$('#hud').innerHTML, /AFK in/);
+  await elapsed(t, 250000);
+  assert.match(d.tab.$('#hud').innerHTML, /AFK in<\/span><span>0:50/);
+  d.tab.dispatch('pointerdown'); // extend the deadline, not the independent turn clock
+  await elapsed(t, 50000);
+  assert.match(d.tab.$('#hud').innerHTML, /AFK in<\/span><span>4:10/);
+  await elapsed(t, 249000);
+  assert.match(d.tab.$('#hud').innerHTML, /AFK in<\/span><span>0:01/);
+  await elapsed(t, 1000);
+  assert.match(d.tab.$('#hud').innerHTML, /AFK<\/span><span>Interact to return/);
+  assert.equal(d.tab.$('#front-signal').textContent, 'AFK on this device');
+  assert.match(spec.tab.$('#room-presence').innerHTML, /Fixture dawn · AFK/);
+  const frozen = copy(net.state),
+    heartbeatCount = net.messages.filter(m => m.sub === 'muster' && !m.data.bye).length;
+  assert.equal(frozen.front.turn, 6);
+  spec.tab.dispatch('pointermove');
+  d.tab.dispatch('pointermove', {isTrusted: false});
+  await elapsed(t, 180000);
+  assert.deepEqual(net.state, frozen);
+  assert.equal(net.messages.filter(m => m.sub === 'muster' && !m.data.bye).length, heartbeatCount);
+  d.tab.dispatch('keydown', {key: 'Shift', target: {}});
+  await elapsed(t, 90000);
+  assert.deepEqual(net.state, frozen, 'no catch-up attack on wake');
+  assert.doesNotMatch(spec.tab.$('#room-presence').innerHTML, /Fixture dawn · AFK/);
+  await elapsed(t, 5000);
+  assert.equal(net.state.front.turn, frozen.front.turn + 1);
+  assert.deepEqual(net.state.players, frozen.players);
+  assert.ok(!/lastInput|activeUntil|"afk"|"until":/.test(JSON.stringify(net.state.front)));
+});
+
+test('an AFK deadline crossed inside a still-valid lock cannot authorize a last turn', async t => {
+  mockTime(t);
+  const st = campaign();
+  st.front = {turn: 1, at: now + 210000, drill: {}};
+  const net = mqtt(st),
+    r = net.join(identity('reich'));
+  await elapsed(t, 800);
+  r.tab.dispatch('wheel'); // AFK deadline at 300.8 seconds
+  await elapsed(t, 294200); // t = 295 seconds, five seconds before the saved turn is due
+  assert.equal(net.writes.length, 0);
+  let held = false;
+  net.before = sub => {
+    if (sub === 'lock') {
+      held = true;
+      net.sleepOffset += 900;
+    }
+  }; // under the 1.5s lease
+  await elapsed(t, 5000);
+  assert.ok(held);
+  assert.equal(net.writes.length, 0);
+  await elapsed(t, 100000);
+  assert.deepEqual(net.state, copy(st));
+});
+
+test('pagehide stops even a still-ticking tab; pageshow or waking after suspension cannot bank an interval', async t => {
+  mockTime(t);
+  const net = mqtt(campaign(RULES)),
+    d = net.join(identity('dawn'));
+  await elapsed(t, 85000);
+  d.tab.dispatchWindow('pagehide');
+  await elapsed(t, 125000);
+  assert.equal(net.writes.length, 0);
+  d.tab.dispatchWindow('pageshow');
+  await elapsed(t, 85000);
+  assert.equal(net.writes.length, 0);
+  net.sleepOffset += 86400000;
+  // Return before a timer has had a chance to observe the gap.
+  d.tab.dispatch('pointermove');
+  await elapsed(t, 90000);
+  assert.equal(net.writes.length, 0);
+  await elapsed(t, 5000);
+  assert.deepEqual(
+    net.writes.map(s => s.front.turn),
+    [1]
+  );
+});
+
+for (const type of ['firebase', 'shared'])
+  test(`${type}: a live pair can raid, but an AFK opponent's mailbox cannot enable further expansion`, async t => {
+    mockTime(t);
+    const f = documents(type, RULES, allCapitalsHome(campaign(RULES))),
+      r = f.join(identity('reich'));
+    const r2 = f.join(identity('reich')),
+      d = f.join(identity('dawn'));
+    await flush();
+    await elapsed(t, 250000);
+    assert.equal(f.writes.length, 2);
+    assert.ok(
+      f.writes.some(s => s.log[0].from && !s.log[0].recovery),
+      'pair-muster must not starve behind solo turns'
+    );
+    r2.tab.click('spectate');
+    r.tab.dispatch('pointerdown'); // only r remains active past 300s
+    await elapsed(t, 60000);
+    assert.match(d.tab.$('#hud').innerHTML, /Interact to return/);
+    const count = f.writes.length;
+    await elapsed(t, 190000);
+    assert.equal(f.writes.length, count + 2);
+    assert.ok(
+      f.writes.slice(count).every(s => !s.log[0].tid),
+      'Dawn idle, so only non-raid turns'
+    );
+  });
+
+test('a paired turn loses raid authority when the opposing post signs out during the lock', async t => {
+  mockTime(t);
+  const net = mqtt(allCapitalsHome(campaign()));
+  net.join(identity('reich'));
+  const d = net.join(identity('dawn'));
+  let left = false;
+  net.before = sub => {
+    if (sub === 'lock' && !left) {
+      left = true;
+      d.tab.click('spectate');
+    }
+  };
+  await elapsed(t, 95000);
+  assert.ok(left);
+  assert.equal(net.writes.length, 0);
+  await elapsed(t, 15000);
+  assert.deepEqual(
+    net.writes.map(s => s.front.turn),
+    [1]
+  );
+  assert.ok(net.state.front.drill.USA && !net.state.log[0].tid);
+});
+
+test('an active solo post cannot mutate a Classic save that already contains Mastery ranks', async t => {
+  mockTime(t);
+  const st = campaign();
+  st.teams.reich.mastery = {inf: {atk: 1}};
+  const net = mqtt(st),
+    r = net.join(identity('reich'));
+  await elapsed(t, 120000);
+  r.tab.click('tab', {k: 'front'});
+  assert.match(r.tab.$('#panel').innerHTML, /Orders paused/);
+  assert.deepEqual(net.state, copy(st));
+  assert.ok(net.messages.every(m => m.sub !== 'muster' && m.sub !== 'lock'));
 });
