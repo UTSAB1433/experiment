@@ -29,10 +29,17 @@ const officer = st => {
 };
 const retained = tab => tab.sockets.flatMap(publications).filter(p => p.retain);
 function targetRelay(tab, i = 0) {
-  const sockets = tab.sockets.slice(-3),
+  const sockets = tab.sockets.filter(s => s.readyState === 0 && s.onopen),
     live = sockets[i];
   live.subscribe();
-  sockets.filter(s => s !== live).forEach(s => s.onerror());
+  sockets
+    .filter(s => s !== live)
+    .forEach(s => {
+      if (i) return s.onerror(); // partial fallback discovery
+      s.subscribe();
+      const req = publications(s).find(m => m.data.type === 'req');
+      s.receive(publication(req.topic, req.data));
+    });
   const echo = publications(live).find(p => p.topic === MP + 'sync' && p.data.type === 'req');
   assert.ok(echo);
   live.receive(publication(echo.topic, echo.data));
@@ -42,7 +49,8 @@ function targetRelay(tab, i = 0) {
 test('explicit Classic → Mastery: copy the confirmed snapshot once; invites, locks, writes and caches stay isolated', async t => {
   mockTime(t);
   const st = saved(83);
-  st.players.Anish.cp = 3.5; st.players.Sattyaki.cp = 0; // continuing is not a CP reset
+  st.players.Anish.cp = 3.5;
+  st.players.Sattyaki.cp = 0; // continuing is not a CP reset
   st.props.push({id: 3, open: true, from: 'reich', type: 'ceasefire', mins: 60});
   const {tab, controls} = purchaseRoom(st, 'dawn');
   tab.click('showmastery', {u: 'bd_init'});
@@ -57,7 +65,7 @@ test('explicit Classic → Mastery: copy the confirmed snapshot once; invites, l
   );
   checkReadOnly(tab);
   await tab.click('preparemastery');
-  assert.equal(tab.sockets.length, 6);
+  assert.equal(tab.sockets.length, 4);
   assert.equal(tab.location.searchParams.get('rules'), RULES);
   const relay = targetRelay(tab);
   t.mock.timers.tick(650);
@@ -90,6 +98,10 @@ test('explicit Classic → Mastery: copy the confirmed snapshot once; invites, l
   assert.match(tab.$('#modal').innerHTML, /rules=mastery-1/);
   await tab.click('classicroom');
   assert.equal(tab.location.searchParams.has('rules'), false);
+  assert.equal(tab.game.S, null);
+  const original = tab.sockets.at(-1);
+  original.subscribe();
+  original.message('state', st);
   assert.equal(tab.game.S.rev, 83);
   assert.equal(tab.game.S.teams.dawn.mastery, undefined);
 });
@@ -144,26 +156,25 @@ test('cold invites, unsupported rules, unfinished discovery, fallback-only and u
 test('stale source, demotion, offline orders and cancelled room switches never publish cached progress', async t => {
   mockTime(t);
   const newer = officer(saved(60)),
-    tab = launch({identity, cached: newer});
-  const [r, x, y] = tab.sockets;
+    tab = launch({identity, cached: newer, relay: 'emqx'});
+  const [r] = tab.sockets;
   r.subscribe();
-  x.onerror();
-  y.onerror();
   r.message('state', officer(saved(4)));
   await tab.click('preparemastery');
   assert.equal(tab.location.searchParams.has('rules'), false);
-  assert.equal(tab.game.S.rev, 60);
+  assert.equal(tab.game.S, null);
+  assert.equal(JSON.parse(tab.storage.get(key)).rev, 60);
   checkReadOnly(tab);
   const demoted = officer(saved(61));
   demoted.players[identity.name].role = 'soldier';
   r.message('state', demoted);
   await tab.click('preparemastery');
-  assert.equal(tab.sockets.length, 3);
+  assert.equal(tab.sockets.length, 1);
   checkReadOnly(tab);
   const m = launch({rules: RULES, cached: officer(masterySaved(70)), identity});
   m.sockets.forEach(s => s.onerror());
   await m.game.act('mastery', {unit: 'bd_init', skill: 'atk', rank: 1, quote: {gold: 10, steel: 10}});
-  assert.equal(m.game.S.teams.dawn.mastery, undefined);
+  assert.equal(m.game.S, null);
   checkReadOnly(m);
   const {tab: cancel} = purchaseRoom(saved(83), 'dawn');
   await cancel.click('preparemastery');
@@ -402,27 +413,25 @@ test('non-JSON, null, scalar and damaged retained saves are not empty; after a v
   assert.equal(tab.game.S.rev, 102);
 });
 
-test('a peer-only mastery snapshot is browseable, not permission to create a competing save on an empty fallback', async t => {
+test('a peer-only mastery snapshot cannot display or create a competing save on an empty fallback', async t => {
   mockTime(t);
   const st = officer(masterySaved(120)),
     tab = launch({cached: st, identity, rules: RULES});
-  targetRelay(tab, 1);
-  tab.channels[0].onmessage({data: {sub: 'state', obj: st}});
+  const relay = targetRelay(tab, 1);
+  relay.message('sync', {type: 'res', state: st});
   t.mock.timers.tick(650);
   await afterLock(t, tab.game.act('contribute', {kind: 'drill'}));
   checkReadOnly(tab);
-  assert.equal(tab.game.S.rev, 120);
+  assert.equal(tab.game.S, null);
 });
 
 test('changing backend discards a pending handoff; MQTT and Firebase Mastery caches and late callbacks do not mix', async t => {
   mockTime(t);
   const st = officer(saved(50)),
     f = firebase(st, false),
-    tab = launch({identity, fetch: f.fetch});
-  const [a, b, c] = tab.sockets;
+    tab = launch({identity, fetch: f.fetch, relay: 'emqx'});
+  const [a] = tab.sockets;
   a.subscribe();
-  b.onerror();
-  c.onerror();
   a.message('state', st);
   await tab.click('preparemastery');
   const old = targetRelay(tab),
@@ -558,7 +567,10 @@ test('a Mastery invite pins the actual backend, not the recipient’s saved Fire
   assert.equal(used, 0);
   checkReadOnly(tab);
   tab.click('room');
-  assert.match(tab.$('#modal').innerHTML, /via=mqtt/);
+  assert.match(tab.$('#modal').innerHTML, /data-act="copyroom" disabled/);
+  targetRelay(tab).message('state', masterySaved(80));
+  t.mock.timers.tick(650);
+  assert.match(tab.$('#modal').innerHTML, /via=mqtt.*relay=emqx/);
   assert.ok(!tab.location.searchParams.has('fb'));
   const unavailable = launch({rules: RULES, via: 'shared', claude, storedFb: url});
   await flush();

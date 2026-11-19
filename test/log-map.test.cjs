@@ -148,11 +148,9 @@ for (const make of [saved, masterySaved])
       {kind: 'front', vis: 'all', t: now - 90000, msg: 'Earlier worldwide report.'}
     ];
     for (const identity of [{name: 'Reader', ph: 'fixture'}, {name: '__spectator'}]) {
-      const tab = launch({cached: st, rules: st.ruleset, identity});
-      const [relay, b, c] = tab.sockets;
+      const tab = launch({cached: st, rules: st.ruleset, identity, relay: 'emqx'});
+      const [relay] = tab.sockets;
       relay.subscribe();
-      b.onerror();
-      c.onerror();
       relay.message('state', st);
       tab.click('tab', {k: 'log'});
       const panel = tab.$('#panel'),

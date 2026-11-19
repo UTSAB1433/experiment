@@ -15,7 +15,7 @@ const room = 'sync-test',
 const prefix = 'lands-eot/v1/' + room + '/';
 const RULES = 'mastery-1',
   masterWire = room + ':' + RULES,
-  masterKey = key + ':' + RULES + '|mqtt';
+  masterKey = key + ':' + RULES + '|mqtt|emqx';
 const ceiling = {man: 10000, gold: 10000, steel: 10000, oil: 10000};
 const flush = () => new Promise(resolve => setImmediate(resolve));
 // Advance the virtual clock in sub-lease steps, allowing the subscription warmup,
@@ -65,6 +65,8 @@ function publications(socket) {
 }
 function launch({
   cached,
+  storage = new Map(),
+  url,
   identity,
   fb,
   fetch,
@@ -75,6 +77,7 @@ function launch({
   random,
   rules,
   via,
+  relay,
   storedFb,
   script = app
 } = {}) {
@@ -85,11 +88,10 @@ function launch({
     windowEvents = new Map();
   const wire = rules ? room + ':' + rules : room,
     cacheKey = rules
-      ? 'eot-live-state:' + wire + '|' + (claude ? 'shared' : fb ? 'https://example.test' : 'mqtt')
+      ? 'eot-live-state:' + wire + '|' + (claude ? 'shared' : fb ? 'https://fixture.firebaseio.com' : 'mqtt')
       : key;
-  const storage = new Map(
-    cached === undefined ? [] : [[cacheKey, typeof cached === 'string' ? cached : JSON.stringify(cached)]]
-  );
+  if (cached !== undefined)
+    storage.set(cacheKey, typeof cached === 'string' ? cached : JSON.stringify(cached));
   if (storedFb) storage.set('eot-fb:' + room, storedFb);
   if (identity) {
     storage.set('eot-me', identity.name);
@@ -161,8 +163,10 @@ function launch({
       assert.equal(this.readyState, 1);
       const buf = Buffer.from(bytes);
       this.sent.push(buf);
+      if (buf[0] === 0xc0 && !this.dropPong) this.receive([0xd0, 0]);
       if (!this.noEcho && buf[0] >> 4 === 3) {
         const [msg] = publications({sent: [buf]});
+        if (msg.topic.endsWith('/sync')) this.prefix = msg.topic.slice(0, -4);
         if (msg.topic.endsWith('/lock') || (msg.topic.endsWith('/state') && !this.dropStateEcho))
           setTimeout(() => this.receive(publication(msg.topic, msg.data)), 12);
       }
@@ -184,7 +188,7 @@ function launch({
       this.receive([0x90, 3, 0, 1, 0]);
     }
     message(sub, data) {
-      this.receive(publication('lands-eot/v1/' + wire + '/' + sub, data));
+      this.receive(publication((this.prefix || 'lands-eot/v1/' + wire + '/') + sub, data));
     }
   }
   class Channel {
@@ -202,11 +206,13 @@ function launch({
     }
   }
   const location = new URL(
-    'https://example.test/?room=' +
-      room +
-      (fb ? '&fb=https://example.test' : '') +
-      (rules ? '&rules=' + rules : '') +
-      (via ? '&via=' + via : '')
+    url ??
+      'https://example.test/?room=' +
+        room +
+        (fb ? '&fb=https://fixture.firebaseio.com' : '') +
+        (rules ? '&rules=' + rules : '') +
+        (via ? '&via=' + via : '') +
+        (relay ? '&relay=' + relay : '')
   );
   script.runInNewContext({
     document,
@@ -284,7 +290,7 @@ const enlist = {name: 'New player', team: 'dawn', pw: 'a'.repeat(64)};
 function purchaseRoom(st, team, role = 'chief', cp = 10) {
   const identity = {name: 'Test chief', ph: 'fixture-only'};
   st.players[identity.name] = {team, role, pw: identity.ph, title: 'Test', cd: 0, cp};
-  const tab = launch({cached: st, identity, rules: st.ruleset}),
+  const tab = launch({cached: st, identity, rules: st.ruleset, relay: 'emqx'}),
     panel = tab.$('#panel');
   let html, elements;
   function controls() {
@@ -307,10 +313,8 @@ function purchaseRoom(st, team, role = 'chief', cp = 10) {
   }
   panel.querySelectorAll = tab.document.querySelectorAll = sel =>
     sel === '[data-price]' ? controls().filter(el => 'price' in el.dataset) : [];
-  const [relay, b, c] = tab.sockets;
+  const [relay] = tab.sockets;
   relay.subscribe();
-  b.onerror();
-  c.onerror();
   relay.message('state', st);
   return {tab, controls, relay};
 }

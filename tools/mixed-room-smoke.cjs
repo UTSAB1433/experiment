@@ -11,9 +11,10 @@ const {chromium} = require('playwright-core');
 const binary = require('@sparticuz/chromium');
 const {factory} = require('../test-support/war-room.cjs');
 const html = fs.readFileSync(join(__dirname, '../index.html'));
-if (!process.env.EOT_ONLY_FRONT && !process.env.EOT_CLASSIC_HTML)
+const currentOnly = process.env.EOT_ONLY_FRONT || process.env.EOT_ONLY_REENTRY;
+if (!currentOnly && !process.env.EOT_CLASSIC_HTML)
   throw Error('Set EOT_CLASSIC_HTML to index.html from before troop mastery.');
-const legacy = process.env.EOT_ONLY_FRONT ? null : fs.readFileSync(process.env.EOT_CLASSIC_HTML);
+const legacy = currentOnly ? null : fs.readFileSync(process.env.EOT_CLASSIC_HTML);
 const room = 'mixed-test',
   prefix = 'lands-eot/v1/' + room,
   classic = prefix + '/state',
@@ -140,6 +141,10 @@ const battle = p =>
       assert.deepEqual(errors, []);
       return;
     }
+    await require('./reentry-room-check.cjs')({origin, context, brokers, fixture, publish, writes, live});
+    assert.deepEqual(errors, []);
+    if (process.env.EOT_ONLY_REENTRY) return;
+    const mixedChangesStart = writes.length;
     const a = await context('dawn'),
       b = await context('reich'),
       dawn = await a.newPage(),
@@ -160,11 +165,11 @@ const battle = p =>
     await dawn.keyboard.press('Enter');
     assert.equal(await dawn.locator('.council-roster').count(), 2);
     await dawn.setViewportSize({width: 1440, height: 900});
-    assert.equal(writes.length, 0);
+    assert.equal(writes.length, mixedChangesStart);
     await research(dawn);
     await click(dawn, 'preparemastery');
     await dawn.waitForSelector('[data-act="startmastery"]');
-    assert.equal(writes.length, 0);
+    assert.equal(writes.length, mixedChangesStart);
     await click(dawn, 'startmastery');
     await rev(dawn, 81);
     const continued = latest.get(mastery);
