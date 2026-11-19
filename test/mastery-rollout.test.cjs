@@ -17,6 +17,7 @@ const {
   launch,
   saved,
   masterySaved,
+  legacySaved,
   factory,
   checkReadOnly,
   purchaseRoom
@@ -45,147 +46,6 @@ function targetRelay(tab, i = 0) {
   live.receive(publication(echo.topic, echo.data));
   return live;
 }
-
-test('explicit Classic → Mastery: copy the confirmed snapshot once; invites, locks, writes and caches stay isolated', async t => {
-  mockTime(t);
-  const st = saved(83);
-  st.players.Anish.cp = 3.5;
-  st.players.Sattyaki.cp = 0; // continuing is not a CP reset
-  st.props.push({id: 3, open: true, from: 'reich', type: 'ceasefire', mins: 60});
-  const {tab, controls} = purchaseRoom(st, 'dawn');
-  tab.click('showmastery', {u: 'bd_init'});
-  assert.ok(
-    controls()
-      .filter(b => b.dataset.act === 'mastery')
-      .every(b => b.disabled)
-  );
-  await afterLock(
-    t,
-    tab.game.act('mastery', {unit: 'bd_init', skill: 'atk', rank: 1, quote: {gold: 5, steel: 8}})
-  );
-  checkReadOnly(tab);
-  await tab.click('preparemastery');
-  assert.equal(tab.sockets.length, 4);
-  assert.equal(tab.location.searchParams.get('rules'), RULES);
-  const relay = targetRelay(tab);
-  t.mock.timers.tick(650);
-  assert.match(tab.$('#panel').innerHTML, /Start from revision 83/);
-  assert.equal(tab.game.S, null);
-  checkReadOnly(tab);
-  const a = tab.click('startmastery'),
-    b = tab.click('startmastery');
-  await afterLock(t, Promise.all([a, b]));
-  const writes = retained(tab);
-  assert.equal(writes.length, 1);
-  assert.equal(writes[0].topic, MP + 'state');
-  assert.deepEqual(writes[0].data, {
-    ...structuredClone(st),
-    ruleset: RULES,
-    rev: 84,
-    origin: writes[0].data.origin
-  });
-  assert.equal(JSON.parse(tab.storage.get(key)).rev, 83);
-  assert.equal(JSON.parse(tab.storage.get(masterKey)).rev, 84);
-  assert.notEqual(tab.channels[0].name, tab.channels[1].name);
-  // Even if a Classic packet reaches the socket it cannot affect the mastery room.
-  relay.receive(publication(prefix + 'state', saved(900)));
-  assert.equal(tab.game.S.rev, 84);
-  const quote = controls().find(e => e.dataset.act === 'mastery' && e.dataset.skill === 'atk').dataset;
-  await afterLock(t, tab.click('mastery', quote));
-  assert.equal(tab.game.S.teams.dawn.mastery.bd_init.atk, 1);
-  assert.ok(retained(tab).every(p => p.topic === MP + 'state'));
-  tab.click('room');
-  assert.match(tab.$('#modal').innerHTML, /rules=mastery-1/);
-  await tab.click('classicroom');
-  assert.equal(tab.location.searchParams.has('rules'), false);
-  assert.equal(tab.game.S, null);
-  const original = tab.sockets.at(-1);
-  original.subscribe();
-  original.message('state', st);
-  assert.equal(tab.game.S.rev, 83);
-  assert.equal(tab.game.S.teams.dawn.mastery, undefined);
-});
-
-test('existing target always wins, even a lower revision than the source or a race during initialization', async t => {
-  mockTime(t);
-  for (const timing of ['before', 'during']) {
-    const {tab} = purchaseRoom(saved(150), 'dawn');
-    await tab.click('preparemastery');
-    const relay = targetRelay(tab);
-    t.mock.timers.tick(650);
-    const target = masterySaved(14);
-    target.teams.reich.mastery = {inf: {def: 3}};
-    const start = timing === 'during' ? tab.click('startmastery') : null;
-    relay.receive(publication(MP + 'state', target));
-    await afterLock(t, start || tab.click('startmastery'));
-    assert.deepEqual(structuredClone(tab.game.S), structuredClone(target));
-    checkReadOnly(tab);
-  }
-});
-
-test('cold invites, unsupported rules, unfinished discovery, fallback-only and unreadable target records cannot seed a room', async t => {
-  mockTime(t);
-  const future = launch({identity, rules: 'mastery-99'});
-  assert.equal(future.sockets.length, 0);
-  assert.match(future.$('#panel').innerHTML, /not supported/);
-  const direct = launch({identity, rules: RULES});
-  targetRelay(direct);
-  t.mock.timers.tick(650);
-  assert.match(direct.$('#panel').innerHTML, /No saved mastery/);
-  await direct.click('startmastery');
-  checkReadOnly(direct);
-  for (const scenario of ['no echo', 'fallback', 'bad record']) {
-    const {tab} = purchaseRoom(saved(83), 'dawn');
-    await tab.click('preparemastery');
-    const sockets = tab.sockets.slice(-3);
-    if (scenario === 'no echo') {
-      sockets[0].subscribe();
-      sockets[1].onerror();
-      sockets[2].onerror();
-    } else {
-      const r = targetRelay(tab, scenario === 'fallback' ? 1 : 0);
-      if (scenario === 'bad record') r.receive(publication(MP + 'state', {invalid: true}));
-    }
-    t.mock.timers.tick(650);
-    await afterLock(t, tab.click('startmastery'));
-    checkReadOnly(tab);
-    assert.equal(tab.game.S, null);
-  }
-});
-
-test('stale source, demotion, offline orders and cancelled room switches never publish cached progress', async t => {
-  mockTime(t);
-  const newer = officer(saved(60)),
-    tab = launch({identity, cached: newer, relay: 'emqx'});
-  const [r] = tab.sockets;
-  r.subscribe();
-  r.message('state', officer(saved(4)));
-  await tab.click('preparemastery');
-  assert.equal(tab.location.searchParams.has('rules'), false);
-  assert.equal(tab.game.S, null);
-  assert.equal(JSON.parse(tab.storage.get(key)).rev, 60);
-  checkReadOnly(tab);
-  const demoted = officer(saved(61));
-  demoted.players[identity.name].role = 'soldier';
-  r.message('state', demoted);
-  await tab.click('preparemastery');
-  assert.equal(tab.sockets.length, 1);
-  checkReadOnly(tab);
-  const m = launch({rules: RULES, cached: officer(masterySaved(70)), identity});
-  m.sockets.forEach(s => s.onerror());
-  await m.game.act('mastery', {unit: 'bd_init', skill: 'atk', rank: 1, quote: {gold: 10, steel: 10}});
-  assert.equal(m.game.S, null);
-  checkReadOnly(m);
-  const {tab: cancel} = purchaseRoom(saved(83), 'dawn');
-  await cancel.click('preparemastery');
-  targetRelay(cancel);
-  t.mock.timers.tick(650);
-  const init = cancel.click('startmastery');
-  cancel.$('#roomin').value = 'different';
-  cancel.click('joinroom');
-  await afterLock(t, init);
-  checkReadOnly(cancel);
-});
 
 // A minimal RTDB emulator: null/empty children are pruned and compare-and-set uses an ETag.
 function prune(v) {
@@ -223,42 +83,39 @@ function firebase(st, conflict) {
   return {fetch, classic, target, records, calls};
 }
 for (const conflict of [false, true])
-  test(`Firebase handoff: ${conflict ? 'a 412 keeps the other game' : 'conditional creation preserves pruned v6 data'}; no writes to Classic`, async t => {
+  test(`Firebase v6 upgrade: ${conflict ? '412 keeps a concurrent game' : 'conditional write preserves pruned data'}; Classic untouched`, async t => {
     mockTime(t);
-    const st = officer(saved(54));
-    st.terr.LOR.u = {};
-    const f = firebase(st, conflict);
+    const archive = legacySaved(543);
+    delete archive.ruleset;
+    const f = firebase(archive, conflict),
+      old = officer(legacySaved(54));
+    old.terr.LOR.u = {};
+    f.records.set(f.target, prune(old));
     const tab = launch({identity, fb: true, fetch: f.fetch});
     await flush();
+    assert.equal(tab.game.S.rev, 54);
     assert.deepEqual(structuredClone(tab.game.S.terr.LOR.u), {});
-    assert.deepEqual(structuredClone(tab.game.S.props), []);
-    const before = structuredClone(f.records.get(f.classic));
-    await tab.click('preparemastery');
+    assert.equal(f.records.get(f.target).v, 6);
+    await tab.click('applyupdate');
     await flush();
-    assert.match(tab.$('#panel').innerHTML, /revision 54/);
-    await tab.click('startmastery');
-    const creates = f.calls.filter(c => c.k === f.target && c.method === 'PUT');
-    assert.equal(creates.length, 1);
-    assert.equal(creates[0].headers['if-match'], '"null_etag"');
-    t.mock.timers.tick(2500);
-    await flush();
+    const updates = f.calls.filter(c => c.k === f.target && c.method === 'PUT');
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].headers['if-match'], '"54"');
     assert.equal(tab.game.S.rev, conflict ? 100 : 55);
-    assert.deepEqual(
-      structuredClone(tab.game.S.terr.LOR.u),
-      conflict ? structuredClone(masterySaved(100).terr.LOR.u) : {}
-    );
-    assert.deepEqual(f.records.get(f.classic), before);
-    assert.ok(!f.calls.some(c => c.k === f.classic && c.method === 'PUT'));
-    assert.equal(tab.game.S.v, 6);
-    assert.equal(tab.game.S.ruleset, RULES);
+    assert.equal(tab.game.S.v, 7);
+    assert.deepEqual(f.records.get(f.classic), prune(archive));
+    assert.ok(f.calls.every(c => c.k !== f.classic));
   });
 
 test('shared DB uses separate state AND lock documents; a late higher read or an invalid target is never overwritten', async t => {
   mockTime(t);
   const classic = officer(saved(90)),
-    target = officer(masterySaved(20));
+    target = officer(legacySaved(20));
   const base = 'game-' + masterWire + '/',
-    dbRecords = new Map([['game/state', classic]]),
+    dbRecords = new Map([
+      ['game/state', classic],
+      [base + 'state', target]
+    ]),
     calls = [];
   let duringGet = null;
   const snap = k => ({exists: dbRecords.has(k), data: () => structuredClone(dbRecords.get(k))});
@@ -288,11 +145,12 @@ test('shared DB uses separate state AND lock documents; a late higher read or an
     }
   });
   await flush();
-  await tab.click('preparemastery');
-  duringGet = target;
-  await tab.click('startmastery');
   assert.equal(tab.game.S.rev, 20);
+  duringGet = officer(masterySaved(22));
+  await tab.click('applyupdate');
+  assert.equal(tab.game.S.rev, 22);
   assert.deepEqual(calls, [['lock', base + 'lock']]);
+  assert.equal(dbRecords.get('game/state'), classic);
   const later = officer(masterySaved(24));
   later.teams.dawn.mastery = {bd_init: {atk: 2}};
   dbRecords.set(base + 'state', later);
@@ -302,23 +160,6 @@ test('shared DB uses separate state AND lock documents; a late higher read or an
   dbRecords.set(base + 'state', {v: 7, terr: {}, teams: {}});
   await tab.game.act('noop');
   assert.equal(calls.filter(c => c[0] === 'set').length, 0);
-});
-
-test('an untagged v6 preview with existing ranks can carry them forward but cannot fight or spend under mixed rules', async t => {
-  mockTime(t);
-  const st = saved(50);
-  st.teams.dawn.mastery = {bd_init: {def: 5}};
-  const {tab} = purchaseRoom(st, 'dawn');
-  assert.match(tab.$('#banner').innerHTML, /Orders are paused/);
-  await afterLock(t, tab.game.act('contribute', {kind: 'drill'}));
-  assert.equal(tab.game.S.rev, 50);
-  checkReadOnly(tab);
-  await tab.click('preparemastery');
-  targetRelay(tab);
-  t.mock.timers.tick(650);
-  await afterLock(t, tab.click('startmastery'));
-  assert.equal(tab.game.S.ruleset, RULES);
-  assert.deepEqual(structuredClone(tab.game.S.teams.dawn.mastery), st.teams.dawn.mastery);
 });
 
 test('an open battle picker follows roster changes and closes if a teammate already took the target', t => {
@@ -390,13 +231,13 @@ test('non-JSON, null, scalar and damaged retained saves are not empty; after a v
     JSON.stringify(wrongRank),
     JSON.stringify(badOfficer)
   ]) {
-    const {tab} = purchaseRoom(saved(90), 'dawn');
-    await tab.click('preparemastery');
-    const r = targetRelay(tab);
+    const tab = launch({relay: 'emqx'}),
+      r = tab.sockets[0];
+    r.subscribe();
     r.receive(publication(MP + 'state', payload, true));
     t.mock.timers.tick(650);
-    assert.match(tab.$('#panel').innerHTML, /not supported/);
-    await afterLock(t, tab.click('startmastery'));
+    assert.match(tab.$('#panel').innerHTML, /Incompatible/);
+    await afterLock(t, tab.game.act('enlist', {name: 'invalid'}));
     assert.equal(tab.game.S, null);
     checkReadOnly(tab);
   }
@@ -425,7 +266,7 @@ test('a peer-only mastery snapshot cannot display or create a competing save on 
   assert.equal(tab.game.S, null);
 });
 
-test('changing backend discards a pending handoff; MQTT and Firebase Mastery caches and late callbacks do not mix', async t => {
+test('changing backend never copies a room; MQTT and Firebase Mastery caches and late callbacks do not mix', async t => {
   mockTime(t);
   const st = officer(saved(50)),
     f = firebase(st, false),
@@ -433,15 +274,11 @@ test('changing backend discards a pending handoff; MQTT and Firebase Mastery cac
   const [a] = tab.sockets;
   a.subscribe();
   a.message('state', st);
-  await tab.click('preparemastery');
-  const old = targetRelay(tab),
-    late = old.onmessage;
-  t.mock.timers.tick(650);
+  const late = a.onmessage;
   tab.$('#fbin').value = 'https://fixture.firebaseio.com';
   tab.click('savefb');
   await flush();
-  await tab.click('startmastery');
-  assert.equal(tab.game.S, null);
+  assert.equal(tab.game.S.rev, 1); // explicitly confirmed empty Firebase, never an MQTT copy
   assert.ok(!f.calls.some(c => c.method === 'PUT'));
   assert.doesNotMatch(tab.$('#panel').innerHTML, /Start from revision/);
   const dst = officer(masterySaved(200));
@@ -458,7 +295,7 @@ test('changing backend discards a pending handoff; MQTT and Firebase Mastery cac
   t.mock.timers.tick(650);
   assert.equal(tab.game.S.rev, 71);
   assert.equal(JSON.parse(tab.storage.get(masterKey)).rev, 71);
-  assert.equal(JSON.parse(tab.storage.get(key + ':' + RULES + '|https://fixture.firebaseio.com')).rev, 200);
+  assert.equal(JSON.parse(tab.storage.get(key + '|https://fixture.firebaseio.com')).rev, 200);
   checkReadOnly(tab);
 });
 
@@ -492,6 +329,11 @@ test('backup imports reject old/equal revisions, a different campaign or rules, 
     s => s.created++,
     s => delete s.ruleset,
     s => s.v++,
+    s => (s.v = 6),
+    s => {
+      delete s.players.Anish.cp;
+      s.teams.dawn.cp = 4;
+    },
     s => (s.terr.TRA.u = {bd_arch: -1}),
     s => (s.players.Anish.cp = 21),
     s => (s.rev = Number.MAX_SAFE_INTEGER)
@@ -508,9 +350,7 @@ test('backup imports reject old/equal revisions, a different campaign or rules, 
   const backup = structuredClone(st);
   backup.rev = 120;
   backup.teams.dawn.mastery = {bd_whis: {atk: 2}};
-  for (const pl of Object.values(backup.players)) delete pl.cp; // backup predates personal CP
-  backup.teams.reich.cp = 0;
-  backup.teams.dawn.cp = 3.75;
+  backup.players.Anish.cp = 3.75;
   const race = open(backup);
   await flush();
   st.rev = 111;
@@ -523,7 +363,7 @@ test('backup imports reject old/equal revisions, a different campaign or rules, 
   assert.equal(retained(tab).length, 1);
   assert.equal(tab.game.S.rev, 121);
   assert.equal(tab.game.S.teams.dawn.mastery.bd_whis.atk, 2);
-  for (const pl of Object.values(tab.game.S.players)) assert.equal(pl.cp, backup.teams[pl.team].cp);
+  for (const [name, pl] of Object.entries(tab.game.S.players)) assert.equal(pl.cp, backup.players[name].cp);
   assert.ok(Object.values(tab.game.S.teams).every(side => !('cp' in side)));
   const chief = purchaseRoom(masterySaved(110), 'reich');
   assert.equal(filePicker(chief.tab)(backup), null);

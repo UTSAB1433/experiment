@@ -100,7 +100,7 @@ test('discount is rounded once per order and charged identically on both recruit
       assert.deepEqual(priceOf(b), {man, gold});
       assert.ok(!b.disabled);
       const old = T.res.gold,
-        previous = st.terr.BUC.u.bd_whis;
+        previous = st.terr.BUC.u.bd_whis || 0;
       const op = tab.click('recruit', b.dataset);
       await finishOrder(t, op);
       const expected = structuredClone(st);

@@ -99,65 +99,64 @@ function challengeableCapital(st) {
   st.terr.LEN.u = {arm: 100};
   return st;
 }
-for (const rules of [undefined, RULES])
-  for (const team of ['reich', 'dawn'])
-    test(`MQTT ${rules || 'Classic'}: one ${team} soldier activates training and capital recovery, even with duplicate tabs; no one, no turn`, async t => {
-      mockTime(t);
-      const st = challengeableCapital(campaign(rules)),
-        net = mqtt(st);
-      const spec = net.join({name: '__spectator'}),
-        bad = net.join({...identity(team), ph: 'wrong'});
-      net.deliver('pres', {tab: 'advertised', team, name: 'Fixture ' + team});
-      await elapsed(t, 100000);
-      assert.equal(net.writes.length, 0);
-      const r = net.join(identity(team)),
-        r2 = net.join(identity(team));
-      await elapsed(t, 90000);
-      assert.equal(net.writes.length, 0, 'first confirmed check-in starts the clock');
-      r.tab.click('tab', {k: 'front'});
-      assert.match(r.tab.$('#panel').innerHTML, /Active player online/);
-      await elapsed(t, 5000);
-      assert.deepEqual(
-        net.writes.map(s => s.rev),
-        [81]
-      );
-      const first = copy(net.state);
-      assert.equal(first.front.turn, 1);
-      assert.ok(first.front.drill.USA);
-      assert.ok(
-        Object.values(first.terr.WDC.u).reduce((n, x) => n + x, 0) >
-          Object.values(st.terr.WDC.u).reduce((n, x) => n + x, 0)
-      );
-      assert.equal(first.log[0].kind, 'front');
-      assert.equal(first.log[0].recovery, true);
-      assert.equal(first.terr.MOS.country, 'USSR');
-      const expected = copy(st);
-      r.tab.game.tick(expected, first.t); // only passive CP accrues on the roster
-      assert.deepEqual(first.players, expected.players);
-      assert.equal(first.v, 6);
-      for (const c of [r, r2, spec, bad]) assert.equal(c.tab.game.S.rev, 81);
-      const signals = net.messages.filter(m => m.sub === 'muster');
-      assert.ok(
-        signals.length > 2 && signals.every(m => !m.retain && !JSON.stringify(m.data).includes('-only'))
-      );
-      r.tab.click('spectate');
-      assert.equal(r.tab.storage.get('eot-me'), '__spectator');
-      assert.equal(r.tab.storage.has('eot-ph'), false);
-      r2.online = false; // abrupt loss; no broker echoes from the second tab
-      await elapsed(t, 120000);
-      assert.deepEqual(net.state, first);
-      net.sleepOffset += 86400000; // suspension, not a day's worth of replayed intervals
-      r2.online = true;
-      r2.tab.dispatch('pointerdown');
-      await elapsed(t, 90000);
-      assert.equal(net.writes.length, 1);
-      await elapsed(t, 5000);
-      assert.deepEqual(
-        net.writes.map(s => s.front.turn),
-        [1, 2]
-      );
-      assert.equal(net.state.log[0].tid, undefined, 'no unrelated raids once the capital is home');
-    });
+for (const team of ['reich', 'dawn'])
+  test(`MQTT Mastery: one ${team} soldier activates training and capital recovery, even with duplicate tabs; no one, no turn`, async t => {
+    mockTime(t);
+    const st = challengeableCapital(campaign(RULES)),
+      net = mqtt(st);
+    const spec = net.join({name: '__spectator'}),
+      bad = net.join({...identity(team), ph: 'wrong'});
+    net.deliver('pres', {tab: 'advertised', team, name: 'Fixture ' + team});
+    await elapsed(t, 100000);
+    assert.equal(net.writes.length, 0);
+    const r = net.join(identity(team)),
+      r2 = net.join(identity(team));
+    await elapsed(t, 90000);
+    assert.equal(net.writes.length, 0, 'first confirmed check-in starts the clock');
+    r.tab.click('tab', {k: 'front'});
+    assert.match(r.tab.$('#panel').innerHTML, /Active player online/);
+    await elapsed(t, 5000);
+    assert.deepEqual(
+      net.writes.map(s => s.rev),
+      [81]
+    );
+    const first = copy(net.state);
+    assert.equal(first.front.turn, 1);
+    assert.ok(first.front.drill.USA);
+    assert.ok(
+      Object.values(first.terr.WDC.u).reduce((n, x) => n + x, 0) >
+        Object.values(st.terr.WDC.u).reduce((n, x) => n + x, 0)
+    );
+    assert.equal(first.log[0].kind, 'front');
+    assert.equal(first.log[0].recovery, true);
+    assert.equal(first.terr.MOS.country, 'USSR');
+    const expected = copy(st);
+    r.tab.game.tick(expected, first.t); // only passive CP accrues on the roster
+    assert.deepEqual(first.players, expected.players);
+    assert.equal(first.v, 7);
+    for (const c of [r, r2, spec, bad]) assert.equal(c.tab.game.S.rev, 81);
+    const signals = net.messages.filter(m => m.sub === 'muster');
+    assert.ok(
+      signals.length > 2 && signals.every(m => !m.retain && !JSON.stringify(m.data).includes('-only'))
+    );
+    r.tab.click('spectate');
+    assert.equal(r.tab.storage.get('eot-me'), '__spectator');
+    assert.equal(r.tab.storage.has('eot-ph'), false);
+    r2.online = false; // abrupt loss; no broker echoes from the second tab
+    await elapsed(t, 120000);
+    assert.deepEqual(net.state, first);
+    net.sleepOffset += 86400000; // suspension, not a day's worth of replayed intervals
+    r2.online = true;
+    r2.tab.dispatch('pointerdown');
+    await elapsed(t, 90000);
+    assert.equal(net.writes.length, 1);
+    await elapsed(t, 5000);
+    assert.deepEqual(
+      net.writes.map(s => s.front.turn),
+      [1, 2]
+    );
+    assert.equal(net.state.log[0].tid, undefined, 'no unrelated raids once the capital is home');
+  });
 
 test('paired players can still enable ordinary raids; losing one side keeps the other side’s upkeep clock running', async t => {
   mockTime(t);
@@ -330,8 +329,8 @@ const prune = v => {
 };
 function documents(type, rules, st = campaign(rules)) {
   const fb = type === 'firebase',
-    wire = rules ? room + ':' + rules : room;
-  const dir = fb ? '/eot-rooms/' + encodeURIComponent(wire) + '/' : rules ? 'game-' + wire + '/' : 'game/';
+    wire = room + ':' + RULES;
+  const dir = fb ? '/eot-rooms/' + encodeURIComponent(wire) + '/' : 'game-' + wire + '/';
   const state = dir + 'state' + (fb ? '.json' : ''),
     lock = dir + 'lock' + (fb ? '.json' : '');
   const slots = t => dir + (fb ? 'muster/' + t + '.json' : 'muster-' + t);
@@ -421,53 +420,50 @@ function documents(type, rules, st = campaign(rules)) {
   return Object.assign(net, {join, commit});
 }
 for (const type of ['firebase', 'shared'])
-  for (const rules of [undefined, RULES])
-    test(`${type} ${rules || 'Classic'}: solo Dawn can liberate a capital; duplicate tabs cannot double-write, and ghost mailboxes cannot keep the room running`, async t => {
-      mockTime(t);
-      const f = documents(type, rules, challengeableCapital(campaign(rules)));
-      const d = f.join(identity('dawn')),
-        d2 = f.join(identity('dawn')),
-        spec = f.join({name: '__spectator'});
-      await flush();
-      await elapsed(t, 90000);
-      assert.equal(f.writes.length, 0);
-      await elapsed(t, 10000);
-      assert.deepEqual(
-        f.writes.map(s => s.rev),
-        [81]
-      );
-      assert.equal(f.writes[0].front.turn, 1);
-      assert.equal(f.writes[0].terr.MOS.country, 'USSR');
-      for (const c of [d, d2, spec]) assert.equal(c.tab.game.S.rev, 81);
-      if (type === 'firebase')
-        assert.ok(f.calls.some(([k, m, h]) => k === f.state && m === 'PUT' && h['if-match'] === '"80"'));
-      const r = f.join(identity('reich'));
-      await flush();
-      await elapsed(t, 25000);
-      for (const side of ['reich', 'dawn']) assert.ok(f.records.has(f.slots(side)));
-      assert.deepEqual(
-        [...f.records.keys()].sort(),
-        [f.lock, f.state, f.slots('reich'), f.slots('dawn')].sort()
-      );
-      assert.ok(
-        [...f.records.values()].filter(m => m.token).every(m => !JSON.stringify(m).includes('-only'))
-      );
-      d.tab.click('spectate');
-      d2.tab.click('spectate');
-      r.tab.click('spectate');
-      const frozen = copy(f.records.get(f.state));
-      await elapsed(t, 150000);
-      assert.deepEqual(f.records.get(f.state), frozen);
-      f.join(identity('reich'));
-      await flush();
-      await elapsed(t, 90000);
-      assert.equal(f.writes.length, 1);
-      await elapsed(t, 5000);
-      assert.deepEqual(
-        f.writes.map(s => s.front.turn),
-        [1, 2]
-      );
-    });
+  test(`${type} Mastery: solo Dawn can liberate a capital; duplicate tabs cannot double-write, and ghost mailboxes cannot keep the room running`, async t => {
+    mockTime(t);
+    const f = documents(type, RULES, challengeableCapital(campaign(RULES)));
+    const d = f.join(identity('dawn')),
+      d2 = f.join(identity('dawn')),
+      spec = f.join({name: '__spectator'});
+    await flush();
+    await elapsed(t, 90000);
+    assert.equal(f.writes.length, 0);
+    await elapsed(t, 10000);
+    assert.deepEqual(
+      f.writes.map(s => s.rev),
+      [81]
+    );
+    assert.equal(f.writes[0].front.turn, 1);
+    assert.equal(f.writes[0].terr.MOS.country, 'USSR');
+    for (const c of [d, d2, spec]) assert.equal(c.tab.game.S.rev, 81);
+    if (type === 'firebase')
+      assert.ok(f.calls.some(([k, m, h]) => k === f.state && m === 'PUT' && h['if-match'] === '"80"'));
+    const r = f.join(identity('reich'));
+    await flush();
+    await elapsed(t, 25000);
+    for (const side of ['reich', 'dawn']) assert.ok(f.records.has(f.slots(side)));
+    assert.deepEqual(
+      [...f.records.keys()].sort(),
+      [f.lock, f.state, f.slots('reich'), f.slots('dawn')].sort()
+    );
+    assert.ok([...f.records.values()].filter(m => m.token).every(m => !JSON.stringify(m).includes('-only')));
+    d.tab.click('spectate');
+    d2.tab.click('spectate');
+    r.tab.click('spectate');
+    const frozen = copy(f.records.get(f.state));
+    await elapsed(t, 150000);
+    assert.deepEqual(f.records.get(f.state), frozen);
+    f.join(identity('reich'));
+    await flush();
+    await elapsed(t, 90000);
+    assert.equal(f.writes.length, 1);
+    await elapsed(t, 5000);
+    assert.deepEqual(
+      f.writes.map(s => s.front.turn),
+      [1, 2]
+    );
+  });
 test('Firebase refuses a conflicting front save, adopts the higher revision and never overwrites a post-battle roster change', async t => {
   mockTime(t);
   const f = documents('firebase', RULES),
@@ -755,15 +751,96 @@ test('a paired turn loses raid authority when the opposing post signs out during
   assert.ok(net.state.front.drill.USA && !net.state.log[0].tid);
 });
 
-test('an active solo post cannot mutate a Classic save that already contains Mastery ranks', async t => {
+test('an active solo post cannot silently upgrade an older Mastery save or mutate its ranks', async t => {
   mockTime(t);
   const st = campaign();
+  st.v = 6;
   st.teams.reich.mastery = {inf: {atk: 1}};
   const net = mqtt(st),
     r = net.join(identity('reich'));
   await elapsed(t, 120000);
   r.tab.click('tab', {k: 'front'});
-  assert.match(r.tab.$('#panel').innerHTML, /Orders paused/);
+  assert.match(r.tab.$('#panel').innerHTML, /Update pending/);
   assert.deepEqual(net.state, copy(st));
   assert.ok(net.messages.every(m => m.sub !== 'muster' && m.sub !== 'lock'));
+});
+
+test('a burst of real player orders slows both observers’ World front clock, without slowing CP or replaying missed turns', async t => {
+  mockTime(t);
+  const st = allCapitalsHome(campaign());
+  st.t = now;
+  st.players['Fixture reich'].cp = 0;
+  const net = mqtt(st),
+    a = net.join(identity('reich'));
+  for (let i = 0; i < 4; i++)
+    await finishOrder(t, a.tab.game.act('enlist', {name: 'Test ' + i, team: 'dawn', pw: 'a'.repeat(64)}));
+  const start = Date.now(),
+    after = net.writes.at(-1);
+  assert.equal(after.frontTraffic.count, 4);
+  assert.ok(after.frontTraffic.until > start + 170000);
+  const second = net.join(identity('reich'));
+  second.tab.click('tab', {k: 'front'});
+  await elapsed(t, 100000);
+  assert.equal(net.writes.length, 4);
+  assert.ok(!net.state.front);
+  second.tab.click('tab', {k: 'front'});
+  assert.match(second.tab.$('#panel').innerHTML, /Busy room · slower pace/);
+  assert.match(second.tab.$('#hud').innerHTML, /Your CP<\/span><span class="v">3</);
+  await elapsed(t, 75000);
+  assert.equal(net.writes.length, 4);
+  await elapsed(t, 15000);
+  assert.equal(net.writes.length, 5);
+  assert.equal(net.state.front.turn, 1);
+  await elapsed(t, 90000);
+  assert.equal(net.writes.length, 6);
+  assert.equal(net.state.front.turn, 2);
+  assert.ok(net.writes[5].front.at - net.writes[4].front.at >= 90000);
+});
+
+test('a denied background lock backs off instead of retrying every muster beat; player orders still go through', async t => {
+  mockTime(t);
+  const net = mqtt(allCapitalsHome(campaign())),
+    a = net.join(identity('dawn'));
+  let failNext = true;
+  net.filter = sub => {
+    if (sub === 'lock' && failNext) {
+      failNext = false;
+      return false;
+    }
+    return true;
+  };
+  await elapsed(t, 105000);
+  assert.equal(net.writes.length, 0);
+  assert.equal(net.messages.filter(m => m.sub === 'lock').length, 1);
+  await finishOrder(t, a.tab.game.act('contribute', {kind: 'drill'}));
+  assert.equal(net.writes.length, 1);
+  await elapsed(t, 155000);
+  assert.equal(net.writes.length, 1);
+  assert.equal(net.messages.filter(m => m.sub === 'lock').length, 2);
+  a.tab.dispatch('pointerdown');
+  await elapsed(t, 30000);
+  assert.equal(net.writes.length, 2);
+  assert.equal(net.state.front.turn, 1);
+});
+
+test('a slow but successful locked player order signals backoff to other devices on that same save', async t => {
+  mockTime(t);
+  const f = documents('shared'),
+    a = f.join(identity('reich')),
+    b = f.join(identity('dawn'));
+  await flush();
+  let release;
+  f.onCheck = () =>
+    new Promise(ok => {
+      release = ok;
+    });
+  const action = a.tab.game.act('contribute', {kind: 'drill'});
+  await flush();
+  assert.ok(release);
+  t.mock.timers.tick(1201);
+  release();
+  await action;
+  assert.equal(f.writes.length, 1);
+  assert.equal(f.writes[0].frontTraffic.until, Date.now() + 180000);
+  assert.equal(b.tab.game.S.frontTraffic.count, 1);
 });

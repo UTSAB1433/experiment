@@ -5,6 +5,7 @@ const {
   launch,
   saved,
   masterySaved,
+  legacySaved,
   RULES,
   now,
   mockTime,
@@ -15,7 +16,8 @@ const {
   publications
 } = require('../test-support/war-room.cjs');
 const home = 'https://example.test/game/',
-  classic = home + '?room=friends&via=mqtt&relay=emqx',
+  legacyLink = home + '?room=friends&via=mqtt&relay=emqx&rev=900',
+  primary = home + '?room=friends&rules=mastery-1&via=mqtt&relay=emqx',
   mastery = home + 'index.html?room=friends&rules=' + RULES + '&via=mqtt&relay=hivemq';
 const who = {name: 'Test friend', ph: 'offline-fixture'};
 function board(make, rev, oil, troops) {
@@ -45,11 +47,12 @@ function checkBoard(tab, st) {
   assert.equal(tab.game.S.terr.BUC.u.bd_init, st.terr.BUC.u.bd_init);
 }
 
-test('old 12k-oil Classic and stale Mastery caches never flash; home resumes the confirmed army, and an explicit Classic link still wins', t => {
+test('old 12k-oil Classic and stale Mastery caches never flash; home resumes the confirmed army, and an archived link never plays Classic', t => {
   mockTime(t);
-  const old = board(saved, 800, 12765, 802),
+  const old = board(legacySaved, 800, 12765, 802),
     real = board(masterySaved, 62, 71, 27),
     stale = board(masterySaved, 33, 18000, 903);
+  delete old.ruleset;
   old.t = stale.t = now - 12 * 3600000;
   const storage = new Map([
     ['eot-live-state:friends', JSON.stringify(old)],
@@ -85,17 +88,18 @@ test('old 12k-oil Classic and stale Mastery caches never flash; home resumes the
   checkBoard(returning, newer);
   const ambiguous = launch({storage, url: home + '?room=friends'});
   noBoard(ambiguous);
-  assert.equal(ambiguous.sockets.length, 0);
-  assert.match(text(ambiguous.$('#panel')), /Resume last confirmed Mastery/);
-  ambiguous.click('resumeconfirmed');
+  assert.match(ambiguous.sockets[0].url, /hivemq/);
   accept(ambiguous, newer);
   checkBoard(ambiguous, newer);
-  const back = launch({storage, url: classic, identity: who});
+  const back = launch({storage, url: legacyLink, identity: who});
   noBoard(back);
-  accept(back, old);
-  assert.equal(back.game.S.ruleset, undefined);
-  assert.equal(back.game.S.terr.BUC.u.bd_init, 802);
-  // An older background tab receiving another save cannot steal the home shortcut.
+  assert.match(back.sockets[0].url, /hivemq/);
+  accept(back, newer);
+  checkBoard(back, newer);
+  // Explicit qualified invites still win, without a late tab stealing the home shortcut.
+  const other = launch({storage, url: primary, identity: who});
+  accept(other, newer);
+  checkBoard(other, newer);
   const later = board(masterySaved, 64, 20, 21);
   returning.sockets[0].message('state', later);
   const nextHome = launch({storage, url: home});
@@ -105,15 +109,13 @@ test('old 12k-oil Classic and stale Mastery caches never flash; home resumes the
   assert.equal(storage.get('eot-live-state:friends:' + RULES + '|mqtt'), JSON.stringify(stale));
 });
 
-test('no remembered room or a malformed preference prompts for a campaign; unknown invite addresses fail closed, without touching the last good route', t => {
+test('no remembered room or a malformed preference opens Mastery; unknown invite addresses fail closed, without touching the last good route', t => {
   mockTime(t);
   const storage = new Map([['eot-last-room:v1:/game', '?room=wrong&via=ftp&rev=550']]);
   const empty = launch({storage, url: home});
   noBoard(empty);
-  assert.equal(empty.sockets.length, 0);
-  assert.match(text(empty.$('#panel')), /Which campaign/);
-  empty.$('#home-room').value = 'friends';
-  empty.click('homecampaign', {k: 'mastery'});
+  assert.equal(empty.sockets.length, 3);
+  assert.doesNotMatch(text(empty.$('#panel')), /Which campaign|Classic/);
   const [a, b, c] = empty.sockets;
   b.onerror();
   c.onerror();
@@ -141,13 +143,13 @@ test('no remembered room or a malformed preference prompts for a campaign; unkno
     checkReadOnly(tab);
   }
   const fresh = launch({storage: new Map([['eot-last-room:v1:/other', last]]), url: home});
-  assert.equal(fresh.sockets.length, 0);
+  assert.equal(fresh.sockets.length, 3);
   assert.equal(storage.get('eot-last-room:v1:/game'), last);
   checkReadOnly(empty);
 });
 
 for (const [name, url, make] of [
-  ['Classic', classic, saved],
+  ['Mastery primary', primary, saved],
   ['Mastery', mastery, masterySaved]
 ])
   test(`${name}: an existing invite cannot initialize a missing record, show an earlier revision or use a peer as a write base`, async t => {
@@ -183,7 +185,7 @@ for (const [name, url, make] of [
 
 test('same-revision conflicting troops are quarantined, both snapshots remain exportable, and a newer authoritative revision unblocks orders', async t => {
   mockTime(t);
-  const tab = launch({url: classic, identity: who}),
+  const tab = launch({url: primary, identity: who}),
     consistent = board(saved, 91, 61, 40),
     socket = accept(tab, consistent);
   const fork = structuredClone(consistent);
@@ -192,7 +194,10 @@ test('same-revision conflicting troops are quarantined, both snapshots remain ex
   socket.message('state', fork);
   assert.match(text(tab.$('#banner')), /disagree at revision 91/);
   assert.deepEqual(structuredClone(tab.game.S), structuredClone(consistent));
-  assert.equal(JSON.parse(tab.storage.get('eot-live-state:friends|mqtt|emqx')).terr.BUC.u.bd_init, 40);
+  assert.equal(
+    JSON.parse(tab.storage.get('eot-live-state:friends:mastery-1|mqtt|emqx')).terr.BUC.u.bd_init,
+    40
+  );
   tab.click('room');
   assert.match(tab.$('#modal').innerHTML, /exportconflict/);
   assert.match(tab.$('#modal').innerHTML, /exportstate/);
@@ -231,7 +236,7 @@ test('a half-open socket stops being live; sleep, online and retry always revali
   checkReadOnly(tab);
 });
 
-test('Classic Firebase is pinned and backend-scoped: child puts and patches refetch the full army; out-of-order REST reads never win', async t => {
+test('Firebase is pinned and backend-scoped: child puts and patches refetch the full army; out-of-order REST reads never win', async t => {
   mockTime(t);
   const storage = new Map(),
     unrelated = board(saved, 500, 12099, 888);
@@ -280,12 +285,15 @@ test('Classic Firebase is pinned and backend-scoped: child puts and patches refe
   await flush();
   checkBoard(tab, latest);
   assert.equal(storage.get('eot-live-state:friends'), JSON.stringify(unrelated));
-  assert.equal(JSON.parse(storage.get('eot-live-state:friends|https://fixture.firebaseio.com')).rev, 33);
+  assert.equal(
+    JSON.parse(storage.get('eot-live-state:friends:mastery-1|https://fixture.firebaseio.com')).rev,
+    33
+  );
   assert.ok(requests.every(r => !r.o.method));
   checkReadOnly(tab);
 });
 
-test('partial legacy discovery cannot create a competing Classic save on an empty primary when another broker cannot be checked', async t => {
+test('partial legacy discovery cannot create a competing save on an empty primary when another broker cannot be checked', async t => {
   mockTime(t);
   const tab = launch(),
     [a, b, c] = tab.sockets;
@@ -301,22 +309,20 @@ test('partial legacy discovery cannot create a competing Classic save on an empt
   checkReadOnly(tab);
 });
 
-test('an old code-only bookmark with a pre-update Mastery backup asks which army; choosing a campaign is not a migration', t => {
+test('an old code-only bookmark with a pre-update Mastery backup cannot start a fresh army', t => {
   mockTime(t);
   const key = 'eot-live-state:friends:' + RULES + '|mqtt',
     raw = JSON.stringify(board(masterySaved, 146, 3, 92)),
     storage = new Map([[key, raw]]);
   const tab = launch({url: home + '?room=friends', storage});
   noBoard(tab);
-  assert.equal(tab.sockets.length, 0);
-  assert.match(text(tab.$('#panel')), /older link does not specify/);
-  assert.doesNotMatch(tab.$('#panel').innerHTML, /data-act="resumeconfirmed"/);
-  tab.$('#home-room').value = '!!!';
-  tab.click('homecampaign', {k: 'mastery'});
-  assert.equal(tab.sockets.length, 0);
-  tab.$('#home-room').value = 'friends';
-  tab.click('homecampaign', {k: 'mastery'});
-  assert.equal(tab.location.searchParams.get('rules'), RULES);
+  assert.equal(tab.sockets.length, 3);
+  for (const socket of tab.sockets) {
+    socket.subscribe();
+    socket.message('sync', publications(socket).find(m => m.data.type === 'req').data);
+  }
+  t.mock.timers.tick(650);
+  assert.match(text(tab.$('#banner')), /revision 146/);
   assert.equal(storage.get(key), raw);
   noBoard(tab);
   checkReadOnly(tab);
@@ -324,7 +330,7 @@ test('an old code-only bookmark with a pre-update Mastery backup asks which army
 
 test('confirmed-empty starting numbers disappear on loss; a peer revision still blocks a stale pinned relay after redial', async t => {
   mockTime(t);
-  const tab = launch({url: classic}),
+  const tab = launch({url: primary}),
     socket = tab.sockets[0];
   socket.subscribe();
   socket.message('sync', publications(socket).find(p => p.data.type === 'req').data);
@@ -348,11 +354,11 @@ test('confirmed-empty starting numbers disappear on loss; a peer revision still 
 
 test('a newer on-disk backup written while acquiring the lock prevents a stale write, even before the storage event is delivered', async t => {
   mockTime(t);
-  const tab = launch({url: classic, identity: who}),
+  const tab = launch({url: primary, identity: who}),
     old = board(saved, 45, 70, 7),
     current = board(saved, 46, 6, 14),
     socket = accept(tab, old);
-  const key = 'eot-live-state:friends|mqtt|emqx';
+  const key = 'eot-live-state:friends:mastery-1|mqtt|emqx';
   const order = tab.game.act('contribute', {kind: 'prospect'});
   tab.storage.set(key, JSON.stringify(current));
   await finishOrder(t, order);
@@ -377,7 +383,7 @@ test('a newer on-disk backup written while acquiring the lock prevents a stale w
 
 test('offline followed by a fast reconnect cannot replay an outstanding lock request or project income from the disconnected board', async t => {
   mockTime(t);
-  const tab = launch({url: classic, identity: who}),
+  const tab = launch({url: primary, identity: who}),
     s = board(saved, 78, 30, 11),
     socket = accept(tab, s);
   t.mock.timers.tick(1500);
@@ -398,7 +404,7 @@ test('offline followed by a fast reconnect cannot replay an outstanding lock req
 
 test('Firebase omission of null and empty children at the same revision is not a fork; a changed amount at that revision is', async t => {
   mockTime(t);
-  const key = 'eot-live-state:friends|https://fixture.firebaseio.com',
+  const key = 'eot-live-state:friends:mastery-1|https://fixture.firebaseio.com',
     st = board(saved, 65, 38, 29);
   st.origin = null;
   st.terr.BER.u = {};
@@ -434,7 +440,7 @@ test('Firebase omission of null and empty children at the same revision is not a
   checkReadOnly(tab);
 });
 
-test('an in-flight Firebase PUT that finishes after switching to Mastery cannot repaint, unlock or save into the new room', async t => {
+test('an in-flight Firebase PUT that finishes after switching databases cannot repaint, unlock or save into the new room', async t => {
   mockTime(t);
   const src = board(saved, 80, 12000, 33),
     dst = board(masterySaved, 10, 52, 14),
@@ -444,7 +450,7 @@ test('an in-flight Firebase PUT that finishes after switching to Mastery cannot 
     pendingLock,
     blockMaster = false;
   async function fetch(url, o = {}) {
-    const master = url.includes('%3Amastery-1');
+    const master = url.startsWith('https://second.firebaseio.com/');
     if (url.endsWith('/lock.json')) {
       if (master && blockMaster && !o.method)
         return new Promise(resolve => {
@@ -467,11 +473,8 @@ test('an in-flight Firebase PUT that finishes after switching to Mastery cannot 
   await flush();
   assert.equal(writes.length, 1);
   // An explicit change of source while awaiting the first response, then a fresh invite on the pinned DB.
-  tab.click('clearfb');
-  tab.$('#fbin').value = 'https://fixture.firebaseio.com';
+  tab.$('#fbin').value = 'https://second.firebaseio.com';
   tab.click('savefb');
-  await flush();
-  await tab.click('viewcampaign');
   await flush();
   checkBoard(tab, dst);
   blockMaster = true;
@@ -487,9 +490,11 @@ test('an in-flight Firebase PUT that finishes after switching to Mastery cannot 
   await ordering;
   noBoard(tab);
   assert.equal(writes.length, 1);
-  assert.ok(!writes[0].url.includes('mastery-1'));
+  assert.ok(
+    writes[0].url.startsWith('https://fixture.firebaseio.com/') && writes[0].url.includes('mastery-1')
+  );
   assert.equal(
-    JSON.parse(tab.storage.get('eot-live-state:friends:' + RULES + '|https://fixture.firebaseio.com')).rev,
+    JSON.parse(tab.storage.get('eot-live-state:friends:' + RULES + '|https://second.firebaseio.com')).rev,
     10
   );
 });
@@ -514,7 +519,7 @@ test('shared workspace: reject cache-only and pending local snapshots, keep the 
       });
     }
   };
-  const doc = k => (k === 'game/lock' ? {acquire: async () => ({acquired: true})} : state);
+  const doc = k => (k === 'game-friends:mastery-1/lock' ? {acquire: async () => ({acquired: true})} : state);
   const tab = launch({
     url: home + '?room=friends&via=shared',
     claude: {use: async () => ({doc})},
@@ -535,7 +540,7 @@ test('shared workspace: reject cache-only and pending local snapshots, keep the 
   finish();
   await order;
   checkBoard(tab, st);
-  const key = 'eot-live-state:friends|shared';
+  const key = 'eot-live-state:friends:mastery-1|shared';
   assert.equal(JSON.parse(tab.storage.get(key)).teams.dawn.res.oil, 3);
   tab.dispatchWindow('online');
   listeners[0](snapshot(board(saved, 90, 2929, 827)));
@@ -559,7 +564,7 @@ test('a legacy Classic bookmark resumes its last confirmed Firebase source, not 
   const first = launch({url: home + '?room=friends&via=firebase&fb=' + fb, storage, identity: who, fetch});
   await flush();
   checkBoard(first, st);
-  storage.delete('eot-live-state:friends|' + fb);
+  storage.delete('eot-live-state:friends:mastery-1|' + fb);
   st = board(saved, 14, 17500, 87);
   const back = launch({
     url: home + '?room=friends',
@@ -579,7 +584,9 @@ test('a legacy Classic bookmark resumes its last confirmed Firebase source, not 
   t.mock.timers.tick(2500);
   await flush();
   assert.equal(back.game.S.rev, 100);
-  assert.ok(queries.every(r => !r.o.method && r.url.startsWith(fb + '/eot-rooms/friends/state.json')));
+  assert.ok(
+    queries.every(r => !r.o.method && r.url.startsWith(fb + '/eot-rooms/friends%3Amastery-1/state.json'))
+  );
   checkReadOnly(first);
   checkReadOnly(back);
 });

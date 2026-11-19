@@ -25,7 +25,7 @@ test('no phantom board during discovery; conflicting saved relays require an exp
   t.mock.timers.tick(650);
   assert.match(tab.$('#panel').innerHTML, /Choose the shared copy/);
   assert.equal(tab.game.S, null); checkReadOnly(tab);
-  assert.equal(JSON.parse(tab.storage.get(key)).rev, 12, 'original cache left untouched');
+  assert.equal(JSON.parse(tab.storage.get(key+'|mqtt')).rev, 12, 'original cache left untouched');
   tab.click('pickrelay', {id:'hivemq'});
   const chosen = tab.sockets.at(-1); assert.equal(chosen.url, slower.url);
   chosen.subscribe(); chosen.message('state', saved(40));
@@ -55,7 +55,7 @@ test('a bare websocket, a refused subscription and an unreachable relay fail ove
   t.mock.timers.tick(2000);
   assert.equal(tab.game.S, null, 'no invented offline campaign');
   assert.match(tab.$('#me').innerHTML, /Offline/);
-  assert.equal(tab.storage.get(key), undefined);
+  assert.equal(tab.storage.get(key+'|mqtt'), undefined);
   t.mock.timers.tick(350);
   assert.equal(tab.sockets.length, 6, 'one bounded retry, not one per failure event');
   const [a,b,c] = tab.sockets.slice(3);
@@ -83,7 +83,7 @@ test('broker silence never retains a cache or new game; a late verified snapshot
     tab.sockets[0].message('sync', {type:'req', from:'peer'});
     const noop = tab.game.act('noop'); await finishOrder(t,noop);
     assert.ok(!tab.sockets.flatMap(publications).some(p => p.data.type === 'res'));
-    if(!cached) assert.equal(tab.storage.get(key), undefined);
+    if(!cached) assert.equal(tab.storage.get(key+'|mqtt'), undefined);
     const remote = saved(cached ? 8 : 1); remote.created = now + 10000;
     // Verify the other brokers are empty, rather than silently picking the first reachable one.
     for(const s of tab.sockets.slice(1)) s.message('sync',publications(s).find(p => p.data.type === 'req').data);
@@ -114,22 +114,22 @@ test('manual retry and room changes cancel pending probes, handlers and retry ti
   assert.ok(tab.channels.every(c => c.closed)); assert.equal(tab.game.S, null);
   const s = tab.sockets.slice(6); s.forEach(r => r.subscribe());
   s.slice(1).forEach(r => r.message('sync',publications(r).find(p => p.data.type === 'req').data));
-  s[0].receive(publication('lands-eot/v1/another-test/state', saved(9)));
+  s[0].receive(publication('lands-eot/v1/another-test:mastery-1/state', saved(9)));
   old({data:Uint8Array.from(publication(prefix + 'state', saved(99))).buffer});
   t.mock.timers.tick(5000);
   assert.equal(tab.sockets.length, 9); assert.equal(tab.game.S.rev, 9);
-  assert.equal(JSON.parse(tab.storage.get(key)).rev, 6);
+  assert.equal(JSON.parse(tab.storage.get(key+'|mqtt')).rev, 6);
   checkReadOnly(tab);
 });
 
 test('an older-format live room is not migrated, reset, or replaced with the cache', async t => {
   mockTime(t);
-  const tab = launch({cached:saved(3)}), legacy = saved(90); legacy.v--;
+  const tab = launch({cached:saved(3)}), legacy = saved(90); legacy.v = 5;
   tab.sockets.forEach(s => { s.subscribe(); s.message('state', legacy); });
   assert.match(tab.$('#banner').innerHTML, /Incompatible/);
   await tab.game.act('enlist', enlist);
   assert.equal(tab.game.S, null); checkReadOnly(tab);
-  assert.equal(JSON.parse(tab.storage.get(key)).rev, 3);
+  assert.equal(JSON.parse(tab.storage.get(key+'|mqtt')).rev, 3);
 });
 
 test('Firebase waits for the server; a conflicting conditional write cannot overwrite newer progress', async t => {
@@ -226,7 +226,7 @@ test('recruit buttons track full batch cost and command points, and a newer room
   const st = saved(15); st.t = now;
   const T = st.teams.reich, projected = structuredClone(st); factory.tick(projected, now + 1000);
   T.res.man = 50 - 2.5 * (projected.teams.reich.res.man - T.res.man);
-  const {tab, controls, relay} = purchaseRoom(st, 'reich', 'chief', 0.95);
+  const {tab, controls, relay} = purchaseRoom(st, 'reich', 'chief', 0.97);
   const buy = (n,u = 'inf') => controls().find(el => el.dataset.act === 'recruit' && el.dataset.u === u && +el.dataset.n === n);
   tab.click('sel', {id:'BER'});
   assert.equal(buy(1).disabled, true, 'needs one command point');
@@ -241,7 +241,7 @@ test('recruit buttons track full batch cost and command points, and a newer room
   assert.equal(buy(1).disabled, true); checkReadOnly(tab);
 });
 
-for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} formation research: a v6 room can browse, accrue funds, buy and reload one rank`, async t => {
+for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} formation research: a Mastery room can browse, accrue funds, buy and reload one rank`, async t => {
   mockTime(t);
   const st = masterySaved(42), T = st.teams[team]; st.t = now; T.res.steel = 0;
   const {tab, controls} = purchaseRoom(st, team);
@@ -261,7 +261,7 @@ for(const [team, unit] of [['reich','inf'],['dawn','bd_init']]) test(`${team} fo
   assert.equal(side.res.steel, beforePayment.teams[team].res.steel - Number(price.steel));
   assert.deepEqual(structuredClone(side.mastery), {[unit]:{atk:1}});
   assert.deepEqual(structuredClone(side.tech), structuredClone(T.tech)); assert.ok(result.players.Veteran);
-  assert.equal(result.rev, 43); assert.equal(result.v, 6); const next = button().dataset;
+  assert.equal(result.rev, 43); assert.equal(result.v, 7); const next = button().dataset;
   assert.equal(next.rank, '2'); assert.deepEqual([next.gold, next.steel, next.oil], team === 'reich' ? ['12','18','6'] : ['10','15','5']);
   assert.equal(tab.sockets.flatMap(publications).filter(p => p.retain).length, 1);
   const restored = launch({storage:tab.storage, url:tab.location.href}); assert.equal(restored.game.S, null);

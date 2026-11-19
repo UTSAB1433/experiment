@@ -36,7 +36,8 @@ test('location-bearing orders record their actual map IDs; earlier plain-text co
   for (const [name, p, r] of cases) {
     roll = r ?? 0.5;
     const s = saved(12);
-    s.players.Berlin = {...s.players.DEB};
+    s.players.Berlin = {...s.players.Sattyaki};
+    delete s.players.Sattyaki;
     s.teams.reich.tech.intel = 4;
     s.teams.reich.res.gold = 1000;
     s.terr.RIO.o = s.terr.BSB.o = s.terr.NYC.o = 'reich';
@@ -92,9 +93,18 @@ test('expedition and resistance dispatches link countries to the battle, not a h
     links(g.logMessageHtml({kind: 'battle', tid: 'PAR', msg: 'Paris took Paris from neutral forces.'})),
     [['PAR', 'Paris']]
   );
-  assert.deepEqual(links(g.logMessageHtml({kind: 'win', msg: 'Black Dawn wins the war. Berlin has fallen.'})), [
-    ['BER', 'Berlin']
-  ]);
+  assert.deepEqual(
+    links(g.logMessageHtml({kind: 'win', msg: 'Black Dawn wins the war. Berlin has fallen.'})),
+    [['BER', 'Berlin']]
+  );
+  for (const [id, name] of [
+    ['NIG', 'Nigeria'],
+    ['BUC', 'Bucharest']
+  ])
+    assert.deepEqual(
+      links(g.logMessageHtml({kind: 'win', msg: `The Reich wins the war. ${name} has fallen.`})),
+      [[id, name]]
+    );
   for (const msg of [
     'Rome enlists with The Reich.',
     'Coastal watch rank 5/5.',
@@ -129,87 +139,86 @@ test('a new quiet-turn report snapshots only affected countries, prioritizing re
   assert.ok(g.validSave(s));
 });
 
-for (const make of [saved, masterySaved])
-  test(`${make === saved ? 'Classic' : 'Mastery'} Log: links center and select, keep the log, respect visibility and never write`, t => {
-    mockTime(t);
-    const st = make(50);
-    st.players.Reader = {team: 'dawn', role: 'soldier', pw: 'fixture', cp: 10};
-    st.log = [
-      {kind: 'battle', vis: 'all', t: now, tid: 'MOS', msg: 'Battle at Moscow.'},
-      {kind: 'intel', vis: 'reich', t: now, tid: 'WDC', msg: 'Private report from Washington D.C.'},
-      {kind: 'info', vis: 'dawn', t: now, tid: 'CHA', msg: "Agents report from N'Djamena."},
-      {
-        kind: 'front',
-        vis: 'all',
-        t: now,
-        sites: {JPN: 'OSA', ISL: 'ICE', France: 'PAR', BRA: 'not-a-place'},
-        msg: 'Independent powers held their ground.'
-      },
-      {kind: 'front', vis: 'all', t: now - 90000, msg: 'Earlier worldwide report.'}
-    ];
-    for (const identity of [{name: 'Reader', ph: 'fixture'}, {name: '__spectator'}]) {
-      const tab = launch({cached: st, rules: st.ruleset, identity, relay: 'emqx'});
-      const [relay] = tab.sockets;
-      relay.subscribe();
-      relay.message('state', st);
-      tab.click('tab', {k: 'log'});
-      const panel = tab.$('#panel'),
-        html = panel.innerHTML;
-      assert.doesNotMatch(html, /Private report|Washington D.C./);
-      assert.equal(html.includes('Agents report'), identity.name === 'Reader');
-      assert.match(html, /Countries active this turn \(2\)/);
-      assert.deepEqual(
-        links(html).map(([id]) => id),
-        identity.name === 'Reader' ? ['MOS', 'CHA'] : ['MOS']
-      );
-      const report = html.match(/class="log-sites" data-report="([^"]+)"/)[1];
-      const box = {
-        open: true,
-        matches: () => true,
-        dataset: {report},
-        lastElementChild: {childElementCount: 0}
-      };
-      panel.contains = el => el === box;
-      tab.dispatch('toggle', {target: box});
-      assert.deepEqual(links(box.lastElementChild.innerHTML), [
-        ['ICE', 'Iceland'],
-        ['OSA', 'Japan']
-      ]);
-      let focused = false,
-        scrolled = false,
-        view;
-      tab.$('#map .node[data-id="OSA"]').focus = () => {
-        focused = true;
-      };
-      const svg = tab.$('#map');
-      svg.scrollIntoView = () => {
-        scrolled = true;
-      };
-      svg.setAttribute = (k, v) => {
-        if (k === 'viewBox') view = v.split(' ').map(Number);
-      };
-      tab.click('goto', {id: 'OSA'});
-      assert.ok(focused && scrolled);
-      assert.equal(view[0] + view[2] / 2, g.TD.OSA.x);
-      assert.equal(view[1] + view[3] / 2, g.TD.OSA.y);
-      assert.equal(panel.innerHTML, html);
-      tab.click('goto', {id: 'constructor'}); // no lookup of inherited or unknown IDs
-      assert.equal(view[0] + view[2] / 2, g.TD.OSA.x);
-      assert.deepEqual(copy(tab.game.S), copy(st));
-      // A newer save prepends another dispatch and changes who holds Osaka. Keep
-      // the old list open and its original target; don't use the row index or owner.
-      panel.querySelectorAll = q => (q === 'details.log-sites[open]' ? [box] : []);
-      const next = copy(st);
-      next.rev++;
-      next.terr.OSA.o = 'reich';
-      next.log.unshift({t: now + 90000, vis: 'all', kind: 'front', sites: {JPN: 'TOK'}, msg: 'Another turn.'});
-      relay.message('state', next);
-      assert.match(panel.innerHTML, new RegExp(`data-report="${report}" open`));
-      assert.ok(links(panel.innerHTML).some(([id, label]) => id === 'OSA' && label === 'Japan'));
-      assert.ok(!links(panel.innerHTML).some(([id]) => id === 'TOK'));
-      tab.click('tab', {k: 'orders'});
-      assert.match(panel.innerHTML, /class="tname">Osaka/);
-      assert.deepEqual(copy(tab.game.S), next);
-      checkReadOnly(tab);
-    }
-  });
+test(`Mastery Log: links center and select, keep the log, respect visibility and never write`, t => {
+  mockTime(t);
+  const st = saved(50);
+  st.players.Reader = {team: 'dawn', role: 'soldier', pw: 'fixture', cp: 10};
+  st.log = [
+    {kind: 'battle', vis: 'all', t: now, tid: 'MOS', msg: 'Battle at Moscow.'},
+    {kind: 'intel', vis: 'reich', t: now, tid: 'WDC', msg: 'Private report from Washington D.C.'},
+    {kind: 'info', vis: 'dawn', t: now, tid: 'CHA', msg: "Agents report from N'Djamena."},
+    {
+      kind: 'front',
+      vis: 'all',
+      t: now,
+      sites: {JPN: 'OSA', ISL: 'ICE', France: 'PAR', BRA: 'not-a-place'},
+      msg: 'Independent powers held their ground.'
+    },
+    {kind: 'front', vis: 'all', t: now - 90000, msg: 'Earlier worldwide report.'}
+  ];
+  for (const identity of [{name: 'Reader', ph: 'fixture'}, {name: '__spectator'}]) {
+    const tab = launch({cached: st, rules: st.ruleset, identity, relay: 'emqx'});
+    const [relay] = tab.sockets;
+    relay.subscribe();
+    relay.message('state', st);
+    tab.click('tab', {k: 'log'});
+    const panel = tab.$('#panel'),
+      html = panel.innerHTML;
+    assert.doesNotMatch(html, /Private report|Washington D.C./);
+    assert.equal(html.includes('Agents report'), identity.name === 'Reader');
+    assert.match(html, /Countries active this turn \(2\)/);
+    assert.deepEqual(
+      links(html).map(([id]) => id),
+      identity.name === 'Reader' ? ['MOS', 'CHA'] : ['MOS']
+    );
+    const report = html.match(/class="log-sites" data-report="([^"]+)"/)[1];
+    const box = {
+      open: true,
+      matches: () => true,
+      dataset: {report},
+      lastElementChild: {childElementCount: 0}
+    };
+    panel.contains = el => el === box;
+    tab.dispatch('toggle', {target: box});
+    assert.deepEqual(links(box.lastElementChild.innerHTML), [
+      ['ICE', 'Iceland'],
+      ['OSA', 'Japan']
+    ]);
+    let focused = false,
+      scrolled = false,
+      view;
+    tab.$('#map .node[data-id="OSA"]').focus = () => {
+      focused = true;
+    };
+    const svg = tab.$('#map');
+    svg.scrollIntoView = () => {
+      scrolled = true;
+    };
+    svg.setAttribute = (k, v) => {
+      if (k === 'viewBox') view = v.split(' ').map(Number);
+    };
+    tab.click('goto', {id: 'OSA'});
+    assert.ok(focused && scrolled);
+    assert.equal(view[0] + view[2] / 2, g.TD.OSA.x);
+    assert.equal(view[1] + view[3] / 2, g.TD.OSA.y);
+    assert.equal(panel.innerHTML, html);
+    tab.click('goto', {id: 'constructor'}); // no lookup of inherited or unknown IDs
+    assert.equal(view[0] + view[2] / 2, g.TD.OSA.x);
+    assert.deepEqual(copy(tab.game.S), copy(st));
+    // A newer save prepends another dispatch and changes who holds Osaka. Keep
+    // the old list open and its original target; don't use the row index or owner.
+    panel.querySelectorAll = q => (q === 'details.log-sites[open]' ? [box] : []);
+    const next = copy(st);
+    next.rev++;
+    next.terr.OSA.o = 'reich';
+    next.log.unshift({t: now + 90000, vis: 'all', kind: 'front', sites: {JPN: 'TOK'}, msg: 'Another turn.'});
+    relay.message('state', next);
+    assert.match(panel.innerHTML, new RegExp(`data-report="${report}" open`));
+    assert.ok(links(panel.innerHTML).some(([id, label]) => id === 'OSA' && label === 'Japan'));
+    assert.ok(!links(panel.innerHTML).some(([id]) => id === 'TOK'));
+    tab.click('tab', {k: 'orders'});
+    assert.match(panel.innerHTML, /class="tname">Osaka/);
+    assert.deepEqual(copy(tab.game.S), next);
+    checkReadOnly(tab);
+  }
+});

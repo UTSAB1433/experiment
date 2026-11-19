@@ -11,10 +11,11 @@ const {chromium} = require('playwright-core');
 const binary = require('@sparticuz/chromium');
 const {factory} = require('../test-support/war-room.cjs');
 const html = fs.readFileSync(join(__dirname, '../index.html'));
-const currentOnly = process.env.EOT_ONLY_FRONT || process.env.EOT_ONLY_REENTRY;
-if (!currentOnly && !process.env.EOT_CLASSIC_HTML)
-  throw Error('Set EOT_CLASSIC_HTML to index.html from before troop mastery.');
-const legacy = currentOnly ? null : fs.readFileSync(process.env.EOT_CLASSIC_HTML);
+const currentOnly =
+  process.env.EOT_ONLY_FRONT || process.env.EOT_ONLY_REENTRY || process.env.EOT_ONLY_COMMAND;
+if (!currentOnly && !process.env.EOT_V6_HTML)
+  throw Error('Set EOT_V6_HTML to index.html from the previous v6 Mastery build.');
+const legacy = currentOnly ? null : fs.readFileSync(process.env.EOT_V6_HTML);
 const room = 'mixed-test',
   prefix = 'lands-eot/v1/' + room,
   classic = prefix + '/state',
@@ -25,7 +26,7 @@ const brokers = [aedes(), aedes(), aedes()],
   writes = [];
 const server = http.createServer((req, res) => {
   res.writeHead(200, {'content-type': 'text/html', 'cache-control': 'no-store'});
-  res.end(req.url.startsWith('/classic.html') ? legacy : html);
+  res.end(req.url.startsWith('/previous.html') ? legacy : html);
 });
 server.on('upgrade', (req, socket, head) => {
   const m = req.url.match(/^\/relay\/([012])$/);
@@ -44,6 +45,7 @@ const to = 'LOR',
 function fixture() {
   const st = factory.newGame(Date.now());
   st.rev = 80;
+  st.players.Utkarsh.role = 'soldier'; // make room for the synthetic Reich chief
   for (const team of ['reich', 'dawn']) {
     st.players['Fixture ' + team] = {team, role: 'chief', pw: 'fixture-only', cd: 0, title: 'E2E', cp: 10};
     for (const r in st.teams[team].res) st.teams[team].res[r] = 5000;
@@ -84,11 +86,18 @@ const battle = p =>
 (async () => {
   let browser;
   try {
-    const original = fixture(); // Both builds open a real pre-personal-CP Classic save.
+    const original = structuredClone(fixture());
+    original.v = 6;
+    delete original.players.Dhruv;
     for (const pl of Object.values(original.players)) delete pl.cp;
     original.teams.reich.cp = 8;
     original.teams.dawn.cp = 4.5;
-    await publish(classic, original);
+    original.terr.NIG = {o: 'reich', u: {inf: 21}, st: 'bunker', f: 2};
+    const archive = structuredClone(original);
+    delete archive.ruleset;
+    archive.rev = 610;
+    await publish(classic, archive);
+    await publish(mastery, original);
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const origin = 'http://127.0.0.1:' + server.address().port;
@@ -141,6 +150,12 @@ const battle = p =>
       assert.deepEqual(errors, []);
       return;
     }
+    if (!process.env.EOT_ONLY_REENTRY)
+      await require('./command-room-check.cjs')({origin, context, fixture, publish, latest, writes, live});
+    if (process.env.EOT_ONLY_COMMAND) {
+      assert.deepEqual(errors, []);
+      return;
+    }
     await require('./reentry-room-check.cjs')({origin, context, brokers, fixture, publish, writes, live});
     assert.deepEqual(errors, []);
     if (process.env.EOT_ONLY_REENTRY) return;
@@ -149,11 +164,12 @@ const battle = p =>
       b = await context('reich'),
       dawn = await a.newPage(),
       old = await b.newPage();
-    const url = origin + '/index.html?room=' + room;
-    await Promise.all([dawn.goto(url), old.goto(url.replace('index.html', 'classic.html'))]);
+    const url = origin + '/index.html?room=' + room + '&rules=mastery-1&via=mqtt&relay=emqx';
+    await Promise.all([dawn.goto(url), old.goto(url.replace('index.html', 'previous.html'))]);
     await Promise.all([live(dawn), live(old)]);
-    assert.match(await dawn.locator('#me').textContent(), /Fixture dawn/);
-    assert.match(await old.locator('#me').textContent(), /Fixture reich/);
+    assert.equal(await old.evaluate(() => window.__eot.S.v), 6);
+    assert.equal(await old.evaluate(() => window.__eot.S.terr.NIG.o), 'reich');
+    assert.equal(await dawn.evaluate(() => window.__eot.S.terr.NIG.o), 'dawn');
     // Long officer lists must not flex-shrink the Council view switch out of reach.
     await click(dawn, 'tab', '[data-k="council"]');
     await click(dawn, 'councilview', '[data-k="hierarchy"]');
@@ -167,15 +183,20 @@ const battle = p =>
     await dawn.setViewportSize({width: 1440, height: 900});
     assert.equal(writes.length, mixedChangesStart);
     await research(dawn);
-    await click(dawn, 'preparemastery');
-    await dawn.waitForSelector('[data-act="startmastery"]');
     assert.equal(writes.length, mixedChangesStart);
-    await click(dawn, 'startmastery');
+    await click(dawn, 'applyupdate');
     await rev(dawn, 81);
     const continued = latest.get(mastery);
-    for (const pl of Object.values(continued.players)) assert.equal(pl.cp, original.teams[pl.team].cp);
+    assert.equal(continued.v, 7);
+    assert.equal(continued.terr.NIG.o, 'dawn');
+    assert.equal(continued.terr.BER.u.inf, original.terr.BER.u.inf + 21);
+    assert.equal(continued.players.Dhruv.team, 'reich');
+    for (const [n, p] of Object.entries(continued.players))
+      assert.ok(p.cp >= (n === 'Dhruv' ? 10 : original.teams[p.team].cp));
     assert.ok(Object.values(continued.teams).every(side => !('cp' in side)));
-    assert.match(await dawn.locator('#hud .cp').textContent(), /Your CP\d+\/20/);
+    await old.waitForFunction(() => document.querySelector('#banner').textContent.includes('Incompatible'));
+    await old.evaluate(() => window.__eot.act('contribute', {kind: 'prospect'}));
+    assert.equal(writes.length, mixedChangesStart + 1);
     await click(dawn, 'room');
     const invite = await dawn.locator('#roomlink').inputValue();
     assert.equal(new URL(invite).searchParams.get('rules'), 'mastery-1');
@@ -190,28 +211,14 @@ const battle = p =>
     }
     await rev(updated, 86);
     assert.equal(latest.get(classic).teams.dawn.mastery, undefined);
-    assert.equal(await battle(old), 'reich');
-    await rev(old, 81);
-    await rev(updated, 86);
-    assert.equal(latest.get(mastery).terr[to].o, 'dawn');
     assert.equal(await battle(updated), 'dawn');
     await rev(dawn, 87);
-    assert.equal(latest.get(classic).terr[to].o, 'reich');
-    assert.equal(latest.get(mastery).terr[to].o, 'dawn');
-    // A pre-deployment tab following the new invite still cannot address a mastery topic.
-    const oldWrites = writes.length;
-    await old.goto(invite.replace('index.html', 'classic.html'));
-    await live(old);
-    await rev(old, 81);
-    await click(old, 'room');
-    await old.locator('details summary').click();
-    await click(old, 'reconnect');
-    await live(old);
-    await rev(old, 81);
-    assert.equal(await old.evaluate(() => window.__eot.S.terr.LOR.o), 'reich');
-    assert.equal(writes.length, oldWrites);
+    assert.deepEqual(latest.get(classic), archive);
+    await old.goto(invite.replace('index.html', 'previous.html'));
+    await old.waitForFunction(() => document.querySelector('#panel').textContent.includes('not supported'));
+    assert.equal(await old.evaluate(() => window.__eot.S), null);
     console.log(
-      'PASS: unchanged legacy tab, matching-roll combat, and reconnect via a Mastery invite; Classic cannot touch Mastery.'
+      'PASS: old Mastery tab and reconnect cannot modify a v7 campaign; Nigeria returned without replay, and Classic remains archived.'
     );
     const peer = await a.newPage();
     await peer.goto(invite);
@@ -301,8 +308,8 @@ const battle = p =>
     }
     await click(dawn, 'recruit', '[data-u="bd_whis"][data-n="5"]');
     await rev(dawn, 92);
-    assert.equal(latest.get(mastery).terr.BUC.u.bd_whis, 6);
-    assert.equal(latest.get(classic).rev, 81);
+    assert.equal(latest.get(mastery).terr.BUC.u.bd_whis, (original.terr.BUC.u.bd_whis || 0) + 5);
+    assert.deepEqual(latest.get(classic), archive);
     console.log(
       'PASS: all 73 dossiers, full-page Research axe checks, keyboard map/roster selection, 320–1440px layouts and a discounted mobile batch.'
     );

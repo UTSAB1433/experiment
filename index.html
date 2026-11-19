@@ -494,7 +494,7 @@ const MATRIX = {
 const STANCES = {bunker:'Dig in', elastic:'Elastic', counter:'Counter-attack'};
 const TERRAIN = {plain:1, forest:1.1, mountain:1.3, urban:1.15, desert:1, coast:1};
 const BASE_INC = {man:2, steel:2, oil:1.5, gold:1};
-const CP_START = 10, CPMAX = 20, CP_MS = 20000;
+const CP_START = 10, CPMAX = 20, CP_MS = 30000, LEGACY_CP_MS = 20000;
 const DOM_SHARE = 0.6, DOM_MS = 45*60000;
 const SPY_MS = 30*60000;
 
@@ -511,7 +511,7 @@ POE|Bug River|24.3|51.6|oil|2|1|forest|reich|6|0
 FRN|Normandy|-0.7|49.3|gold|2|1|coast|reich|6|0
 PAR|Paris|2.4|48.8|gold|3|3|urban|reich|8|1
 LOR|Lorraine|6.2|48.6|man|2|1|plain|reich|6|0
-BUC|Bucharest|25.4|44.2|man|3|5|urban|dawn|16|2
+BUC|Bucharest|25.4|44.2|man|3|5|urban|dawn|16|1
 TRA|Transylvania|22.9|46.3|steel|2|1|mountain|dawn|9|0
 PLO|Ploiești Oil|26.9|45.8|oil|4|3|plain|dawn|9|0
 MOL|Chișinău|28.8|47.0|man|1|1|forest|dawn|6|1
@@ -571,7 +571,7 @@ EGY|Cairo|31.2|30.0|gold|3|3|desert|dawn|10|1
 SEN|Dakar|-17.4|14.7|gold|2|1|coast|neutral|5|1
 MAL|Bamako|-8.0|12.6|gold|2|1|desert|neutral|5|1
 GHA|Accra|-0.2|5.6|gold|2|1|coast|neutral|5|1
-NIG|Nigeria|7.5|9.1|oil|3|2|forest|dawn|8|1
+NIG|Nigeria|7.5|9.1|oil|3|2|forest|dawn|8|2
 CHA|N'Djamena|15.0|12.1|gold|2|1|desert|dawn|8|1
 SUD|Khartoum|32.5|15.6|man|2|2|desert|dawn|8|1
 ETH|Addis Ababa|38.7|9.0|man|2|2|mountain|dawn|7|1
@@ -740,11 +740,13 @@ async function pwHash(name, pw){
   const bits = await crypto.subtle.deriveBits({name:'PBKDF2', salt:enc.encode('eot-v1:' + name), iterations:100000, hash:'SHA-256'}, key, 256);
   return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
+// Store this post’s verifier on its roster entry. Never shadow an existing custom Dhruv login.
+const DHRUV_VERIFIER = '65605199d27e220189765c7160edbf0f1bab83f425328748acd3882989eab94e';
 const ROSTER = [
   ['reich','DEB','leader','Führer'],['reich','Sattyaki','chief','Strumabteilung Stabschief'],['reich','Utsab Chatterjee','chief','Schutzstaffel Stabschief'],
   ['reich','Soumalya Majumdar','chief','Wehrmacht Stabschief'],['reich','Utkarsh','chief','Luftwaffe Stabschief (Air Chief)'],['reich','Anasruta Tagore','diplomat','Diplomat'],
   ['reich','Ritam','soldier','Assassin'],['reich','Kaustav','soldier','Soldier'],['reich','Rohan','soldier','Soldier'],['reich','Sounak','soldier','Soldier'],
-  ['reich','Souptik Das','soldier','Soldier'],['reich','Angel Halder','soldier','Soldier'],
+  ['reich','Souptik Das','soldier','Soldier'],['reich','Angel Halder','soldier','Soldier'],['reich','Dhruv','soldier','Soldier'],
   ['dawn','Syamantak Kar','leader','Prophet King'],['dawn','Anish','chief','Commander-in-Chief'],['dawn','Rishit Mullick','diplomat','Envoy'],
   ['dawn','Debjiit','soldier','Soldier'],['dawn','Swapnil Das','soldier','Soldier'],['dawn','Subhadeep','soldier','Soldier'],['dawn','Souvik','soldier','Soldier'],['dawn','Ratnadeep','soldier','Soldier'],['dawn','Titli','soldier','Soldier'],['dawn','Suvodeep','soldier','Soldier']
 ];
@@ -808,7 +810,16 @@ const PERM = {
   diplomat:['dip','spy','honey','sabotage','annex','decap','contribute'],
   soldier:['contribute','spy']
 };
-const can = (role, p) => PERM[role] === '*' || (PERM[role] || []).includes(p);
+const MAX_CHIEFS = 4, MAX_ATTACKERS = 6;
+// Recruitment is the exception to the leader's general command authority.
+const can = (role, p) => PERM[role] === '*' ? p !== 'recruit' : (PERM[role] || []).includes(p);
+const postCan = (pl,p) => !!pl && (can(pl.role,p) || (p === 'attack' && pl.attackSeat === true));
+const usesAttackSeat = pl => pl.role !== 'leader' && postCan(pl,'attack');
+function seats(players,team){
+  const side = Object.values(players).filter(pl => pl.team === team);
+  return {chiefs:side.filter(pl => pl.role === 'chief').length, attackers:side.filter(usesAttackSeat).length, leaders:side.filter(pl => pl.role === 'leader').length};
+}
+const attackSources = (s,team) => PROVINCES.filter(id => s.terr[id].o === team && total(s.terr[id].u) > 0);
 
 /* ============================ ENGINE ============================ */
 function stanceOf(id){ return ['bunker','elastic','counter'][(id.charCodeAt(0) + id.charCodeAt(2)) % 3]; }
@@ -842,13 +853,14 @@ function startUnits(t){
   Object.keys(u).forEach(k => { if(!u[k]) delete u[k]; });
   return u;
 }
-const GAME_V = 6;
+const LEGACY_V = 6, GAME_V = 7;
 function newGame(now){
-  const s = {v:GAME_V, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
+  const s = {v:GAME_V, ruleset:MASTERY_RULES, rev:1, t:now, created:now, terr:{}, teams:{}, players:{}, props:[], pact:null, treach:{}, intel:{reich:{}, dawn:{}}, log:[], win:null, dom:null, pid:1};
   TIDS.forEach(i => { const t = TD[i]; s.terr[i] = {o:t.owner0, u:startUnits(t), f:t.fcap ? 1 : 0, st:t.owner0 === 'neutral' ? stanceOf(i) : 'bunker'}; });
   s.teams.reich = {res:{man:80, steel:80, oil:60, gold:50}, tech:{inf:1, art:0, arm:1, air:1, nav:0, intel:0, ind:0}};
   s.teams.dawn = {res:{man:80, steel:80, oil:60, gold:50}, tech:{inf:1, art:1, arm:0, air:0, nav:0, intel:1, ind:0}};
   ROSTER.forEach(([team, name, role, title]) => s.players[name] = {team, role, title, cd:0, cp:CP_START});
+  s.players.Dhruv.pw = DHRUV_VERIFIER;
   log(s, now, 'all', 'The war begins across the globe. Use the region buttons (World, Americas, Europe, Africa, Mid East, Asia, Oceania) or the nation directory to reach every front.', 'sys');
   return s;
 }
@@ -954,14 +966,15 @@ function income(s, team){
   return inc;
 }
 // Balances are as of s.t. A legacy v6 post inherits its faction's last balance
-// once. Only settle on a working copy (order, import, continuation or HUD).
+// once. Only settle on a working copy (order, import, upgrade or HUD).
 function settleCommand(s, elapsedMs = 0){
+  const ms = s.v === LEGACY_V ? LEGACY_CP_MS : CP_MS;
   for(const pl of Object.values(s.players)){
     const balance = pl.cp ?? Math.max(0, Math.min(CPMAX, s.teams[pl.team].cp));
     // Count whole refill milliseconds, tolerating only floating-point noise.
     // Copying a snapshot at its own timestamp preserves even legacy fractions.
-    const bankedMs = Math.floor(balance * CP_MS + 1e-9);
-    pl.cp = elapsedMs ? Math.min(CPMAX, (bankedMs + elapsedMs) / CP_MS) : balance;
+    const bankedMs = Math.floor(balance * ms + 1e-9);
+    pl.cp = elapsedMs ? Math.min(CPMAX, (bankedMs + elapsedMs) / ms) : balance;
   }
   for(const team of Object.values(s.teams)) delete team.cp;
 }
@@ -982,7 +995,7 @@ function checkWin(s, now){
   if(s.win) return;
   const end = (team, why) => { s.win = {team, why, t:now}; log(s, now, 'all', `${TEAMS[team].name} wins the war. ${why}`, 'win'); };
   if(s.terr.BER.o === 'dawn') return end('dawn', 'Berlin has fallen.');
-  if(s.terr.BUC.o === 'reich') return end('reich', 'Bucharest has fallen.');
+  if(s.terr.NIG.o === 'reich') return end('reich', 'Nigeria has fallen.');
   for(const t of ['reich','dawn']) if(countOf(s, t) === 0) return end(OTHER(t), `${TEAMS[t].name} has no land left.`);
   let hit = null; for(const t of ['reich','dawn']) if(vpOf(s, t) / TOTAL_VP >= DOM_SHARE) hit = t;
   if(hit){ if(!s.dom || s.dom.team !== hit) s.dom = {team:hit, since:now}; else if(now - s.dom.since >= DOM_MS) end(hit, 'Domination: they held most of the world long enough.'); }
@@ -1131,6 +1144,8 @@ A.contribute = (s, c, p) => {
   return {ok:`${c.name} ${k[2]}: +${k[1]} ${RES[k[0]]}.`};
 };
 A.recruit = (s, c, p) => {
+  const issuer = s.players[c.name];
+  if(issuer?.team !== c.team || !postCan(issuer,'recruit')) return {err:'Only a staff chief may recruit.'};
   const t = s.terr[p.tid], U = UNITS[p.unit], n = p.n;
   if(!Number.isInteger(n) || n < 1 || n > 20) return {err:'Choose a valid recruitment quantity.'};
   if(!t || t.o !== c.team) return {err:'You can only recruit in your own territory.'};
@@ -1196,11 +1211,14 @@ A.move = (s, c, p) => {
   log(s, c.now, c.team, `${total(p.grp)} units moved ${T_(p.from)} to ${T_(p.to)}.`, 'info', {tid:p.to,from:p.from}); return {ok:`Moved ${total(p.grp)} units to ${T_(p.to)}.`};
 };
 A.attack = (s, c, p) => {
+  const issuer = s.players[c.name];
+  if(issuer?.team !== c.team || !postCan(issuer,'attack')) return {err:'This post has no attack seat.'};
+  if(!Object.hasOwn(TD,p.from) || !Object.hasOwn(TD,p.to)) return {err:'Choose a map province.'};
   const a = s.terr[p.from], d = s.terr[p.to]; if(!a || !d || a.o !== c.team) return {err:'Attack from one of your territories.'};
-  if(d.o === c.team) return {err:'That territory is already yours.'}; const ln = adjInfo(p.from, p.to); if(!ln) return {err:'Those territories are not connected.'};
+  if(d.o === c.team) return {err:'That territory is already yours.'};
   if(d.o === OTHER(c.team) && ceasefire(s, c.now)) return {err:'A ceasefire is in force. Break it from the Diplomacy tab first.'};
-  if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to send.'}; if(ln.sea && !seaOK(s, c.team, p.grp)) return {err:'Crossing water needs a fleet (Naval 2) or an air group.'};
-  const tc = TACT[p.tactic]; if(!tc || !hasTech(s, c.team, tc.req)) return {err:'That tactic is not researched.'};
+  if(!validGroup(s, p.from, p.grp)) return {err:'Pick units to send.'};
+  const tc = Object.hasOwn(TACT,p.tactic) && TACT[p.tactic]; if(!tc || !hasTech(s, c.team, tc.req)) return {err:'That tactic is not researched.'};
   if(tc.units.length && !tc.units.some(u => p.grp[u] > 0)) return {err:'That tactic needs matching units in the group.'};
   const oil = fuel(s, c.team, p.grp); if(s.teams[c.team].res.oil < oil) return {err:`Not enough oil. This force burns ${oil}.`};
   if(!spendCP(s, c, 2)) return {err:'An attack costs 2 command points.'};
@@ -1331,9 +1349,23 @@ A.breakpact = (s, c) => {
   log(s, c.now, 'all', `${TEAMS[c.team].name} tears up the ceasefire. Its troops fight at -10% for ${Math.round(30 * bMult)} minutes.`, 'dip'); return {ok:'Ceasefire broken.'};
 };
 A.setrole = (s, c, p) => {
-  const pl = s.players[p.name]; if(!pl || pl.team !== c.team) return {err:'Not on your side.'}; if(ROLES[p.role]) pl.role = p.role; if(typeof p.title === 'string') pl.title = p.title.slice(0, 40);
-  if(p.name === c.name && pl.role !== 'leader' && !Object.values(s.players).some(x => x.team === c.team && x.role === 'leader')) pl.role = 'leader';
-  return {ok:'Updated.'};
+  const pl = s.players[p.name], leader = s.players[c.name];
+  if(!pl || pl.team !== c.team || leader?.team !== c.team || leader.role !== 'leader') return {err:'Only the faction leader can appoint their posts.'};
+  const next = {...pl};
+  if(p.role !== undefined){
+    if(!Object.hasOwn(ROLES,p.role) || (p.role === 'leader') !== (pl.role === 'leader')) return {err:'The leader slot cannot be reassigned here.'};
+    next.role = p.role;
+    if(next.role === 'chief' || next.role === 'leader') delete next.attackSeat;
+  }
+  if(p.attackSeat !== undefined){
+    if(typeof p.attackSeat !== 'boolean' || ['chief','leader'].includes(next.role)) return {err:'Leaders and chiefs already have attack access.'};
+    if(p.attackSeat) next.attackSeat = true; else delete next.attackSeat;
+  }
+  const counts = seats({...s.players,[p.name]:next},c.team);
+  if(counts.chiefs > MAX_CHIEFS) return {err:'Four staff chiefs are already appointed.'};
+  if(counts.attackers > MAX_ATTACKERS) return {err:'Release an attack seat first (six plus the leader).'};
+  if(typeof p.title === 'string') next.title = p.title.slice(0,40);
+  delete pl.attackSeat; Object.assign(pl,next); return {ok:'Post updated.'};
 };
 A.remove = (s, c, p) => { const pl = s.players[p.name]; if(!pl || pl.team !== c.team || p.name === c.name) return {err:'Not possible.'}; delete s.players[p.name]; return {ok:'Removed.'}; };
 A.enlist = (s, c, p) => { const n = String(p.name || '').trim().slice(0, 30); if(!n) return {err:'Enter a name.'}; if(s.players[n]) return {err:'That name is taken.'}; if(!TEAMS[p.team]) return {err:'Pick a side.'}; if(!p.pw || String(p.pw).length !== 64) return {err:'Choose a password.'}; s.players[n] = {team:p.team, role:'soldier', title:'Recruit', cd:0, pw:p.pw, cp:CP_START}; log(s, c.now, 'all', `${n} enlists with ${TEAMS[p.team].name}.`); return {ok:'Welcome.'}; };
@@ -1341,16 +1373,62 @@ A.reset = (s, c, p) => {
   if(p.rev !== s.rev || p.origin !== s.origin || p.created !== s.created) return {err:'The room changed. Review the latest map before resetting.'};
   const players = s.players, fresh = newGame(c.now);
   for(const pl of Object.values(players)) pl.cp = CP_START;
-  if(s.ruleset) fresh.ruleset = s.ruleset;
   Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players});
   return {ok:'The map is reset.', reset:true};
 };
 A.noop = () => ({});
+A.applyupdate = () => ({ok:'Campaign updated. Share the live Room link with your faction.'});
 
-/* Independent countries use ordinary v6 garrisons, never a third player team.
-   An occupied province keeps o='neutral' and carries the name of its independent army.
-   Old clients therefore see exactly the troops, terrain and forts used in combat. */
-const FRONT_MS = 90000, FRONT_MAX = 5, DRILLS_PER_RANK = 4;
+// Called only on a confirmed v6 Mastery snapshot or an explicitly imported backup.
+// Return a new object. A failed transaction, preview, import or second read must never
+// mutate the backup, replay the territorial handover, or replace a removed login.
+function upgradeV6(old,now){
+  if(old.v !== LEGACY_V || old.ruleset !== MASTERY_RULES) throw Error('Expected a v6 Mastery save.');
+  const s = clone(old);
+  if(!s.win) tick(s,now); else settleCommand(s); // settle pre-cutover CP and income at their original rate / owners
+  const n = s.terr.NIG;
+  if(n.o !== 'dawn'){
+    const owner = n.o, country = n.country || HOME.NIG;
+    const dest = (owner === 'reich' ? ['BER',...PROVINCES] : PROVINCES).find(id => id !== 'NIG' && s.terr[id].o === owner &&
+      (owner !== 'neutral' || (country && countryAt(s,id) === country)) &&
+      Object.entries(n.u).every(([u,count]) => Number.isSafeInteger((s.terr[id].u[u] || 0) + count)));
+    if(dest) for(const [u,count] of Object.entries(n.u)) s.terr[dest].u[u] = (s.terr[dest].u[u] || 0) + count;
+    else if(total(n.u)) s.hqReserve = {owner,...(country ? {country} : {}),units:n.u}; // no friendly destination: retain the displaced force in the save
+    n.u = {}; n.o = 'dawn'; delete n.country;
+    log(s,now,'all',`Nigeria returned to Black Dawn as its headquarters.${dest ? ' The previous garrison withdrew to '+T_(dest)+'.' : ' The previous garrison was placed in reserve.'}`,'sys',{tid:'NIG'});
+  }
+  // Preserve identities, titles and CP. In an over-cap legacy roster keep the original
+  // office holders first, then stable account-key order (also deterministic after an RTDB read).
+  for(const team of ['reich','dawn']){
+    for(const [role,limit] of [['leader',1],['chief',MAX_CHIEFS]]){
+      const priority = ROSTER.filter(r => r[0] === team && r[2] === role).map(r => r[1]);
+      const names = Object.keys(s.players).filter(k => s.players[k].team === team && s.players[k].role === role).sort();
+      const ordered = [...priority.filter(k => names.includes(k)),...names.filter(k => !priority.includes(k))];
+      for(const name of ordered.slice(limit)) s.players[name].role = 'soldier';
+    }
+  }
+  for(const p of Object.values(s.players)) delete p.attackSeat; // not a v6 permission
+  let post = 'Dhruv', serial = 1;
+  while(Object.hasOwn(s.players,post) && !(s.players[post].team === 'reich' && s.players[post].pw === DHRUV_VERIFIER)){
+    post = serial === 1 ? 'Dhruv (Reich)' : `Dhruv (Reich ${serial})`; serial++;
+  }
+  if(!Object.hasOwn(s.players,post)) s.players[post] = {team:'reich',role:'soldier',title:'Soldier',cd:0,cp:CP_START,pw:DHRUV_VERIFIER};
+  s.v = GAME_V; s.ruleset = MASTERY_RULES; return s;
+}
+
+/* Independent armies use ordinary garrisons, never a third player team.
+   An occupied province keeps o='neutral' and carries the name of its independent army. */
+// Player traffic is recorded with the order already being committed (no extra writes).
+// A burst or a slow lock/read doubles the interval for everyone; quiet rooms recover.
+const FRONT_MS = 90000, FRONT_BUSY_MS = 180000, FRONT_MAX = 5, DRILLS_PER_RANK = 4;
+const BURST_MS = 15000, BURST_ORDERS = 4, SLOW_ORDER_MS = 1200, SLOW_TURN_MS = 150;
+function recordFrontTraffic(s,now,slow){
+  const prev = s.frontTraffic, sameWindow = prev && now >= prev.at && now - prev.at < BURST_MS;
+  const at = sameWindow ? prev.at : now, count = sameWindow ? Math.min(BURST_ORDERS,prev.count+1) : 1;
+  const until = count >= BURST_ORDERS || slow ? now + FRONT_BUSY_MS : Math.min(now + FRONT_BUSY_MS,Math.max(now,prev?.until || 0));
+  s.frontTraffic = {at,count,until};
+}
+const frontInterval = (s,now) => s?.frontTraffic?.until > now ? FRONT_BUSY_MS : FRONT_MS;
 const COUNTRIES = {}, HOME = {};
 for(const line of `USSR|USSR|MOS LEN MIN KYV CRI DON VOL CAU TKM KAZ OMS NOV IRK VLA|arm
 USA|USA|WDC NYC USN TEX SFO LAX ALA HNL|air
@@ -1444,7 +1522,7 @@ function independentHoldings(s){
 const capitalOf = k => COUNTRIES[k].homes[0];
 const resistanceCap = rank => 4 + 2 * rank;
 const frontTurn = s => s?.front?.turn || 0;
-const frontDue = (s,now) => Number.isSafeInteger(now) && now >= 0 && !s.win && (!s.front || now - s.front.at >= FRONT_MS);
+const frontDue = (s,now) => Number.isSafeInteger(now) && now >= 0 && !s.win && (!s.front || now - s.front.at >= frontInterval(s,now));
 function reinforce(s,id,k){
   const g = s.terr[id].u, d = TD[id], special = COUNTRIES[k].specialty, rank = frontRank(s,k);
   // Fill actual missing formations in small installments; no healing to full, no
@@ -1602,38 +1680,39 @@ const query = new URLSearchParams(location.search), requested = readAddress(quer
 const bare = !addressKeys.some(k => query.has(k));
 const lastQuery = new URLSearchParams(readPref(LAST_ROOM) || ''), previous = readAddress(lastQuery);
 const knownRoute = lastQuery.has('room') && previous.valid && previous.rev > 0 && previous.via && (previous.via !== 'mqtt' || previous.relay);
-// A complete invite overrides device preferences. Fill missing parts of a legacy
-// bookmark only from a matching room/rules/source, never from another campaign.
-const matching = knownRoute && requested.valid && requested.room === previous.room && requested.rules === previous.rules &&
-  (!requested.via || requested.via === previous.via) && (!query.has('fb') || requested.fb === previous.fb) &&
-  (!requested.relay || requested.relay === previous.relay);
-const resumed = bare && knownRoute;
-const address = resumed ? previous : matching ? {...previous,rev:Math.max(previous.rev,requested.rev)} : requested;
-const oldCodeOnly = query.has('room') && !addressKeys.some(k => k !== 'room' && query.has(k));
-const lastMastery = knownRoute && previous.rules && previous.room === requested.room;
-const ambiguousBookmark = oldCodeOnly && (lastMastery || ((!knownRoute || previous.room !== requested.room) && ['mqtt','shared',requested.fb].some(b =>
-  b && readPref('eot-live-state:'+requested.room+':'+MASTERY_RULES+'|'+b))));
-let landing = (bare && !resumed) || ambiguousBookmark, badAddress = !address.valid;
-let ROOM = address.room, rules = address.rules, via = address.via, FB_URL = address.fb, relayPin = address.relay, minRev = address.rev;
-// The document/topic names are the original v6 names. Never move or combine campaigns.
-const wireRoom = () => rules ? ROOM + ':' + rules : ROOM;
-const inMastery = () => rules === MASTERY_RULES;
-let seed = null, backend = '', sawSavedRoom = false, relayChoices = [], waitReason = '';
-let cacheKey = '', backup = null, legacyBackup = null, conflictCopy = null, homeReceipt = null;
+// Play only in the existing Mastery namespace. An old untagged URL identifies a
+// room/backend, NOT a Mastery revision or MQTT relay. Rediscover that room's
+// Mastery copy unless this device already has a matching, confirmed Mastery route.
+const chosen = bare && knownRoute ? previous : requested;
+const matching = knownRoute && previous.rules === MASTERY_RULES && previous.room === chosen.room &&
+  (!chosen.via || previous.via === chosen.via) && (!(bare && knownRoute ? lastQuery : query).has('fb') || previous.fb === chosen.fb) &&
+  (!chosen.rules || !chosen.relay || previous.relay === chosen.relay);
+const address = matching ? {...previous,rev:Math.max(previous.rev,chosen.rules ? chosen.rev : 0)} :
+  chosen.rules ? chosen : {...chosen,relay:'',rev:0};
+let badAddress = !chosen.valid, ROOM = address.room, via = address.via, FB_URL = address.fb, relayPin = address.relay, minRev = address.rev;
+const wireRoom = () => ROOM + ':' + MASTERY_RULES;
+let backend = '', sawSavedRoom = false, relayChoices = [], waitReason = '';
+// Keep the exact server payload for backups, equality and revision gates. S can be
+// a read-only preview of the v7 conversion until the first authorized player order.
+let confirmed = null, cutoverAt = 0;
+let cacheKey = '', backup = null, legacyBackup = null, preUpdateBackup = null, conflictCopy = null, homeReceipt = null;
 let authorityEpoch = 0, startingMap = false;
 function pauseRoom(status){
   authorityEpoch++; frontWatch?.reset(); mode = status;
+  if(confirmed?.v === LEGACY_V && S && S.t !== confirmed.t) S = upgradeV6(confirmed,confirmed.t); // offline: as saved, not accrued income
   if(startingMap){ S = null; startingMap = false; } // a starting map is not a last-confirmed save
 }
 function scopedKey(){ return wireRoom()+'|'+backend+(backend === 'mqtt' ? '|'+relayPin : ''); }
 const relayPref = () => 'eot-relay:v1:'+wireRoom();
 function useCacheScope(){
   const key = backend && (backend !== 'mqtt' || relayPin) ? scopedKey() : '';
-  if(key !== cacheKey) backup = null;
+  if(key !== cacheKey){
+    backup = null; preUpdateBackup = null;
+    try{ const old = key && JSON.parse(readPref('eot-v6-backup:'+key)); if(old?.v === LEGACY_V && validSave(old) && matchesRules(old)) preUpdateBackup = old; }catch(_){}
+  }
   cacheKey = key; refreshBackup();
-  // Pre-fix Classic caches have no backend; pre-fix MQTT Mastery caches have no relay.
-  // Preserve the original bytes for recovery. Never present or publish them as a live read.
-  legacyBackup = !rules ? loadLiveCache(ROOM) : backend === 'mqtt' ? loadLiveCache(wireRoom()+'|mqtt') : null;
+  // A pre-relay Mastery backup only supplies a floor; never read or update a Classic cache.
+  legacyBackup = backend === 'mqtt' ? loadLiveCache(wireRoom()+'|mqtt') : null;
 }
 // Firebase can omit null/empty children and return keys in a different order.
 // Normalize only for comparison, never for persistence or to invent missing data.
@@ -1650,10 +1729,11 @@ function sameSave(a,b,pruned = false){
 }
 function requiredRevision(st){
   return Math.max(minRev, backup?.rev || 0, db?.seenRevision || 0,
-    legacyBackup && (!st || legacyBackup.created === st.created) ? legacyBackup.rev : 0);
+    legacyBackup && (!st || legacyBackup.created === st.created) ? legacyBackup.rev : 0,
+    preUpdateBackup && (!st || preUpdateBackup.created === st.created) ? preUpdateBackup.rev + 1 : 0);
 }
 function canStartEmpty(){ return db?.canInitialize === true && !sawSavedRoom && !requiredRevision(null); }
-function liveBoard(){ return mode === 'live' && !!S && (db?.hasLiveState === true || (!rules && canStartEmpty())); }
+function liveBoard(){ return mode === 'live' && !!S && (db?.hasLiveState === true || (startingMap && canStartEmpty())); }
 function refreshBackup(){
   const disk = cacheKey && loadLiveCache(cacheKey);
   if(disk && (!backup || disk.rev >= backup.rev)) backup = disk;
@@ -1662,19 +1742,22 @@ const divergent = (a,b) => !!a && b?.rev === a.rev && !sameSave(a,b,via === 'fir
 function rememberBoard(st){
   if(!cacheKey) return;
   // The receive gate compared the latest on-disk backup. Never replace an equal revision.
+  if(st.v === GAME_V && backup?.v === LEGACY_V && st.created === backup.created && !readPref('eot-v6-backup:'+cacheKey)){
+    preUpdateBackup = backup; putPref('eot-v6-backup:'+cacheKey,JSON.stringify(backup));
+  }
   if(!backup || st.rev > backup.rev) putPref('eot-live-state:'+cacheKey,JSON.stringify(st));
   backup = st; minRev = Math.max(minRev,st.rev);
   const u = new URL(roomUrl());
   // A background tab may update its own bookmark, not take back another room's home shortcut.
   const pref = readPref(LAST_ROOM), home = pref && readAddress(new URLSearchParams(pref));
-  const sameRoom = home?.valid && home.room === ROOM && home.rules === rules && home.via === via && home.fb === FB_URL && home.relay === relayPin;
+  const sameRoom = home?.valid && home.room === ROOM && home.rules === MASTERY_RULES && home.via === via && home.fb === FB_URL && home.relay === relayPin;
   if((pref === homeReceipt || sameRoom) && (!sameRoom || home.rev <= st.rev) && pref !== u.search){
     homeReceipt = u.search; putPref(LAST_ROOM,homeReceipt);
     if(backend === 'mqtt') putPref(relayPref(),relayPin);
   }
   if(location.href !== u.href) try{ history.replaceState(null,'',u.href); }catch(_){}
 }
-function displayed(store,st){ return store === db && mode === 'live' && sameSave(S,st,via === 'firebase'); }
+function displayed(store,st){ return store === db && mode === 'live' && sameSave(confirmed,st,via === 'firebase'); }
 const NET = { status:'connecting', transport:'Starting…', peers:new Map(), reconnect:null, announce:()=>{}, destroy:null };
 const onlineList = () => {
   const now = Date.now(), out = [{tab:TAB, name:authed() ? (me.name === '__spectator' ? 'Spectator' : me.name) : 'Joining…', team:myTeam(), afk:!!myTeam() && isAway(), self:true}];
@@ -1704,10 +1787,20 @@ function validFront(f){
     Object.entries(f.drill).every(([k,n]) => countryId(k) && levelIn(n,drillCap(k))) && (f.resistance == null || (record(f.resistance) &&
       Object.entries(f.resistance).every(([k,n]) => countryId(k) && levelIn(n,resistanceCap(frontRank({front:f},k)))))));
 }
+function validTraffic(f){
+  return f == null || (record(f) && Number.isSafeInteger(f.at) && Number.isSafeInteger(f.until) && f.at >= 0 &&
+    f.until >= f.at && f.until-f.at <= BURST_MS+FRONT_BUSY_MS && levelIn(f.count,BURST_ORDERS) && f.count > 0);
+}
+function validAppointments(players){
+  return Object.values(players).every(pl => pl.attackSeat === undefined || (pl.attackSeat === true && !['chief','leader'].includes(pl.role))) &&
+    ['reich','dawn'].every(team => { const n = seats(players,team); return n.chiefs <= MAX_CHIEFS && n.attackers <= MAX_ATTACKERS && n.leaders <= 1; });
+}
 function validSave(p){
-  return p?.v === GAME_V && Number.isSafeInteger(p.rev) && p.rev > 0 && validFront(p.front) && Number.isFinite(p.created) && Number.isFinite(p.t) &&
+  return (p?.v === LEGACY_V || (p?.v === GAME_V && p.ruleset === MASTERY_RULES)) && Number.isSafeInteger(p.rev) && p.rev > 0 &&
+    validFront(p.front) && validTraffic(p.frontTraffic) && Number.isFinite(p.created) && Number.isFinite(p.t) &&
     record(p.players) && Object.values(p.players).every(pl => sideId(pl?.team) && Object.hasOwn(ROLES, pl.role) &&
-      (pl.cp === undefined ? Number.isFinite(p.teams?.[pl.team]?.cp) : Number.isFinite(pl.cp) && pl.cp >= 0 && pl.cp <= CPMAX)) &&
+      (pl.cp === undefined ? p.v === LEGACY_V && Number.isFinite(p.teams?.[pl.team]?.cp) : Number.isFinite(pl.cp) && pl.cp >= 0 && pl.cp <= CPMAX)) &&
+    (p.v === LEGACY_V || validAppointments(p.players)) &&
     record(p.intel?.reich) && record(p.intel.dawn) && record(p.treach) && (!p.win || sideId(p.win.team)) && (!p.dom || sideId(p.dom.team)) &&
     Array.isArray(p.log) && p.log.every(l => Number.isFinite(l?.t) && typeof l.msg === 'string') &&
     Array.isArray(p.props) && p.props.every(q => sideId(q?.from) && (q.type === 'ceasefire' || (q.type === 'trade' &&
@@ -1721,8 +1814,7 @@ function nextRevision(rev){
   if(!Number.isSafeInteger(rev + 1)) throw Error('Cannot advance this room revision safely. No changes made.');
   return rev + 1;
 }
-const matchesRules = st => rules ? st?.ruleset === rules : !st?.ruleset;
-const classicWithRanks = st => !rules && ['reich','dawn'].some(t => Object.values(st?.teams[t]?.mastery || {}).some(skills => Object.values(skills).some(n => n > 0)));
+const matchesRules = st => st?.ruleset === MASTERY_RULES;
 function loadLiveCache(room){
   try{
     const p = JSON.parse(localStorage.getItem('eot-live-state:' + room));
@@ -1776,10 +1868,8 @@ function createMqttDb(room){
       // Coordinate only in the selected broker’s delivery order, never in two
       // independent orders (BroadcastChannel and MQTT). Observe locks during discovery too.
       const now = Date.now(), span = msg.until - msg.ts;
-      if(typeof msg.holder !== 'string' || !(span > 0 && span <= LEASE_MS) || (inMastery() && typeof msg.token !== 'string')) return;
-      // A legacy Classic client cannot arbitrate tokenized claims. Yield on an
-      // overlapping legacy claim rather than simulating over its pending order.
-      if(!msg.token || !c.lease || c.lease.until <= now || c.lease.holder === msg.holder) c.lease = {holder:msg.holder, until:now + span};
+      if(typeof msg.holder !== 'string' || !(span > 0 && span <= LEASE_MS) || typeof msg.token !== 'string') return;
+      if(!c.lease || c.lease.until <= now || c.lease.holder === msg.holder) c.lease = {holder:msg.holder, until:now + span};
       if(c.waiter && msg.holder === TAB && msg.token === c.waiter.token) c.waiter.finish(c.lease.holder === TAB);
       return;
     }
@@ -1995,7 +2085,7 @@ function createMqttDb(room){
 // RTDB omits empty maps/lists rather than returning {} or []. Restore only these
 // known empty containers on the in-memory JSON read, never manufacture a missing province/team.
 function restoreFirebaseEmpties(st){
-  if(st?.v === GAME_V && st.terr && st.teams){
+  if([LEGACY_V,GAME_V].includes(st?.v) && st.terr && st.teams){
     st.intel ??= {}; if(record(st.intel)){ st.intel.reich ??= {}; st.intel.dawn ??= {}; } st.treach ??= {};
     st.props ??= []; st.log ??= []; if(record(st.front)) st.front.drill ??= {};
     for(const id of PROVINCES) if(record(st.terr[id])) st.terr[id].u ??= {};
@@ -2156,32 +2246,40 @@ async function act(name, payload){
   if(busy || !S) return;
   if(!liveBoard()){ if(name !== 'noop') toast('Wait for the confirmed live room before sending orders.'); return; }
   const store = db, campaign = S.created;
-  const who = {...me}, pl = S.players[who.name]; const needs = {contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
+  const began = Date.now(), who = {...me}, pl = S.players[who.name];
+  const subject = ['setrole','remove'].includes(name) && S.players[payload?.name], subjectPw = subject && expectedPw(payload.name,S);
+  const needs = {applyupdate:'contribute',contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
   if(name !== 'enlist' && name !== 'noop'){
     if(!pl || !authed()) return toast('Choose your post and enter its password first.', 'bad');
-    const need = needs[name]; if(need === '*' ? pl.role !== 'leader' : !can(pl.role, need)) return toast(`Your role (${ROLES[pl.role]}) cannot do that.`, 'bad');
+    const need = needs[name]; if(need === '*' ? pl.role !== 'leader' : !postCan(pl,need)) return toast(`Your role (${ROLES[pl.role]}) cannot do that.`, 'bad');
   }
   busy = true; renderHud();
   try{
     const {ref,remote} = await lockedState(store); requireLive(store);
-    if(!remote && (inMastery() || !canStartEmpty())) throw Error('Wait for the saved room to sync.');
-    if(name === 'noop' && !remote) return;
+    if(!remote && !canStartEmpty()) throw Error('Wait for the saved room to sync.');
+    if(name === 'noop' && (!remote || remote.v === LEGACY_V)) return;
+    if(name === 'applyupdate' && remote?.v !== LEGACY_V) return;
     if(remote && (remote.rev < requiredRevision(remote) || !store.hasLiveState)) throw Error('The relay is behind. Reconnect and retry.');
     if(remote && remote.created !== campaign) throw Error('The campaign changed. Review the map before ordering.');
-    const base = remote ? clone(remote) : newGame(Date.now());
-    if(classicWithRanks(base)) return toast('This save already has mastery ranks. Continue from Classic in Research to keep them.', 'bad');
+    const base = remote?.v === LEGACY_V ? upgradeV6(remote,cutoverAt) : remote ? clone(remote) : newGame(Date.now());
     const nextRev = nextRevision(base.rev);
-    if(base.win && name !== 'reset') return toast('The war is over. A leader can reset the map.', 'bad');
-    const now = Date.now(); tick(base, now);
+    if(base.win && name !== 'reset' && name !== 'applyupdate') return toast('The war is over. A leader can reset the map.', 'bad');
+    const now = Date.now(); if(!base.win) tick(base, now);
     if(me.name !== who.name || me.ph !== who.ph) return;
     const player = base.players[who.name], need = needs[name];
-    if(name !== 'enlist' && name !== 'noop' && (!player || !who.ph || expectedPw(who.name, base) !== who.ph || player.team !== pl.team || (need === '*' ? player.role !== 'leader' : !can(player.role, need)))){
+    if(name !== 'enlist' && name !== 'noop' && (!player || !who.ph || expectedPw(who.name, base) !== who.ph || player.team !== pl.team || (need === '*' ? player.role !== 'leader' : !postCan(player,need)))){
       toast('Your post or permissions changed. Review the latest room.', 'bad'); return;
+    }
+    if(subject){
+      const latest = base.players[payload.name];
+      if(!latest || latest.team !== subject.team || latest.role !== subject.role || latest.attackSeat !== subject.attackSeat || expectedPw(payload.name,base) !== subjectPw)
+        return toast('This appointment changed. Review the latest Council roster.', 'bad');
     }
     const ctx = {now, name:who.name, team:player?.team, role:player?.role};
     const res = (name === 'enlist') ? A.enlist(base, {now, name:me.name}, payload) : A[name](base, ctx, payload || {});
     if(res.err){ toast(res.err, 'bad'); return; }
-    if(!res.reset) checkWin(base, now);
+    if(!res.reset && name !== 'applyupdate') checkWin(base, now);
+    if(!res.reset && name !== 'noop') recordFrontTraffic(base,now,now-began >= SLOW_ORDER_MS);
     base.rev = nextRev; base.origin = TAB; await ref.set(base);
     if(!displayed(store,base)) return; // only a confirmed delivery can replace S
     if(res.ok) toast(res.ok, res.battle === false ? 'bad' : (res.battle ? 'win' : ''));
@@ -2204,7 +2302,7 @@ function createFrontWatch(store,bus){
   let pulse = null, pending = null, received = '', serial = 0, epoch = 0, reading = null;
   let identity = '', campaign = null, restUntil = 0, trouble = false, signalError = false;
   const usable = (st=S) => store === db && !!st && S?.created === st.created && mode === 'live' && NET.status === 'live' &&
-    sawSavedRoom && bus.ready() && !st.win && !classicWithRanks(st) && !isAway() && !!me.ph && me.name !== '__spectator' &&
+    confirmed?.v === GAME_V && bus.ready() && !st.win && !isAway() && !!me.ph && me.name !== '__spectator' &&
     !!st.players[me.name] && expectedPw(me.name,st) === me.ph;
   const fresh = at => Date.now() >= at && Date.now()-at <= SIGNAL_LIFE;
   function unpair(){ pairSince = null; other = peer = pending = null; received = ''; }
@@ -2217,8 +2315,8 @@ function createFrontWatch(store,bus){
   }
   const active = () => since !== null && fresh(last) && usable() && S.created === campaign && identity === myTeam()+':'+me.name;
   const joint = () => active() && pairSince !== null && fresh(pairLast) && peer.until > Date.now() && S.players[peer.name]?.team === OTHER(myTeam());
-  const dueAt = () => Math.max(restUntil, Math.max(since ?? Date.now(), S?.front?.at || 0) + FRONT_MS);
-  const pairDue = () => Math.max(dueAt(), (pairSince ?? Date.now()) + FRONT_MS);
+  const dueAt = () => Math.max(restUntil, Math.max(since ?? Date.now(), S?.front?.at || 0) + frontInterval(S,Date.now()));
+  const pairDue = () => Math.max(dueAt(), (pairSince ?? Date.now()) + frontInterval(S,Date.now()));
   function here(){ last = Date.now(); since ??= last; signalError = false; }
   function paired(msg){
     if(pairSince === null || !fresh(pairLast) || peer.until <= Date.now()) pairSince = Date.now();
@@ -2276,27 +2374,33 @@ function createFrontWatch(store,bus){
       Date.now() >= at && Date.now()-at <= MUSTER_MS && Date.now() >= dueAt() && frontDue(st,Date.now()) && st.players[me.name].team === ticket.team &&
       (!proof || (joint() && Date.now() >= pairDue() && peer.tab === proof.tab && proof.until > Date.now() && st.players[proof.name]?.team === 'dawn'));
     if(!permitted(S)) return;
+    const backOff = () => { if(store === db && epoch === ticket.gen){ trouble = true; restUntil = Date.now() + FRONT_BUSY_MS; } };
+    const expired = deadline => { if(Date.now() < deadline) return false; backOff(); return true; };
     busy = true;
     try{
       const {ref,remote,expires} = await readBy(lockedState(store,true),at+MUSTER_MS);
-      if(!remote || !permitted(remote) || Date.now() >= expires) return;
+      if(!remote || expired(expires) || !permitted(remote)) return;
       if(proof && bus.read){
         const ack = await readBy(bus.read('dawn'),expires);
         // Two Reich tabs may share one Dawn mailbox. A newer answer from the
         // same still-active player at this revision confirms the matched proof.
         if(!validPeer(ack,ticket.team) || ack.name !== proof.name || ack.tab !== proof.tab || ack.at < proof.at) return;
       }
-      if(!permitted(remote) || Date.now() >= expires) return;
+      if(expired(expires) || !permitted(remote)) return;
       const next = clone(remote), now = Date.now();
       tick(next,now); checkWin(next,now); // settle the old owners' income first
-      if(next.win || !advanceFront(next,now,ticket.turn,!!proof)){ restUntil = now + FRONT_MS; return; }
+      if(next.win || !advanceFront(next,now,ticket.turn,!!proof)){ restUntil = now + frontInterval(next,now); return; }
       checkWin(next,now); next.rev = nextRevision(remote.rev); next.origin = TAB;
-      if(!permitted(remote) || Date.now() >= expires) return;
+      if(expired(expires) || !permitted(remote)) return;
+      // If this very simulation stalled the page, advertise a slower next turn
+      // in the same publication. Do not add a load monitor or another heartbeat.
+      const sending = Date.now();
+      if(sending-now >= SLOW_TURN_MS || sending-at >= SLOW_ORDER_MS) recordFrontTraffic(next,sending,true);
       await ref.set(next);
       if(!displayed(store,next)) return;
-      trouble = false;
+      if(Date.now()-sending >= SLOW_ORDER_MS) backOff(); else trouble = false;
       if(S.log[0]?.kind === 'front') toast(S.log[0].msg);
-    }catch(_){ if(store === db) trouble = true; }
+    }catch(_){ backOff(); }
     finally{ if(store === db){ busy = false; renderAll(); } }
   }
   async function poll(){
@@ -2335,9 +2439,9 @@ function createFrontWatch(store,bus){
   return {receive,poll,reset,leave,depart,active,joint,dueAt,ready:usable,get trouble(){return trouble;},get signalError(){return signalError;},get partner(){return joint() ? peer : null;}};
 }
 
-// The shared workspace has a legacy Classic document; its name must not change.
-function createSharedDb(cap,wire,mastery){
-  const doc = path => cap.doc(mastery ? path.replace('game/', 'game-'+wire+'/') : path);
+// Never address the archived shared game/state or game/lock documents.
+function createSharedDb(cap,wire){
+  const doc = path => cap.doc(path.replace('game/', 'game-'+wire+'/'));
   let current = null, empty = false, cb, unsub, generation = 0, dead = false;
   function deliver(snap){
     if(dead) return;
@@ -2388,17 +2492,17 @@ function createSharedDb(cap,wire,mastery){
   return store;
 }
 let bootId = 0;
-async function boot(prepared = null){
+async function boot(){
   frontWatch?.depart(); frontWatch = null; frontWrite = null; busy = false;
-  const id = ++bootId, wire = wireRoom(); seed = prepared; ui.confirmReset = null; sawSavedRoom = startingMap = false; homeReceipt = readPref(LAST_ROOM); authorityEpoch++;
+  const id = ++bootId, wire = wireRoom(); confirmed = null; cutoverAt = 0; ui.confirmReset = null; sawSavedRoom = startingMap = false; homeReceipt = readPref(LAST_ROOM); authorityEpoch++;
   if(NET.destroy) NET.destroy();
   clearTimeout(loadTimer); NET.peers.clear(); db = NET.destroy = NET.reconnect = null; NET.announce = () => {};
-  S = backup = legacyBackup = conflictCopy = null; cacheKey = backend = waitReason = ''; relayChoices = []; seen = Date.now(); shown.clear();
+  S = backup = legacyBackup = preUpdateBackup = conflictCopy = null; cacheKey = backend = waitReason = ''; relayChoices = []; seen = Date.now(); shown.clear();
   mode = NET.status = 'connecting'; NET.transport = 'Checking the saved room…';
-  if(landing || badAddress){ mode = landing ? 'choose' : 'incompatible'; NET.status = 'off'; renderAll(); return; }
+  if(badAddress){ mode = 'incompatible'; NET.status = 'off'; renderAll(); return; }
   renderAll(); // Geography only. No stocks, garrisons, provisional purchases or income from a cache.
   let cap = null;
-  const tryShared = (via === 'shared' || !via) && typeof window.claude?.use === 'function';
+  const tryShared = (via === 'shared' || (!via && !FB_URL)) && typeof window.claude?.use === 'function';
   try{ if(tryShared) cap = await window.claude.use('db'); }catch(_){}
   if(id !== bootId) return;
   if((via === 'shared' || tryShared) && !cap){
@@ -2410,8 +2514,7 @@ async function boot(prepared = null){
   if(via !== 'firebase') FB_URL = '';
   if(backend === 'mqtt' && !relayPin){ const hint = readPref(relayPref()); if(Object.hasOwn(RELAYS,hint)) relayPin = hint; }
   useCacheScope();
-  if(seed && seed.backend !== backend) seed = null;
-  db = cap ? createSharedDb(cap,wire,inMastery()) : backend === 'mqtt' ? createMqttDb(wire) : createFirebaseDb(FB_URL,wire);
+  db = cap ? createSharedDb(cap,wire) : backend === 'mqtt' ? createMqttDb(wire) : createFirebaseDb(FB_URL,wire);
   const store = db;
   loadTimer = setTimeout(() => { if(id === bootId && mode === 'connecting' && !S){ mode = 'slow'; renderAll(); } },4000);
   function receive(snap){
@@ -2421,7 +2524,7 @@ async function boot(prepared = null){
     const st = snap.exists ? snap.data() : null, wasSaved = sawSavedRoom, wasLive = mode === 'live';
     refreshBackup(); // another tab may have confirmed a newer revision since this read began
     if(snap.exists) sawSavedRoom = true;
-    if(snap.exists && (!validSave(st) || !matchesRules(st))){ pauseRoom('incompatible'); seed = null; renderAll(); return; }
+    if(snap.exists && (!validSave(st) || !matchesRules(st))){ pauseRoom('incompatible'); renderAll(); return; }
     if(st ? (!store.hasLiveState || st.rev < requiredRevision(st)) : !canStartEmpty()){
       pauseRoom('waiting');
       const floor = requiredRevision(st);
@@ -2430,65 +2533,32 @@ async function boot(prepared = null){
     }
     // Same revision is not proof of identical inventories. Quarantine the fork;
     // both copies remain available for export, neither becomes an automatic repair.
-    if(divergent(st,backup) || (!startingMap && divergent(st,S))){
+    if(st?.v === LEGACY_V && (preUpdateBackup?.created === st.created || [backup,confirmed].some(prior => prior?.v === GAME_V && prior.created === st.created))){
+      conflictCopy = st; pauseRoom('waiting'); waitReason = 'This source reported an older save format after the campaign was updated. Orders paused; both copies are available in Room.'; renderAll(); return;
+    }
+    if(divergent(st,backup) || divergent(st,confirmed)){
       conflictCopy = st; pauseRoom('waiting');
       waitReason = `Two saves disagree at revision ${st.rev}. Orders are paused. You can export both copies from Room.`;
       renderAll(); return;
     }
     conflictCopy = null; mode = 'live'; waitReason = '';
     if(st){
-      seed = null;
-      if(wasLive && wasSaved && S && JSON.stringify(S) === JSON.stringify(st)) return;
-      startingMap = false; S = clone(st); rememberBoard(S);
+      if(wasLive && wasSaved && sameSave(confirmed,st,via === 'firebase')) return;
+      if(st.v === LEGACY_V && (!confirmed || confirmed.created !== st.created)) cutoverAt = Date.now();
+      confirmed = clone(st); startingMap = false; S = st.v === LEGACY_V ? upgradeV6(confirmed,cutoverAt) : clone(confirmed);
+      rememberBoard(confirmed);
       if(!wasSaved || st.origin === TAB) seen = Date.now(); else announce();
-    } else if(!S && !inMastery()){ S = newGame(Date.now()); startingMap = true; } // explicitly confirmed empty Classic only
+    } else if(!S){ S = newGame(Date.now()); startingMap = true; } // confirmed empty, never published just by visiting
     renderAll();
   }
   db.doc('game/state').onSnapshot(receive, () => { if(id === bootId){ pauseRoom('error'); NET.status = 'off'; NET.transport = 'Cannot read the shared workspace. Reconnect or check access.'; renderAll(); } });
   frontWatch = createFrontWatch(store,store.muster);
 }
-// Changing rooms changes only the address. Loading, reconnecting, or following an
-// invite never copies a campaign; only the explicit locked continuation can do that.
-function navigate(room,next,transport='',fb='',relay='',floor=0,prepared=null){
-  if(!validRoom(room) || (next && next !== MASTERY_RULES)) return toast('Choose a valid room and campaign first.');
-  landing = badAddress = false; ROOM = room; rules = next; via = transport; FB_URL = fb; relayPin = relay; minRev = floor;
-  sel = M = PWASK = null; history.replaceState(null,'',roomUrl()); return boot(prepared);
-}
-function switchRules(next, prepared = null){
-  tab = 'tech'; ui.researchBranch = 'mastery';
-  return navigate(ROOM,next,backend ? transportOf(backend) : via,FB_URL,'',0,prepared);
-}
-async function prepareMastery(){
-  if(busy || rules || mode !== 'live' || !officerIn(S, me)) return;
-  const store = db, epoch = authorityEpoch, who = {...me}; busy = true;
-  try{
-    const snap = await store.doc('game/state').get();
-    requireLive(store,epoch);
-    if(who.name !== me.name || who.ph !== me.ph) return;
-    const src = snap.exists ? snap.data() : null;
-    if(snap.exists ? (!store.hasLiveState || !displayed(store,src)) : !canStartEmpty()) throw Error('Wait for the latest shared Classic save before continuing.');
-    const state = src || newGame(Date.now()); // Only a confirmed empty Classic can supply a fresh board.
-    if(state.win || !officerIn(state, who)) throw Error('Only an active leader or chief can start a mastery room.');
-    await switchRules(MASTERY_RULES, {state:clone(state), backend, who});
-  }catch(e){ toast(e.message, 'bad'); }
-  finally{ if(store === db){ busy = false; renderAll(); } }
-}
-async function startMastery(){
-  if(busy || !inMastery() || !seed || S || sawSavedRoom || mode !== 'live') return;
-  const store = db, prepared = seed; busy = true; renderPanel();
-  try{
-    const {ref, remote} = await lockedState(store);
-    requireLive(store);
-    if(remote) return; // Already displayed by the live read, even if its Classic source revision was lower.
-    if(seed !== prepared || S || sawSavedRoom || !officerIn(prepared.state, me) || me.name !== prepared.who.name || me.ph !== prepared.who.ph) return;
-    if(!canStartEmpty()) throw Error('No confirmed empty room. Reconnect and retry.');
-    const st = clone(prepared.state); st.ruleset = MASTERY_RULES; st.origin = TAB; st.rev = nextRevision(st.rev);
-    settleCommand(st);
-    await ref.set(st); // Firebase uses the empty record's ETag; other stores use their room lock.
-    if(!displayed(store,st)) return;
-    toast('Mastery room started. Share its invite with both factions.');
-  }catch(e){ toast(e.message, 'bad'); }
-  finally{ if(store === db){ busy = false; renderAll(); } }
+// Navigation selects a room/source; it never imports, resets or seeds a campaign.
+function navigate(room,transport='',fb='',relay='',floor=0){
+  if(!validRoom(room)) return toast('Choose a valid room first.');
+  badAddress = false; ROOM = room; via = transport; FB_URL = fb; relayPin = relay; minRev = floor;
+  sel = M = PWASK = null; history.replaceState(null,'',roomUrl()); return boot();
 }
 let seen = 0, shown = new Set();
 function announce(){
@@ -2525,7 +2595,7 @@ function recruitButtons(team, u, unlocked, each, have){
 }
 function refreshPrices(view, root = document){
   const team = myTeam() || 'reich', T = view.teams[team], cp = view.players[me.name]?.cp ?? 0;
-  const paused = busy || classicWithRanks(S) || !liveBoard();
+  const paused = busy || !liveBoard();
   root.querySelectorAll('[data-price]').forEach(el => {
     const enough = afford(view, team, el.dataset);
     // Only otherwise-eligible buttons carry a price; never unlock a role/tech/cap restriction.
@@ -2550,9 +2620,9 @@ function projectedEconomy(){
 function roomPillHtml(){
   const n = onlineList().length;
   const live = mode === 'live', offline = NET.status === 'off';
-  if(landing || badAddress) return '<span class="roompill">No campaign selected</span>';
+  if(badAddress) return '<span class="roompill">No campaign selected</span>';
   const lbl = live ? (sawSavedRoom ? `Live · #${S?.rev ?? minRev}` : 'Empty room') : offline ? 'Offline' : 'Syncing…';
-  return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)} · ${n} connected"><span class="sdot ${live ? 'live' : offline ? 'off' : 'conn'}"></span><span>${inMastery() ? 'Mastery' : 'Classic'} · ${esc(ROOM)} · ${lbl}</span></button>`;
+  return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)} · ${n} connected"><span class="sdot ${live ? 'live' : offline ? 'off' : 'conn'}"></span><span>Mastery · ${esc(ROOM)} · ${lbl}</span></button>`;
 }
 function syncText(){
   if(badAddress || mode === 'incompatible') return 'Incompatible room address or unreadable save. No data has been changed.';
@@ -2567,7 +2637,7 @@ function renderHud(){
   }
   if(!S){
     $('#hud').innerHTML = $('#score').innerHTML = ''; $('#me').innerHTML = roomPillHtml();
-    $('#banner').innerHTML = landing || mode === 'live' ? '' : `<div class="banner" role="status">${esc(syncText())}</div>`; return;
+    $('#banner').innerHTML = mode === 'live' ? '' : `<div class="banner" role="status">${esc(syncText())}</div>`; return;
   }
   const t = myTeam(), team = t || 'reich', P = projectedEconomy(), inc = income(S, team);
   refreshPrices(P);
@@ -2585,13 +2655,13 @@ function renderHud(){
   if(S.win) b = `<div class="banner win" style="color:${tcol(S.win.team)}">${TEAMS[S.win.team].name} wins. <span style="font-family:var(--body);font-size:14px;text-transform:none;letter-spacing:0;color:var(--ink)">${esc(S.win.why)}</span></div>`;
   else {
     const parts = [];
-    if(classicWithRanks(S)) parts.push('This Classic save contains mastery ranks. Orders are paused here; continue from Research → Troop mastery to keep your ranks.');
     if(S.dom){ const left = Math.max(0, DOM_MS - (Date.now() - S.dom.since)); parts.push(`<span style="color:${tcol(S.dom.team)}">${TEAMS[S.dom.team].name} holds ${Math.round(vpOf(S, S.dom.team) / TOTAL_VP * 100)}% of the world. Victory in ${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')} unless it is pushed below ${Math.round(DOM_SHARE * 100)}%.</span>`); }
     const cf = ceasefire(S, Date.now()); if(cf) parts.push(`Ceasefire in force for ${Math.ceil((cf.until - Date.now()) / 60000)} more minutes.`);
     if(!liveBoard()) parts.push(`${esc(syncText())} Showing the last confirmed map, read-only. <button class="btn sm" data-act="reconnect">Reconnect</button>`);
-    else if(!sawSavedRoom) parts.push('Confirmed empty Classic room. This is the starting map; the first explicit order starts the campaign.');
+    else if(!sawSavedRoom) parts.push('Confirmed empty Mastery room. No army was imported. This is the starting map; the first explicit order starts the campaign.');
     if(parts.length) b = `<div class="banner ${mode === 'local' || mode === 'error' ? 'warn' : ''}">${parts.join(' · ')}</div>`;
   }
+  if(confirmed?.v === LEGACY_V && liveBoard()) b += `<div class="banner">Campaign update ready: Nigeria is Black Dawn’s HQ. The next successful player order saves the update. ${t ? '<button class="btn sm" data-act="applyupdate">Apply update now</button>' : 'Choose a post to apply it.'}</div>`;
   $('#banner').innerHTML = b;
 }
 
@@ -2721,7 +2791,8 @@ function panelOrders(){
       h += `<div class="card"><h3>Recruit here · 1 command point</h3>${divBarHtml('div', curDiv, team)}${rows}</div>`;
     }
     let ord = '<div class="row">';
-    if(can(role, 'move')) ord += `<button class="btn pri" data-act="open" data-m="move">Move units</button><button class="btn pri" data-act="open" data-m="attack">Attack from here</button>`;
+    if(can(role, 'move')) ord += `<button class="btn pri" data-act="open" data-m="move">Move units</button>`;
+    if(postCan(S.players[me.name], 'attack')) ord += `<button class="btn pri" data-act="open" data-m="attack" ${total(t.u) ? '' : 'disabled'}>Attack from here</button>`;
     if(can(role, 'fort')){
       const cost = fortCost(t.f);
       ord += `<button class="btn" data-act="fort" data-rank="${t.f + 1}" ${t.f >= 3 ? 'disabled' : priceAttrs(cost, 1)}>Fortify ${t.f < 3 ? `(${cost.steel}S)` : '(max)'}</button>`;
@@ -2729,11 +2800,11 @@ function panelOrders(){
     ord += '</div>';
     if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}" ${k === t.st ? 'disabled' : priceAttrs({}, 1)}>${STANCES[k]}</button>`).join('')}</div>`;
     if(ord.length > 30 || can(role, 'stance')) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
-    if(!can(role, 'recruit') && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. Use Diplomacy, Council and field duty.</div>`;
+    if(!postCan(S.players[me.name],'attack') && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. Use Diplomacy, Council and field duty.</div>`;
   } else {
-    const srcs = ADJ[sel].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0);
+    const srcs = attackSources(S,team);
     let a = '<div class="row">';
-    if(can(role, 'attack')) a += `<button class="btn pri" data-act="open" data-m="attack" data-to="${sel}" ${srcs.length ? '' : 'disabled'}>Attack</button>`;
+    if(postCan(S.players[me.name],'attack')) a += `<button class="btn pri" data-act="open" data-m="attack" data-to="${sel}" ${srcs.length ? '' : 'disabled'}>Attack</button>`;
     if(can(role, 'spy')) a += `<button class="btn" data-act="spy" ${priceAttrs({gold:10}, 2)}>Spy · 2cp 10G</button>`;
     if(can(role, 'honey') && t.o !== 'neutral') a += `<button class="btn" data-act="honey" ${priceAttrs({gold:20}, 3)}>Honeytrap · 3cp 20G</button>`;
     if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage" ${priceAttrs({gold:25}, 3)}>Sabotage · 3cp 25G</button>`;
@@ -2798,7 +2869,7 @@ function masteryPanel(team, canResearch){
     return `<option value="${id}" ${id === u ? 'selected' : ''}>${esc(UNITS[id].n)}${locked ? ' · locked' : ranks ? ` · ${ranks}/${cap}` : ''}</option>`;
   };
   const options = divsFor(team).filter(d => d !== 'all').map(d => `<optgroup label="${DIVS[d]}">${roster.filter(id => UNITS[id].div === d).map(option).join('')}</optgroup>`).join('');
-  const note = !inMastery() ? 'Preview only in Classic.' : S.win ? 'The war has ended; research is closed.' : canResearch ? 'Attack and Defense unlock the role talent.' : 'Only your leader and chiefs of staff can buy ranks.';
+  const note = S.win ? 'The war has ended; research is closed.' : canResearch ? 'Attack and Defense unlock the role talent.' : 'Only your leader and chiefs of staff can buy ranks.';
   const dossier = `<section class="card mastery-dossier"><label><span class="research-kicker">Formation dossier · ${TEAMS[team].short}</span>
     <select data-chg="masteryunit" id="mastery-unit" aria-label="Choose a troop formation">${options}</select></label>
     <div class="row sb">${troopStatsHtml(S, team, u)}<span class="mastery-rank">${totalRanks(u)}/${cap} ranks</span></div>
@@ -2824,12 +2895,7 @@ function masteryPanel(team, canResearch){
 function panelTech(){
   const team = myTeam() || 'reich', T = S.teams[team]; const can_ = can(myRole(), 'research') && myTeam() && !S.win;
   const nav = `<div class="research-nav"><span class="research-kicker">${TEAMS[team].short} / Research bureau</span><div class="seg" role="group" aria-label="Research branches">${[['doctrine','Faction doctrines'],['mastery','Troop mastery']].map(([key, label]) => `<button data-act="researchbranch" data-k="${key}" class="${ui.researchBranch === key ? 'on' : ''}" aria-pressed="${ui.researchBranch === key}">${label}</button>`).join('')}</div></div>`;
-  if(ui.researchBranch === 'mastery'){
-    const session = inMastery() ? `<div class="sm mut">Mastery room · <button class="btn sm" data-act="room">Invite players</button></div>` :
-      `<div class="card sm"><h3>Play with troop mastery</h3>Continue from a snapshot of Classic in a separate room. Your map, officers and resources come with you. Later Classic moves stay in Classic, so have both factions use the new invite.
-      <div class="row" style="margin-top:6px">${can_ ? `<button class="btn pri sm" data-act="preparemastery" ${mode === 'live' && !busy ? '' : 'disabled'}>Continue from Classic</button>` : ''}<button class="btn sm" data-act="joinmastery">Join mastery room</button></div></div>`;
-    return nav + session + masteryPanel(team, can_ && inMastery());
-  }
+  if(ui.researchBranch === 'mastery') return nav + masteryPanel(team, can_);
   return nav + `<div class="sm mut">Research costs gold, steel and oil, and applies instantly. Leaders and chiefs of staff can buy it.</div><div class="card sm"><b style="color:${TEAMS[team].css}">${TEAMS[team].name}:</b> ${TEAMS[team].flavor}</div>` + TKEYS.map(k => {
     const L = T.tech[k], nx = L + 1, cost = researchCost(S, team, nx);
     return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ ? priceAttrs(cost) : 'disabled'} data-act="research" data-k="${k}" data-rank="${nx}">Level ${nx} ${costHtml(cost)}</button>`}<div class="desc">${L ? 'Have: ' + TECH[k].d.slice(0, L).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + TECH[k].d[L] : ''}</div></div>`; }).join('');
@@ -2860,17 +2926,20 @@ function panelCouncil(){
   if(ui.councilView === 'hierarchy') return h + dawnCharterHtml();
   if(team){ const pl = S.players[me.name], cd = Math.max(0, pl.cd - Date.now()); h += `<div class="card"><h3>Field duty · free, no command points</h3><div class="row"><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="drill">Drill +6 Manpower</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="scavenge">Scavenge +5 Steel</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="prospect">Prospect +4 Oil</button></div><div class="mut sm" style="margin-top:6px">${cd ? `Ready in ${Math.ceil(cd / 1000)}s.` : 'Every player can do one duty every 3 minutes. Soldiers keep the war machine fed.'}</div></div>`; }
   ['reich','dawn'].forEach(tm => {
-    const ps = roomPosts(S,tm,true);
-    h += `<div class="card council-roster" style="--post-color:${TEAMS[tm].css}"><h3>${TEAMS[tm].name} · ${ps.length}</h3>`;
+    const ps = roomPosts(S,tm,true), nSeats = seats(S.players,tm);
+    h += `<div class="card council-roster" style="--post-color:${TEAMS[tm].css}"><h3>${TEAMS[tm].name} · ${ps.length}</h3><p class="sm">Staff chiefs: <b>${nSeats.chiefs}/${MAX_CHIEFS}</b> · Attack seats: <b>${nSeats.attackers}/${MAX_ATTACKERS}</b> + leader. Chiefs use one attack seat each.</p>`;
     if(tm === 'dawn') h += '<p class="mut sm">Official appointments follow the Black Dawn hierarchy. Room titles are optional; game roles control orders.</p>';
     h += ps.map(([n,p]) => {
       const post = postView(S.players,n), label = esc(post.name), key = esc(n);
+      const chiefFull = nSeats.chiefs >= MAX_CHIEFS || (!usesAttackSeat(p) && nSeats.attackers >= MAX_ATTACKERS);
+      const roleOption = r => p.role === r ? 'selected' : p.role === 'leader' || r === 'leader' || (r === 'chief' && chiefFull) ? 'disabled' : '';
       if(lead && tm === team) return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)">
         <span class="council-name"><b>${label}</b>${post.office ? `<small>${esc(post.office.title)}</small>` : ''}</span>
-        <select aria-label="Game role for ${label}" data-chg="role" data-n="${key}">${Object.keys(ROLES).map(r => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${ROLES[r]}</option>`).join('')}</select>
+        <select aria-label="Game role for ${label}" data-chg="role" data-n="${key}">${Object.keys(ROLES).map(r => `<option value="${r}" ${roleOption(r)}>${ROLES[r]}</option>`).join('')}</select>
+        ${p.role === 'chief' || p.role === 'leader' ? '<span class="mut sm">Can attack worldwide</span>' : `<button class="btn sm" data-act="attackseat" data-n="${key}" data-grant="${p.attackSeat ? '0' : '1'}" aria-label="${p.attackSeat ? 'Release' : 'Assign'} attack seat: ${label}" ${!p.attackSeat && nSeats.attackers >= MAX_ATTACKERS ? 'disabled' : ''}>${p.attackSeat ? 'Release attack seat' : 'Assign attack seat'}</button>`}
         <input type="text" aria-label="Room title for ${label}" placeholder="Room title" maxlength="40" value="${esc(post.roomTitle)}" data-chg="title" data-n="${key}" style="flex:1;min-width:90px">
         ${n === me.name ? '' : `<button class="btn sm danger" aria-label="Remove ${label}" data-act="remove" data-n="${key}">×</button>`}</div>`;
-      return `<div class="row sb" style="padding:3px 0"><span class="council-name"><b>${label}</b> <small>${esc(post.caption)}</small></span><span class="mut sm">${ROLES[p.role]}</span></div>`;
+      return `<div class="row sb" style="padding:3px 0"><span class="council-name"><b>${label}</b> <small>${esc(post.caption)}</small></span><span class="mut sm">${ROLES[p.role]}${p.attackSeat ? ' · Attack seat' : ''}</span></div>`;
     }).join('') + '</div>';
   });
   h += `<div class="card"><h3>Enlist someone new</h3><div class="row"><input type="text" id="enl" aria-label="Name for new post" placeholder="Name" style="flex:1;min-width:100px"><input type="text" id="enlpw" aria-label="Password for new post" placeholder="Choose a password" style="flex:1;min-width:100px"><select id="enlt" aria-label="Faction for new post"><option value="reich">Reich</option><option value="dawn">Black Dawn</option></select><button class="btn pri sm" data-act="enlist">Enlist</button></div></div>`;
@@ -2895,7 +2964,7 @@ const oldLocationFormats = [
   /^A (?:Reich|Dawn) (?:spy was caught in|honeytrap was exposed in|saboteur was caught in|assassination team was destroyed near) (.+)\.$/,
   /^Sabotage in (.+): depots burn,/,
   /^Decapitation strike at (.+)\. (?:Black Dawn|The Reich) command is in disarray\./,
-  / wins the war\. (Berlin|Bucharest) has fallen\.$/
+  / wins the war\. (Berlin|Bucharest|Nigeria) has fallen\.$/
 ];
 function logEndpoints(l){
   if(l.tid != null || l.kind === 'front') return l; // aggregate reports have no single target
@@ -2964,11 +3033,12 @@ function frontStatus(){
   if(mode !== 'live' || NET.status !== 'live') return ['Signals offline','This device cannot run an independent operation without live room confirmation.'];
   if(!myTeam()) return ['Observer','Only signed-in faction players activate the front. Spectators do not count.'];
   if(isAway()) return ['AFK on this device','Move, tap or press a key to return. Other active players can still run operations.'];
-  if(classicWithRanks(S)) return ['Orders paused','Continue this campaign in Mastery to preserve its existing ranks.'];
+  if(confirmed?.v === LEGACY_V) return ['Update pending','Apply the campaign update or issue a player order to activate operations.'];
   if(!frontWatch?.ready()) return ['Awaiting live save','The front needs a confirmed campaign. In a new room, make a player order first.'];
   if(!frontWatch.active()) return frontWatch.signalError ? ['Signal unavailable','Cannot confirm live activity. Check room connectivity and muster permissions.'] : ['Checking in','Confirming this post with the live room…'];
   const left = frontWatch.dueAt()-Date.now();
-  return [frontWatch.joint() ? 'Both factions online' : 'Active player online',frontWatch.trouble ? 'Waiting for the room lock or save confirmation; player orders take priority.' : left > 0 ? `Next operation in ${clockText(left)}.` : 'Confirming the next operation…'];
+  const pressure = frontWatch.trouble || frontInterval(S,Date.now()) > FRONT_MS;
+  return [frontWatch.joint() ? 'Both factions online' : 'Active player online',left > 0 ? `${pressure ? 'Busy room · slower pace. ' : ''}Next operation in ${clockText(left)}.` : 'Confirming the next operation…'];
 }
 function updateFrontClock(){
   if(!S || tab !== 'front') return;
@@ -2994,40 +3064,33 @@ function panelFront(){
   return `<section class="card front-hero"><div class="front-brow">Field intelligence <span>OP / ${String(turn).padStart(3,'0')}</span></div>
     <h2>World front</h2><p>Beyond the two factions, independent armies are fighting for their own borders.</p>
     <div class="front-watch"><b id="front-signal" class="${frontWatch?.active()?'on':''}">${label}</b><span class="sm" id="front-countdown">${detail}</span></div></section>
-    <section class="card dispatch"><h3>Latest dispatch</h3>${report ? `<small class="mut mono">${new Date(report.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small><p>${esc(report.msg)}</p>${Object.hasOwn(TD,report.tid) ? `<button class="btn sm" data-act="goto" data-id="${esc(report.tid)}">Show battle on map ↗</button>`:''}` : '<p>No operations yet. The first turn needs 90 seconds with one active player from either faction.</p>'}</section>
+    <section class="card dispatch"><h3>Latest dispatch</h3>${report ? `<small class="mut mono">${new Date(report.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small><p>${esc(report.msg)}</p>${Object.hasOwn(TD,report.tid) ? `<button class="btn sm" data-act="goto" data-id="${esc(report.tid)}">Show battle on map ↗</button>`:''}` : '<p>No operations yet. Operations need an active player from either faction: normally 90 seconds, or 3 minutes in a busy room.</p>'}</section>
     <details class="card sm"><summary>Occupied national capitals (${occupied.length})</summary><div class="chips" style="margin-top:8px">${occupied.map(k=>{
       const cap = capitalOf(k), stock = S.front?.resistance?.[k] || 0;
       return `<button class="chip" data-act="goto" data-id="${cap}">${COUNTRIES[k].name} · ${TD[cap].name}${stock ? ` · Resistance ${stock}/${resistanceCap(frontRank(S,k))}` : ''}</button>`;
     }).join('') || 'All independent capitals are home-held.'}</div></details>
     <section class="power-list"><div class="front-brow">Major powers <span>Force readiness</span></div>${roster}</section>
     <details class="card sm"><summary>Other independent countries (${minor.length})</summary><div class="chips" style="margin-top:8px">${minor.map(k=>`<button class="chip" data-act="goto" data-id="${point(k)}">${COUNTRIES[k].name} · ${RANK_NUM[frontRank(S,k)]}</button>`).join('') || 'None remaining.'}</div></details>
-    <div class="card sm"><h3>Rules of engagement</h3>One active player from either faction keeps the 90-second clock running. Independent countries train, reinforce their own garrisons and fight for occupied home capitals. If no army can reach its capital, local resistance recruits there, even in exile. A full reserve can challenge the occupier; victory is not automatic. Other border raids need both factions active. At most one battle happens per turn. Sea expeditions need a fleet, and neither faction HQ is a target. Major powers rebuild faster; training doubles if either faction holds eight originally independent provinces or reaches rank III in doctrine or mastery. After five minutes without input, this device is AFK and stops counting. Missed turns never stack.</div>`;
+    <div class="card sm"><h3>Rules of engagement</h3>One active player from either faction keeps operations running. Busy rooms slow from 90 seconds to 3 minutes. Independent countries train, reinforce their own garrisons and fight for occupied home capitals. If no army can reach its capital, local resistance recruits there, even in exile. A full reserve can challenge the occupier; victory is not automatic. Other border raids need both factions active. At most one battle happens per turn. Sea expeditions need a fleet, and neither faction HQ is a target. Major powers rebuild faster; training doubles if either faction holds eight originally independent provinces or reaches rank III in doctrine or mastery. After five minutes without input, this device is AFK and stops counting. Missed turns never stack.</div>`;
 }
 
 function panelRules(){
   const hdr = Object.keys(STANCES).map(k => `<th>${STANCES[k]}</th>`).join('');
-  return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>Capture the enemy capital: <b>Berlin</b> or <b>Bucharest</b>. Instant victory.</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of all victory points for 45 minutes.</li><li>Or leave the enemy without land.</li></ul></div>
+  return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>Capture the enemy capital: <b>Berlin</b> or <b>Nigeria</b>. Instant victory.</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of all victory points for 45 minutes.</li><li>Or leave the enemy without land.</li></ul></div>
   <div class="card sm"><h3>Resources and time</h3>Every province pays resources to its faction every minute (Industry raises income). Command points (CP) belong to your post, not your faction. Each player starts with ${CP_START} and regains 1 CP every ${CP_MS / 1000} seconds, up to ${CPMAX}. A move or recruitment order costs 1 CP; an attack or spy mission costs 2.</div>
-  <div class="card sm"><h3>Independent countries</h3>With one active player online, independent countries train, rebuild and try to reclaim their national capitals. Other raids require both factions. Five minutes without input marks a post AFK until its player interacts again. Open <button class="btn sm" data-act="tab" data-k="front">World front</button> for the live clock, readiness and latest dispatch. Nothing accumulates offline.</div>
+  <div class="card sm"><h3>Independent countries</h3>With one active player online, independent countries train, rebuild and try to reclaim their national capitals. Other raids require both factions. Operations normally run every 90 seconds and slow to 3 minutes when orders are arriving quickly or the room lock is slow. Five minutes without input marks a post AFK until its player interacts again. Open <button class="btn sm" data-act="tab" data-k="front">World front</button> for the live clock, readiness and latest dispatch. Nothing accumulates offline.</div>
   <div class="card sm"><h3>Troop mastery</h3>Faction doctrines unlock formations. In Research → Troop mastery, choose a formation to improve its Attack, Defense or Vitality. Its role talent needs Attack and Defense at the rank you want to buy; tactic talents also need the matching doctrine. Each ability has five ranks and only affects the selected formation.</div>
-  <div class="card sm"><h3>Attacking</h3>Pick a source province that borders the target, choose units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Water crossings need a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
+  <div class="card sm"><h3>Attacking</h3>Launch from any friendly garrison against any foreign province. Choose your units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Friendly moves still require a connection; moving across water needs a fleet with Naval 2, or an air group. Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
   <div class="card sm"><h3>Tactics beat postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div><p class="mut" style="margin:6px 0 0">A tactic multiplies only the matching units. A defender's posture is hidden until you scout. Neutral lands have a fixed hidden posture.</p></div>
-  <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Bucharest); ◆ marks national capitals.</div>
-  <div class="card sm"><h3>Roles</h3><b>Leader</b>: everything. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
+  <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Nigeria); ◆ marks national capitals.</div>
+  <div class="card sm"><h3>Roles</h3><b>Leader</b>: commands attacks worldwide and appoints posts. Only the four staff chiefs can recruit, in any friendly province. The leader can fill six non-leader attack seats; chiefs count toward the six. Attack-only appointments keep their normal game role. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
 }
 function renderPanel(refreshBudget = true){
-  if(landing || badAddress){
-    $('#panel').innerHTML = `<section class="card"><h3>Which campaign are you playing?</h3>${badAddress ? '<p>This room address is not supported. No save was changed.</p>' : ''}${ambiguousBookmark && landing ? '<p>This older link does not specify the campaign.</p>' + (lastMastery ? '<button class="btn pri" data-act="resumeconfirmed">Resume last confirmed Mastery room</button>' : '') : ''}<p class="sm">Classic and Mastery have separate armies and stockpiles. Open the Room invite from your friend, or choose your campaign below. This device will remember the last room it confirmed.</p><label class="sm">Room code <input id="home-room" aria-label="Room code" type="text" maxlength="32" value="${esc(ROOM)}"></label><div class="row"><button class="btn" data-act="homecampaign" data-k="classic">Open Classic</button><button class="btn pri" data-act="homecampaign" data-k="mastery">Open Mastery</button></div></section>`; return;
+  if(badAddress){
+    $('#panel').innerHTML = `<section class="card"><h3>Unsupported room address</h3><p>No save was changed. Open your group’s exact Mastery invite or enter a room code.</p><label>Room code <input id="home-room" maxlength="32"></label> <button class="btn pri" data-act="homeroom">Open room</button></section>`; return;
   }
   if(mode === 'conflict'){
     $('#panel').innerHTML = `<section class="card"><h3>Choose the shared copy</h3><p class="sm">Nothing was merged or overwritten. Ask your friend for their Room invite, or select the relay and revision you recognize, then share its link.</p><div class="row">${relayChoices.map(c => `<button class="btn" data-act="pickrelay" data-id="${c.id}" ${c.rev ? '' : 'disabled'}>${c.id} · ${c.rev ? 'revision '+c.rev : 'unreadable'}</button>`).join('')}</div></section>`; return;
-  }
-  if(!S && rules){
-    const ready = mode === 'live' && inMastery();
-    const empty = ready && canStartEmpty();
-    const text = ready && !empty ? 'An empty mastery room has not been confirmed on the primary relay. Reconnect to check again.' : ready ? (seed ? `Start from the shared Classic snapshot at revision ${seed.state.rev}. This does not change Classic. After starting, share the Mastery invite with both factions.` : 'No saved mastery session here yet. A leader or chief can start one from Research in Classic.') :
-      mode === 'error' && via === 'shared' ? NET.transport : mode === 'incompatible' ? 'These room rules or this save are not supported. No progress has been changed.' : esc(syncText());
-    $('#panel').innerHTML = `<section class="card sm"><h3>Mastery room · ${esc(ROOM)}</h3><p>${text}</p><div class="row">${empty && seed ? `<button class="btn pri sm" data-act="startmastery" ${busy ? 'disabled' : ''}>Start from revision ${seed.state.rev}</button>` : ''}<button class="btn sm" data-act="classicroom">Back to Classic</button><button class="btn sm" data-act="reconnect">Reconnect</button></div></section>`; return;
   }
   if(!S || !liveBoard()){ $('#panel').innerHTML = `<section class="card"><h3>Waiting for the live room</h3><p class="sm">${esc(syncText())}</p><div class="row"><button class="btn sm" data-act="reconnect">Reconnect</button><button class="btn sm" data-act="room">Room &amp; backups</button></div></section>`; return; }
   const sc = $('#panel').scrollTop; const el = document.activeElement; if(el && el.matches && el.matches('input[type=text],input[type=number]') && $('#panel').contains(el)) return;
@@ -3037,12 +3100,18 @@ function renderPanel(refreshBudget = true){
 
 /* --- modal --- */
 function closeModal(){ M = null; $('#modal').innerHTML = ''; }
-function groupStrength(grp){ return grp; }
+function regionsForPicker(ids){
+  const groups = new Map();
+  for(const id of [...ids].sort((a,b) => TD[a].name.localeCompare(TD[b].name))){
+    const reg = TD[id].reg; if(!groups.has(reg)) groups.set(reg,[]); groups.get(reg).push(id);
+  }
+  return [...groups].sort(([a],[b]) => a.localeCompare(b));
+}
 function roomUrl(){
   const u = new URL(location.href);
   u.search = u.hash = ''; // share only the campaign address, never unrelated URL parameters
-  u.searchParams.set('room',ROOM); // even default Classic invites must override the recipient’s last room
-  if(rules) u.searchParams.set('rules',rules);
+  u.searchParams.set('room',ROOM);
+  u.searchParams.set('rules',MASTERY_RULES);
   if(via) u.searchParams.set('via',via);
   if(FB_URL && via === 'firebase') u.searchParams.set('fb',FB_URL);
   if(via === 'mqtt' && relayPin) u.searchParams.set('relay',relayPin);
@@ -3062,15 +3131,15 @@ function renderModal(refreshBudget = true){
   if(M === 'room'){
     const canShare = canInvite();
     $('#modal').innerHTML = `<div class="modalbg"><div class="modal" role="dialog" aria-label="War Room">
-      <h2>${inMastery() ? 'Mastery' : 'Classic'} War Room · ${esc(ROOM)}</h2>${!landing && !badAddress ? `<div class="sm mut">Classic and Mastery keep separate armies. Switching views does not copy or start a campaign. <button class="btn sm" data-act="viewcampaign" ${busy ? 'disabled' : ''}>Open ${inMastery() ? 'Classic' : 'Mastery'} room</button></div>` : ''}
+      <h2>Mastery War Room · ${esc(ROOM)}</h2>
       <div class="sm mut">Source: <b>${esc(NET.transport)}</b>${canShare ? ` · Live · Revision #${S.rev}` : startingMap ? ' · Confirmed empty' : ` · ${esc(syncText())}`}</div>
       <div class="card sm" id="room-presence">${roomPresenceHtml()}</div>
       <div class="card sm"><h3>Invite friends</h3><div class="row"><input type="text" readonly id="roomlink" value="${canShare ? esc(roomUrl()) : ''}" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn pri sm" data-act="copyroom" ${canShare ? '' : 'disabled'}>Copy link</button></div><div class="mut sm" style="margin-top:6px">${canShare ? 'Share this exact link. It selects the same room, rules and data source on every device.' : 'Share the link once the saved campaign is live.'}</div></div>
-      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" value="${esc(ROOM)}" placeholder="room-code" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New MQTT Classic room</button></div></div>
+      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" value="${esc(ROOM)}" placeholder="room-code" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New Mastery room</button></div></div>
       <details class="card sm"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
         <div class="mut sm" style="margin:6px 0">Public relays can lose retained saves. Export a backup you want to keep. Selecting a Firebase database opens a different data source; it does not move or upload this campaign.</div>
         <div class="row" style="margin-bottom:8px"><input type="text" id="fbin" value="${esc(FB_URL)}" placeholder="https://your-app-default-rtdb.firebaseio.com" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn sm" data-act="savefb">Use</button>${FB_URL ? '<button class="btn sm" data-act="clearfb">Clear</button>' : ''}</div>
-        <div class="row"><button class="btn sm" data-act="exportstate" ${S ? '' : 'disabled'}>Export displayed save</button>${conflictCopy ? '<button class="btn sm" data-act="exportconflict">Export conflicting live copy</button>' : ''}${backup && (!S || !sameSave(backup,S,via === 'firebase')) ? '<button class="btn sm" data-act="exportbackup">Export cached backup</button>' : ''}${legacyBackup ? '<button class="btn sm" data-act="exportlegacy">Export prior local backup</button>' : ''}<button class="btn sm" data-act="importstate" ${S && myRole() === 'leader' && mode === 'live' && !classicWithRanks(S) ? '' : 'disabled'}>Import save JSON</button><button class="btn sm" data-act="reconnect">Reconnect</button></div>
+        <div class="row"><button class="btn sm" data-act="exportstate" ${S ? '' : 'disabled'}>Export confirmed save</button>${conflictCopy ? '<button class="btn sm" data-act="exportconflict">Export conflicting live copy</button>' : ''}${backup && !sameSave(backup,confirmed,via === 'firebase') ? '<button class="btn sm" data-act="exportbackup">Export cached backup</button>' : ''}${legacyBackup ? '<button class="btn sm" data-act="exportlegacy">Export prior local backup</button>' : ''}${preUpdateBackup ? '<button class="btn sm" data-act="exportv6">Export pre-update backup</button>' : ''}<button class="btn sm" data-act="importstate" ${S && myRole() === 'leader' && mode === 'live' ? '' : 'disabled'}>Import save JSON</button><button class="btn sm" data-act="reconnect">Reconnect</button></div>
         <div class="mut sm">A leader can restore a newer backup of this campaign with matching rules. Import never rolls a live room back.</div>
       </details>
       <div class="row"><button class="btn pri" data-act="closem">Done</button></div>
@@ -3096,17 +3165,20 @@ function renderModal(refreshBudget = true){
   }
   if(!M || M === 'join'){ $('#modal').innerHTML = ''; return; }
   const to = M.to, from = M.from;
-  if(S.win || !can(myRole(), M.mode) || (from && S.terr[from].o !== team) || (to && (M.mode === 'attack' ? S.terr[to].o === team : S.terr[to].o !== team))){ closeModal(); return; }
+  if(S.win || !team || !postCan(S.players[me.name], M.mode) || (from && S.terr[from].o !== team) || (to && (M.mode === 'attack' ? S.terr[to].o === team : S.terr[to].o !== team))){ closeModal(); return; }
   // A teammate can move/recruit/fight while the picker is open. Never preview or send absent units.
   if(from) for(const u of Object.keys(M.grp)){
     const available = S.terr[from].u[u] || 0;
     if(!available) delete M.grp[u]; else M.grp[u] = Math.min(M.grp[u], available);
   }
-  const srcs = M.mode === 'attack' ? (to ? ADJ[to].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0).map(n => n.id) : []) : (from ? ADJ[from].filter(n => S.terr[n.id].o === team).map(n => n.id) : []);
+  const srcs = M.mode === 'attack' ? (to ? attackSources(S,team) : []) : (from ? ADJ[from].filter(n => S.terr[n.id].o === team).map(n => n.id) : []);
   let h = `<div class="modalbg"><div class="modal" role="dialog" aria-label="Orders"><h2>${M.mode === 'attack' ? 'Attack' : 'Move units'}</h2>`;
   if(M.mode === 'attack'){
-    if(!to){ const targets = ADJ[from].filter(n => S.terr[n.id].o !== team); h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a target.</div><div class="pick">${targets.length ? targets.map(n => `<button data-act="mto" data-id="${n.id}"><b>${esc(TD[n.id].name)}</b><span class="mut sm">${S.terr[n.id].o === 'neutral' ? 'Neutral' : TEAMS[S.terr[n.id].o].name}${n.sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No enemy borders.</span>'}</div>`; }
-    else if(!from){ h += `<div class="sm mut">Target: <b>${esc(TD[to].name)}</b>. Choose where the attack launches from.</div><div class="pick">${srcs.map(id => `<button data-act="mfrom" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(id, to).sea ? ' · sea' : ''}</span></button>`).join('')}</div>`; }
+    if(!to || !from){
+      const targets = !to, ids = targets ? PROVINCES.filter(id => S.terr[id].o !== team) : srcs;
+      h += `<div class="sm mut">${targets ? 'From' : 'Target'}: <b>${esc(TD[from || to].name)}</b>. ${targets ? 'Choose any foreign province.' : 'Choose one of your garrisons.'}</div>
+        <label>${targets ? 'Target province' : 'Launching garrison'} <select data-chg="attackplace"><option value="">Select a province…</option>${regionsForPicker(ids).map(([reg,group]) => `<optgroup label="${esc(reg)}">${group.map(id => `<option value="${id}">${esc(TD[id].name)} · ${targets ? TEAMS[S.terr[id].o]?.short || 'Neutral' : total(S.terr[id].u)+' units'}</option>`).join('')}</optgroup>`).join('')}</select></label>`;
+    }
   }
   if(M.mode === 'move' && !to){ h += `<div class="sm mut">From <b>${esc(TD[from].name)}</b>. Choose a friendly neighbor.</div><div class="pick">${srcs.length ? srcs.map(id => `<button data-act="mto" data-id="${id}"><b>${esc(TD[id].name)}</b><span class="mut sm">${total(S.terr[id].u)} units${adjInfo(from, id).sea ? ' · sea' : ''}</span></button>`).join('') : '<span class="mut">No friendly neighbors.</span>'}</div>`; }
   let confirmAttrs = 'disabled';
@@ -3120,7 +3192,7 @@ function renderModal(refreshBudget = true){
       if(!sub.length) return '';
       return `<div class="divhdr">${DIVS[d]} Division</div>` + sub.map(u => `<div class="stepper" style="padding:3px 0"><span>${uname(u, team)} <span class="mut sm">of ${src.u[u]}</span></span><button class="btn sm" data-act="step" data-u="${u}" data-d="-1">−</button><span class="n">${grp[u] || 0}</span><button class="btn sm" data-act="step" data-u="${u}" data-d="1">+</button><button class="btn sm" data-act="step" data-u="${u}" data-d="max">All</button></div>`).join('');
     }).join('');
-    h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${adjInfo(from, to).sea ? ' · across water' : ''}</div><div>${stepperHtml}</div>`;
+    h += `<div class="sm mut"><b>${esc(TD[from].name)}</b> → <b>${esc(TD[to].name)}</b>${!attack && adjInfo(from,to)?.sea ? ' · across water' : ''}</div><div>${stepperHtml}</div>`;
     if(attack){
       const tact = Object.keys(TACT).filter(k => hasTech(S, team, TACT[k].req)); if(!tact.includes(M.tactic)) M.tactic = 'frontal';
       h += `<div><div class="sm mut" style="margin-bottom:4px">Tactic</div><div class="pick">${Object.keys(TACT).map(k => { const has = tact.includes(k), match = !TACT[k].units.length || TACT[k].units.some(u => grp[u] > 0); return `<button ${has ? '' : 'disabled'} style="${M.tactic === k ? 'border-color:var(--acc);background:var(--panel)' : ''}${has ? '' : ';opacity:.4'}" data-act="tactic" data-k="${k}"><b>${TACT[k].n}</b><span class="mut sm">${has ? (match ? TACT[k].d : 'Needs matching units.') : 'Research ' + TECH[TACT[k].req[0]].n + ' ' + TACT[k].req[1]}</span></button>`; }).join('')}</div></div>`;
@@ -3178,29 +3250,15 @@ document.addEventListener('click', e => {
   if(a === 'setdiv'){ ui[d.kind || 'div'] = d.d; renderPanel(); return; }
   if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
   if(a === 'zoomreset'){ setRegion('world'); return; }
-  if(a === 'resumeconfirmed' && landing && ambiguousBookmark && lastMastery) return navigate(previous.room,previous.rules,previous.via,previous.fb,previous.relay,previous.rev);
-  if(a === 'homecampaign' && (landing || badAddress)){
-    const next = d.k === 'mastery' ? MASTERY_RULES : '';
-    const room = $('#home-room').value.trim();
-    if(!validRoom(room)) return toast('Enter a room code (1–32 letters, numbers, hyphens or underscores).');
-    if(knownRoute && room === previous.room && next === previous.rules) return navigate(room,next,previous.via,previous.fb,previous.relay,previous.rev);
-    const fb = firebaseRoot(readPref('eot-fb:'+room));
-    return navigate(room,next,fb ? 'firebase' : '',fb);
-  }
+  if(a === 'homeroom' && badAddress) return navigate($('#home-room').value.trim());
   if(a === 'pickrelay' && mode === 'conflict'){
     const choice = relayChoices.find(c => c.id === d.id && c.rev);
-    if(choice) return navigate(ROOM,rules,'mqtt','',choice.id,Math.max(minRev,choice.rev),seed);
+    if(choice) return navigate(ROOM,'mqtt','',choice.id,Math.max(minRev,choice.rev));
     return;
   }
-  if(a === 'preparemastery') return prepareMastery();
-  if(a === 'startmastery') return startMastery();
-  if(a === 'joinmastery' && !busy) return switchRules(MASTERY_RULES);
-  if(a === 'classicroom' && !busy) return switchRules('');
+  if(a === 'applyupdate' && confirmed?.v === LEGACY_V) return act('applyupdate');
   if(a === 'switch'){ ui.confirmReset = null; M = 'join'; renderModal(); return; }
   if(a === 'room'){ M = 'room'; renderModal(); return; }
-  if(a === 'viewcampaign' && !busy && !landing && !badAddress){
-    tab = 'orders'; return navigate(ROOM, rules ? '' : MASTERY_RULES, via, FB_URL);
-  }
   if(a === 'copyroom'){
     if(!canInvite()) return;
     const u = roomUrl();
@@ -3212,45 +3270,48 @@ document.addEventListener('click', e => {
     const nr = $('#roomin').value.trim();
     if(!validRoom(nr)) return toast('Enter a valid room code. No room changed.');
     if(nr === ROOM) return closeModal();
-    if(backend === 'shared' && !rules) return toast('Shared Classic uses the workspace campaign. Use the other workspace’s invite.', 'bad');
     const fb = firebaseRoot(readPref('eot-fb:'+nr));
-    return navigate(nr,rules,fb ? 'firebase' : via === 'shared' ? 'shared' : 'mqtt',fb);
+    return navigate(nr,fb ? 'firebase' : via === 'shared' ? 'shared' : 'mqtt',fb);
   }
-  if(a === 'newroom') return navigate('war-'+Math.random().toString(36).slice(2,7),'','mqtt','','emqx');
+  if(a === 'newroom') return navigate('war-'+Math.random().toString(36).slice(2,7),'mqtt','','emqx');
   if(a === 'savefb'){
     const fb = firebaseRoot($('#fbin').value);
     if(!fb) return toast('Enter a valid HTTPS Firebase Realtime Database origin.', 'bad');
-    putPref('eot-fb:'+ROOM,fb); return navigate(ROOM,rules,'firebase',fb);
+    putPref('eot-fb:'+ROOM,fb); return navigate(ROOM,'firebase',fb);
   }
   if(a === 'clearfb'){
-    try{localStorage.removeItem('eot-fb:'+ROOM);}catch(_){} return navigate(ROOM,rules,'mqtt');
+    try{localStorage.removeItem('eot-fb:'+ROOM);}catch(_){} return navigate(ROOM,'mqtt');
   }
   if(a === 'reconnect'){ if(NET.reconnect) NET.reconnect(); toast('Reconnecting to war room…'); return; }
-  if(['exportstate','exportbackup','exportlegacy','exportconflict'].includes(a)){
-    const data = a === 'exportstate' ? S : a === 'exportbackup' ? backup : a === 'exportconflict' ? conflictCopy : legacyBackup; if(!data) return;
+  if(['exportstate','exportbackup','exportlegacy','exportv6','exportconflict'].includes(a)){
+    const data = a === 'exportstate' ? (confirmed || S) : a === 'exportbackup' ? backup : a === 'exportconflict' ? conflictCopy : a === 'exportv6' ? preUpdateBackup : legacyBackup; if(!data) return;
     const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-    const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob); a2.download = `eot-${ROOM}-${rules || 'classic'}-${a}-rev${data.rev}.json`; a2.click(); setTimeout(() => URL.revokeObjectURL(a2.href), 1000);
+    const a2 = document.createElement('a'); a2.href = URL.createObjectURL(blob); a2.download = `eot-${ROOM}-${MASTERY_RULES}-${a}-rev${data.rev}.json`; a2.click(); setTimeout(() => URL.revokeObjectURL(a2.href), 1000);
     return;
   }
   if(a === 'importstate'){
-    if(!S || !db || mode !== 'live' || myRole() !== 'leader' || classicWithRanks(S)) return toast('Only a leader in a writable live room can import a save.');
-    const store = db, beforeImport = S, who = {...me};
+    if(!S || !db || mode !== 'live' || myRole() !== 'leader') return toast('Only a leader in a writable live room can import a save.');
+    const store = db, beforeImport = confirmed || S, who = {...me};
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
     inp.onchange = async () => {
       const f = inp.files && inp.files[0]; if(!f) return;
       let importing = false;
       try{
-        const imp = JSON.parse(await f.text());
-        if(!validSave(imp) || !matchesRules(imp) || classicWithRanks(imp)) return toast('Invalid save, or the save belongs to different room rules.', 'bad');
+        let imp = JSON.parse(await f.text());
+        if(!validSave(imp) || !matchesRules(imp)) return toast('Invalid save, or the save belongs to different room rules.', 'bad');
         if(store !== db || mode !== 'live' || busy) return;
         importing = busy = true;
         const {ref, remote} = await lockedState(store);
         requireLive(store);
         const current = remote || beforeImport;
-        if(!remote && (inMastery() || !canStartEmpty())) throw Error('Empty room not confirmed.');
-        if(me.name !== who.name || me.ph !== who.ph || !validSave(current) || !matchesRules(current) || classicWithRanks(current) || !officerIn(current, who) || current.players[who.name].role !== 'leader') throw Error('Room or permissions changed.');
-        if(!sameSave(S,beforeImport,via === 'firebase') || (remote && !sameSave(beforeImport,remote,via === 'firebase'))) throw Error('The room changed. Review its latest revision before importing.');
+        if(!remote && !canStartEmpty()) throw Error('Empty room not confirmed.');
+        if(me.name !== who.name || me.ph !== who.ph || !validSave(current) || !matchesRules(current) || !officerIn(current, who) || current.players[who.name].role !== 'leader') throw Error('Room or permissions changed.');
+        if(!sameSave(confirmed || S,beforeImport,via === 'firebase') || (remote && !sameSave(beforeImport,remote,via === 'firebase'))) throw Error('The room changed. Review its latest revision before importing.');
         if(remote && (imp.created !== remote.created || imp.rev <= remote.rev)) throw Error('Use a newer backup of this campaign. Existing progress was not changed.');
+        if(imp.v === LEGACY_V){
+          if(remote?.v === GAME_V) throw Error('An older format cannot replace an updated campaign.');
+          imp = upgradeV6(imp,Date.now());
+        }
         imp.rev = nextRevision(imp.rev); imp.origin = TAB;
         settleCommand(imp);
         await ref.set(imp);
@@ -3266,24 +3327,25 @@ document.addEventListener('click', e => {
   if(a === 'pwgo'){
     const v = $('#pwin').value; if(!v.trim()) return;
     const n = PWASK, joined = bootId; const btn = e.target.closest('button'); if(btn) btn.disabled = true;
-    return pwHash(n, v).then(async h => {
+    const saltName = S?.players[n]?.pw === DHRUV_VERIFIER ? 'Dhruv' : n;
+    return pwHash(saltName, v).then(async h => {
       const exp = expectedPw(n);
       if(h !== exp && n === 'Titli'){ const h2 = await pwHash(atob('VGl0bGkgR29ydQ=='), v); if(h2 === exp) h = h2; }
       if(joined !== bootId || PWASK !== n || !S?.players[n] || expectedPw(n) !== exp) return;
       if(h === exp){ frontWatch?.depart(); me.name = n; me.ph = h; PWASK = null; PWERR = ''; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} M = null; NET.announce(); renderAll(); }
-      else { await sleep(1200); PWERR = 'Wrong password.'; renderModal(); }
+      else { await sleep(1200); if(joined === bootId && PWASK === n){ PWERR = 'Wrong password.'; renderModal(); } }
     }).catch(() => { PWERR = 'This browser cannot check passwords.'; renderModal(); });
   }
   if(a === 'spectate'){ frontWatch?.depart(); me.name = '__spectator'; me.ph = null; try{ localStorage.setItem('eot-me', me.name); localStorage.removeItem('eot-ph'); }catch(_){} PWASK = null; M = null; NET.announce(); renderAll(); return; }
   if(a === 'closem'){ closeModal(); renderAll(); return; }
   if(!S) return;
   if(a === 'open'){ const team = myTeam(); if(d.m === 'move') M = {mode:'move', from:sel, to:null, grp:{}, tactic:'frontal'}; else M = d.to ? {mode:'attack', from:null, to:d.to, grp:{}, tactic:'frontal'} : {mode:'attack', from:sel, to:null, grp:{}, tactic:'frontal'};
-    if(M.mode === 'attack' && M.to){ const best = ADJ[M.to].filter(n => S.terr[n.id].o === team && total(S.terr[n.id].u) > 0).map(n => n.id).sort((x, y) => total(S.terr[y].u) - total(S.terr[x].u)); if(best.length === 1){ M.from = best[0]; } } renderModal(); return; }
+    if(M.mode === 'attack' && M.to){ const best = attackSources(S,team); if(best.length === 1){ M.from = best[0]; } } renderModal(); return; }
   if(a === 'mto'){ M.to = d.id; renderModal(); return; }
   if(a === 'mfrom'){ M.from = d.id; renderModal(); return; }
   if(a === 'step'){ const u = d.u, have = S.terr[M.from].u[u] || 0; let v = M.grp[u] || 0; v = d.d === 'max' ? have : Math.max(0, Math.min(have, v + +d.d)); if(v) M.grp[u] = v; else delete M.grp[u]; renderModal(); return; }
   if(a === 'tactic'){ M.tactic = d.k; renderModal(); return; }
-  if(a === 'confirm'){ act(M.mode, {from:M.from, to:M.to, grp:clone(M.grp), tactic:M.tactic}); return; }
+  if(a === 'confirm') return act(M.mode, {from:M.from, to:M.to, grp:clone(M.grp), tactic:M.tactic});
   if(a === 'recruit') return act('recruit', {tid:sel, unit:d.u, n:+d.n, quote:displayedQuote(d)});
   if(a === 'fort') return act('fort', {tid:sel, rank:+d.rank, quote:displayedQuote(d)});
   if(a === 'stance') return act('stance', {tid:sel, st:d.k});
@@ -3295,8 +3357,19 @@ document.addEventListener('click', e => {
   if(a === 'propose'){ if(d.type === 'ceasefire') return act('propose', {type:'ceasefire', mins:+d.mins}); return act('propose', {type:'trade', give:{r:ui.trade.give, n:+ui.trade.gn}, get:{r:ui.trade.get, n:+ui.trade.wn}}); }
   if(a === 'answer') return act('answer', {id:+d.id, accept:!!d.accept, cancel:!!d.cancel});
   if(a === 'breakpact') return act('breakpact');
+  if(a === 'attackseat') return act('setrole', {name:d.n,attackSeat:d.grant === '1'});
   if(a === 'remove') return act('remove', {name:d.n});
-  if(a === 'enlist'){ const n = $('#enl').value.trim(), t = $('#enlt').value, pw = $('#enlpw').value; if(!n || pw.length < 6) return toast('Enter a name and a password of at least 6 characters.', 'bad'); return pwHash(n, pw).then(h => act('enlist', {name:n, team:t, pw:h}).then(() => { if(S.players[n] && S.players[n].pw === h && (!S.players[me.name] || !authed())){ me.name = n; me.ph = h; try{ localStorage.setItem('eot-me', n); localStorage.setItem('eot-ph', h); }catch(_){} NET.announce(); renderAll(); } })); }
+  if(a === 'enlist'){
+    const n = $('#enl').value.trim(), t = $('#enlt').value, pw = $('#enlpw').value;
+    if(!n || n.length > 30 || pw.length < 6) return toast('Enter a name (up to 30 characters) and a password of at least 6 characters.', 'bad');
+    const store = db, epoch = authorityEpoch, created = S.created, who = {...me};
+    return pwHash(n,pw).then(async h => {
+      if(store !== db || epoch !== authorityEpoch || !liveBoard() || created !== S.created || who.name !== me.name || who.ph !== me.ph) return;
+      await act('enlist',{name:n,team:t,pw:h});
+      if(store !== db || epoch !== authorityEpoch || !liveBoard() || S.players[n]?.pw !== h || who.name !== me.name || who.ph !== me.ph || (S.players[me.name] && authed())) return;
+      me.name = n; me.ph = h; try{ localStorage.setItem('eot-me',n); localStorage.setItem('eot-ph',h); }catch(_){} NET.announce(); renderAll();
+    }).catch(() => toast('Could not complete enlistment. Check the live roster before retrying.','bad'));
+  }
   if(a === 'reset'){
     if(ui.confirmReset !== S){ ui.confirmReset = S; renderPanel(); return; }
     ui.confirmReset = null; return act('reset', {rev:S.rev, origin:S.origin, created:S.created});
@@ -3321,6 +3394,7 @@ document.addEventListener('change', e => {
   if(k === 'masteryunit' && unitsFor(myTeam() || 'reich').includes(el.value)){
     ui.masteryUnit = el.value; renderPanel(); $('#mastery-unit').focus({preventScroll:true}); return;
   }
+  if(k === 'attackplace' && M?.mode === 'attack' && Object.hasOwn(TD,el.value)){ if(!M.to) M.to = el.value; else if(!M.from) M.from = el.value; renderModal(); return; }
   if(k === 'give' || k === 'get') ui.trade[k] = el.value; else if(k === 'gn' || k === 'wn') ui.trade[k] = +el.value;
   else if(k === 'role') act('setrole', {name:el.dataset.n, role:el.value}); else if(k === 'title') act('setrole', {name:el.dataset.n, title:el.value});
 });
@@ -3345,17 +3419,17 @@ for(const event of ['pointerdown','pointermove','keydown','wheel','click','input
 window.addEventListener('pagehide', () => { pageAway = true; checkIdle(); });
 let networkOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
 function showOffline(){ pauseRoom('local'); NET.status = 'off'; NET.transport = 'Device offline'; renderAll(); }
-function verifyOnReturn(){ if(!landing && !badAddress){ if(networkOffline) showOffline(); else NET.reconnect?.(); } }
+function verifyOnReturn(){ if(!badAddress){ if(networkOffline) showOffline(); else NET.reconnect?.(); } }
 window.addEventListener('storage',e => {
   if(cacheKey && e.key === 'eot-live-state:'+cacheKey && e.newValue){
     refreshBackup();
-    if(backup && (!S || backup.rev > S.rev || divergent(S,backup))){
+    if(backup && (!confirmed || backup.rev > confirmed.rev || divergent(confirmed,backup))){
       // Don't tear down a healthy socket just before its copy of the same packet arrives.
       pauseRoom('waiting'); waitReason = `Another tab has revision ${backup.rev}. Waiting for this source to confirm it.`; renderAll();
     }
   }
 });
-window.addEventListener('offline',() => { networkOffline = true; if(!landing && !badAddress) showOffline(); });
+window.addEventListener('offline',() => { networkOffline = true; if(!badAddress) showOffline(); });
 window.addEventListener('online',() => { networkOffline = false; verifyOnReturn(); });
 window.addEventListener('pageshow', e => { if(pageAway || e.persisted){ pageAway = false; noteInput(); verifyOnReturn(); } });
 let hiddenAt = null;
@@ -3365,7 +3439,7 @@ document.addEventListener('visibilitychange',() => {
 });
 setInterval(() => frontWatch?.poll(), MUSTER_MS);
 /* clock: live resource display and delayed domination check */
-setInterval(() => { checkIdle(); if(!S) return; renderHud(); updateFrontClock(); if(mode === 'live' && S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
+setInterval(() => { checkIdle(); if(!S) return; renderHud(); updateFrontClock(); if(mode === 'live' && confirmed?.v === GAME_V && S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {}); }, 1000);
 setInterval(() => { if(S && tab === 'council' && ui.councilView === 'posts') { const el = document.activeElement; if(!(el && el.matches && el.matches('input,select'))) renderPanel(); } }, 5000);
 
 buildBase(); setVB(); renderMapnav();

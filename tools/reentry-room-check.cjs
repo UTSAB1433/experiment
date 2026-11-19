@@ -10,6 +10,8 @@ module.exports = async function reentry({origin, context, brokers, fixture, publ
     other = structuredClone(starting);
   const wall = starting.t;
   const address = origin + '/index.html?room=' + code;
+  starting.v = 6;
+  delete starting.ruleset;
   starting.rev = 920;
   starting.teams.dawn.res.oil = 12003;
   starting.terr.BUC.u = {bd_init: 700};
@@ -50,15 +52,9 @@ module.exports = async function reentry({origin, context, brokers, fixture, publ
   try {
     const phone = await mobile.newPage(),
       friend = await desktop.newPage();
-    await phone.goto(origin + '/');
-    const choose = phone.getByRole('button', {name: 'Open Mastery', exact: true});
-    await choose.waitFor();
-    const button = await choose.boundingBox();
-    assert.ok(button && button.y < 844, 'first-visit choice visible without scrolling on a phone');
-    await phone.goto(address + '&via=mqtt&relay=emqx');
-    await check(phone, 920, 12003, 700);
-    await by(phone, 'room').click();
-    await by(phone, 'viewcampaign').click();
+    // Untagged v6 bookmark: discover this code's Mastery relays, don't apply the
+    // old revision floor or show the old garrison, even briefly.
+    await phone.goto(address + '&via=mqtt&relay=emqx&rev=920');
     await by(phone, 'pickrelay').waitFor(); // a high but divergent revision is not a winner
     assert.equal(await phone.locator('#map .node').count(), 0);
     assert.equal(await phone.locator('#hud .v').count(), 0);
@@ -70,8 +66,8 @@ module.exports = async function reentry({origin, context, brokers, fixture, publ
     assert.equal(new URL(invite).searchParams.get('rev'), '81');
     await phone.close();
     // Even another device with a different most recent campaign must obey the qualified invite.
-    await friend.goto(address + '&via=mqtt&relay=emqx');
-    await check(friend, 920, 12003, 700);
+    await friend.goto(address + '&rules=mastery-1&via=mqtt&relay=mosquitto');
+    await check(friend, 990, 50001, 83);
     await friend.goto(invite);
     await check(friend, 81, 43, 15);
     assert.deepEqual(changes(), []);
@@ -97,10 +93,9 @@ module.exports = async function reentry({origin, context, brokers, fixture, publ
     await check(returning, 82, 40, 16);
     assert.equal(await returning.locator('#tabs .on').textContent(), 'Orders');
     await returning.goto(address);
-    await by(returning, 'resumeconfirmed').click();
     await check(returning, 82, 40, 16);
     await returning.goto(address + '&via=mqtt&relay=emqx');
-    await check(returning, 920, 12003, 700);
+    await check(returning, 82, 40, 16);
     assert.deepEqual(
       changes(),
       [{topic: mastery, rev: 82}],
