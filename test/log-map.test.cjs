@@ -13,7 +13,7 @@ const {
 const copy = structuredClone;
 let roll = 0.5;
 const {game: g} = launch({
-  script: inspect(['logMessageHtml', 'advanceFront', 'drillCap', 'COUNTRIES', 'validSave']),
+  script: inspect(['logMessageHtml', 'advanceFront', 'drillCap', 'COUNTRY_IDS', 'COUNTRIES', 'validSave']),
   random: () => roll,
   timers: {setInterval() {}, setTimeout() {}}
 });
@@ -78,6 +78,22 @@ test('expedition and resistance dispatches link countries to the battle, not a h
     links(
       g.logMessageHtml({
         kind: 'front',
+        country: 'SGP',
+        tid: 'SUM',
+        from: 'SIN',
+        msg: 'Singapore captured Sumatra from Dawn. Border counterattack from Singapore: 10 sent, 2 lost; 1 defenders lost.'
+      })
+    ),
+    [
+      ['SUM', 'Singapore'],
+      ['SUM', 'Sumatra'],
+      ['SIN', 'Singapore']
+    ]
+  );
+  assert.deepEqual(
+    links(
+      g.logMessageHtml({
+        kind: 'front',
         country: 'PER',
         tid: 'PER',
         msg: 'Peru was repelled by Brazil trying to reclaim its capital, Lima. Local resistance: 6 sent, 3 lost; 1 defenders lost.'
@@ -122,10 +138,10 @@ test('expedition and resistance dispatches link countries to the battle, not a h
 
 test('a new quiet-turn report snapshots only affected countries, prioritizing real resistance or garrison sites', () => {
   const s = saved(20);
-  for (const c of Object.values(g.COUNTRIES)) for (const id of c.homes) s.terr[id].o = 'neutral';
+  for (const k of g.COUNTRY_IDS) for (const id of g.COUNTRIES[k].homes) s.terr[id].o = 'neutral';
   s.terr.ICE.o = 'dawn'; // no Icelandic source army; resistance recruits in the occupied capital
   // Saturate every held garrison but drain a non-capital. No drill at the rank cap.
-  const full = Object.fromEntries(Object.keys(g.COUNTRIES).map(k => [k, g.drillCap(k)]));
+  const full = Object.fromEntries(g.COUNTRY_IDS.map(k => [k, g.drillCap(k)]));
   s.front = {turn: 10, at: now - 90000, drill: full};
   for (const t of Object.values(s.terr))
     if (t.o === 'neutral') t.u = {inf: 100, arm: 100, air: 100, art: 100, nav: 100};

@@ -30,6 +30,7 @@ const g = launch({
   ]),
   timers: {setTimeout() {}, setInterval() {}}
 }).game;
+const oldBoard = require('../test-support/historical-board.cjs');
 const copy = structuredClone;
 const same = (a, b) => assert.deepEqual(copy(a), copy(b));
 function connect(st, identity, options = {}) {
@@ -56,7 +57,7 @@ const officer = st => {
 };
 
 test('Nigeria is the Dawn HQ on a fresh map and in victory checks; Bucharest remains a national capital', () => {
-  const s = g.newGame(now);
+  const s = oldBoard(g, now);
   assert.equal(s.v, 7);
   assert.equal(s.ruleset, 'mastery-1');
   assert.ok(g.validSave(s));
@@ -78,16 +79,16 @@ test('Nigeria is the Dawn HQ on a fresh map and in victory checks; Bucharest rem
   g.checkWin(s, now);
   assert.equal(s.win.why, 'Nigeria has fallen.');
   assert.equal(s.win.team, 'reich');
-  const other = g.newGame(now);
+  const other = oldBoard(g, now);
   other.terr.BER.o = 'dawn';
   g.checkWin(other, now);
   assert.equal(other.win.team, 'dawn');
 });
 
-test('new rooms start with exactly the two HQ garrisons; other provinces have local neutral defenders', () => {
-  const s = g.newGame(now),
-    oldOpening = g.newGame(now, false);
-  assert.deepEqual(Object.keys(s.terr).sort(), Object.keys(g.TD).sort());
+test('v7 capital-start rooms retain exactly the two HQ garrisons; other provinces have local neutral defenders', () => {
+  const s = oldBoard(g, now),
+    oldOpening = oldBoard(g, now, false);
+  assert.deepEqual(Object.keys(s.terr).sort(), Object.keys(oldOpening.terr).sort());
   assert.equal(Object.keys(s.terr).length, 147);
   for (const [id, t] of Object.entries(s.terr)) {
     if (id === 'BER' || id === 'NIG') {
@@ -122,7 +123,7 @@ test('new rooms start with exactly the two HQ garrisons; other provinces have lo
 });
 
 test('the original room opening, not its current borders, determines expansion pace and an explicit reset', () => {
-  const fresh = g.newGame(now),
+  const fresh = oldBoard(g, now),
     old = saved(32);
   const expectedFresh = copy(fresh.terr),
     expectedOld = copy(old.terr);
@@ -270,10 +271,10 @@ test('over-cap v6 appointments are normalized deterministically without removing
   same(g.seats(next.players, 'reich'), {chiefs: 4, attackers: 4, leaders: 1});
   for (const k of ['Extra', 'Another']) same(next.players[k], {...s.players[k], role: 'soldier'});
   assert.equal(next.players.DEB.role, 'leader');
-  assert.equal(next.players.Dhruv.role, 'soldier');
+  assert.equal(next.players.Dhruv, undefined);
 });
 
-test('Dhruv uses a distinct Reich post when his name is already taken, without changing either existing login', async t => {
+test('upgrading never adds a default account or changes either existing login', async t => {
   mockTime(t);
   const raw = legacySaved(32),
     pw = 'Synthetic existing login',
@@ -287,8 +288,8 @@ test('Dhruv uses a distinct Reich post when his name is already taken, without c
   const st = tab.game.S;
   same(st.players.Dhruv, raw.players.Dhruv);
   same(st.players['Dhruv (Reich)'], raw.players['Dhruv (Reich)']);
-  same(st.players['Dhruv (Reich 2)'], g.newGame(now).players.Dhruv);
-  assert.match(tab.$('#modal').innerHTML, /data-n="Dhruv \(Reich 2\)"/);
+  assert.equal(st.players['Dhruv (Reich 2)'], undefined);
+  assert.doesNotMatch(tab.$('#modal').innerHTML, /data-n="Dhruv \(Reich 2\)"/);
   tab.click('join', {n: 'Dhruv'});
   tab.$('#pwin').value = pw;
   await tab.click('pwgo');

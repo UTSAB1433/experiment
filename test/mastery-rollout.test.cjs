@@ -22,6 +22,7 @@ const {
   checkReadOnly,
   purchaseRoom
 } = require('../test-support/war-room.cjs');
+const {firebase, prune, filePicker} = require('../test-support/document-room.cjs');
 const MP = 'lands-eot/v1/' + masterWire + '/';
 const identity = {name: 'Fixture officer', ph: 'room-fixture'};
 const officer = st => {
@@ -47,47 +48,12 @@ function targetRelay(tab, i = 0) {
   return live;
 }
 
-// A minimal RTDB emulator: null/empty children are pruned and compare-and-set uses an ETag.
-function prune(v) {
-  if (v == null || typeof v !== 'object') return v;
-  if (Array.isArray(v)) return v.length ? Array.from(v, prune) : null;
-  const out = Object.fromEntries(
-    Object.entries(v)
-      .map(([k, x]) => [k, prune(x)])
-      .filter(([, x]) => x != null)
-  );
-  return Object.keys(out).length ? out : null;
-}
-function firebase(st, conflict) {
-  const classic = '/eot-rooms/' + room + '/state.json',
-    target = '/eot-rooms/' + encodeURIComponent(masterWire) + '/state.json';
-  const records = new Map([[classic, prune(st)]]),
-    calls = [];
-  let contended = conflict;
-  const fetch = async (url, o = {}) => {
-    const k = new URL(url).pathname,
-      record = records.get(k) || null,
-      tag = record ? '"' + record.rev + '"' : '"null_etag"';
-    calls.push({k, ...o});
-    if (o.method === 'PUT') {
-      if (k === target && contended) {
-        contended = false;
-        records.set(k, prune(officer(masterySaved(100))));
-        return {ok: false, status: 412};
-      }
-      if (o.headers?.['if-match'] && o.headers['if-match'] !== tag) return {ok: false, status: 412};
-      records.set(k, prune(JSON.parse(o.body)));
-    }
-    return {ok: true, json: async () => structuredClone(record), headers: {get: () => tag}};
-  };
-  return {fetch, classic, target, records, calls};
-}
 for (const conflict of [false, true])
   test(`Firebase v6 upgrade: ${conflict ? '412 keeps a concurrent game' : 'conditional write preserves pruned data'}; Classic untouched`, async t => {
     mockTime(t);
     const archive = legacySaved(543);
     delete archive.ruleset;
-    const f = firebase(archive, conflict),
+    const f = firebase(archive, conflict && officer(masterySaved(100))),
       old = officer(legacySaved(54));
     old.terr.LOR.u = {};
     f.records.set(f.target, prune(old));
@@ -299,25 +265,6 @@ test('changing backend never copies a room; MQTT and Firebase Mastery caches and
   checkReadOnly(tab);
 });
 
-function filePicker(tab) {
-  const create = tab.document.createElement;
-  let input;
-  tab.document.createElement = tag => {
-    const el = create(tag);
-    if (tag === 'input')
-      el.click = () => {
-        input = el;
-      };
-    return el;
-  };
-  return data => {
-    input = null;
-    tab.click('importstate');
-    if (!input) return null;
-    input.files = [{text: async () => JSON.stringify(data)}];
-    return input.onchange();
-  };
-}
 test('backup imports reject old/equal revisions, a different campaign or rules, unreadable data and a racing update; only a newer matching backup is written', async t => {
   mockTime(t);
   const st = masterySaved(110),

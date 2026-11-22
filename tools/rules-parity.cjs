@@ -43,7 +43,7 @@ const officer = team => (team === 'reich' ? 'Sattyaki' : 'Anish');
 const st = old.newGame(now),
   random = rng(seed);
 const initial = asPersonal(structuredClone(st)),
-  actual = structuredClone(next.newGame(now, false)); // compare the retained historical layout, not a new room
+  actual = structuredClone(require('../test-support/historical-board.cjs')(next,now,false)); // compare the retained historical layout, not a new room
 // Only the HQ-specific bonuses move; the two provinces retain their own base garrisons.
 for (const u of ['bd_mant', 'bd_rave', 'bd_obsv', 'bd_whis', 'bd_fact']) {
   const old = initial.terr.NIG.u[u];

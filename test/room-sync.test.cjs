@@ -47,7 +47,7 @@ function checkBoard(tab, st) {
   assert.equal(tab.game.S.terr.BUC.u.bd_init, st.terr.BUC.u.bd_init);
 }
 
-test('old 12k-oil Classic and stale Mastery caches never flash; home resumes the confirmed army, and an archived link never plays Classic', t => {
+test('old 12k-oil Classic and stale Mastery caches never flash; the home shortcut resumes the confirmed army, and an archived link never plays Classic', t => {
   mockTime(t);
   const old = board(legacySaved, 800, 12765, 802),
     real = board(masterySaved, 62, 71, 27),
@@ -68,6 +68,8 @@ test('old 12k-oil Classic and stale Mastery caches never flash; home resumes the
   assert.ok(!invite.searchParams.has('unrelated') && !invite.hash);
   const returning = launch({storage, url: home, identity: who});
   noBoard(returning);
+  assert.equal(returning.sockets.length, 0);
+  returning.click('resume');
   assert.deepEqual(
     returning.sockets.map(s => new URL(s.url).hostname),
     ['broker.hivemq.com']
@@ -103,17 +105,22 @@ test('old 12k-oil Classic and stale Mastery caches never flash; home resumes the
   const later = board(masterySaved, 64, 20, 21);
   returning.sockets[0].message('state', later);
   const nextHome = launch({storage, url: home});
+  nextHome.click('resume');
   assert.match(nextHome.sockets[0].url, /emqx/);
   for (const tab of [first, returning, friend, ambiguous, back, nextHome]) checkReadOnly(tab);
   assert.equal(storage.get('eot-live-state:friends'), JSON.stringify(old));
   assert.equal(storage.get('eot-live-state:friends:' + RULES + '|mqtt'), JSON.stringify(stale));
 });
 
-test('no remembered room or a malformed preference opens Mastery; unknown invite addresses fail closed, without touching the last good route', t => {
+test('no remembered room or a malformed preference opens the room chooser; unknown invite addresses fail closed, without touching the last good route', t => {
   mockTime(t);
   const storage = new Map([['eot-last-room:v1:/game', '?room=wrong&via=ftp&rev=550']]);
   const empty = launch({storage, url: home});
   noBoard(empty);
+  assert.equal(empty.sockets.length, 0);
+  assert.match(empty.$('#entry').innerHTML, /Join with a code/);
+  empty.$('#home-code').value = 'friends';
+  empty.dispatch('submit', {target: {dataset: {form: 'joincode'}}, preventDefault() {}});
   assert.equal(empty.sockets.length, 3);
   assert.doesNotMatch(text(empty.$('#panel')), /Which campaign|Classic/);
   const [a, b, c] = empty.sockets;
@@ -143,7 +150,7 @@ test('no remembered room or a malformed preference opens Mastery; unknown invite
     checkReadOnly(tab);
   }
   const fresh = launch({storage: new Map([['eot-last-room:v1:/other', last]]), url: home});
-  assert.equal(fresh.sockets.length, 3);
+  assert.equal(fresh.sockets.length, 0);
   assert.equal(storage.get('eot-last-room:v1:/game'), last);
   checkReadOnly(empty);
 });

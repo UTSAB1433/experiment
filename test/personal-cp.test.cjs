@@ -1,3 +1,4 @@
+const historicalBoard = require('../test-support/historical-board.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
@@ -26,7 +27,7 @@ const balances = s => Object.fromEntries(Object.entries(s.players).map(([n, p]) 
 
 // Exercise the real income clock, including when other orders split a refill into many small ticks.
 test('every post starts at 10 and earns exactly one spendable CP per 30 seconds, without faction modifiers or overflow', () => {
-  const s = g.newGame(now);
+  const s = historicalBoard(g, now);
   Object.assign(s.terr.NIG.u, {bd_silv: 10, bd_csha: 10, bd_hera: 10, bd_hier: 1});
   assert.ok(Object.values(s.players).every(p => p.cp === 10));
   assert.ok(Object.values(s.teams).every(t => !('cp' in t)));
@@ -65,7 +66,7 @@ test('each priced order checks and charges its issuer, never borrowing a teammat
     ['propose', 1, {type: 'ceasefire', mins: 60}]
   ];
   for (const [order, cost, payload] of methods) {
-    const s = g.newGame(now);
+    const s = historicalBoard(g, now);
     s.teams.reich.tech.intel = 4;
     s.teams.reich.res.gold = 1000;
     s.terr.RIO = {o: 'reich', u: {inf: 5}, f: 0, st: 'bunker'};
@@ -97,7 +98,7 @@ test('a successful honeytrap or decapitation affects at most one enemy post and 
     ['decap', 4, 6]
   ]) {
     for (const available of [10, 1.25, 0.5]) {
-      const s = g.newGame(now);
+      const s = historicalBoard(g, now);
       s.teams.reich.tech.intel = 4;
       s.teams.reich.res.gold = 100;
       for (const p of Object.values(s.players)) if (p.team === 'dawn') p.cp = available;
@@ -117,7 +118,7 @@ test('a successful honeytrap or decapitation affects at most one enemy post and 
 });
 
 test('new enlistees get a fresh budget, role changes keep it and a new war resets CP without resetting identities', () => {
-  const s = g.newGame(now);
+  const s = historicalBoard(g, now);
   s.ruleset = 'mastery-1';
   const later = now + 300000;
   g.tick(s, later);

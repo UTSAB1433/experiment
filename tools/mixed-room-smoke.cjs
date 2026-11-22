@@ -12,6 +12,7 @@ const binary = require('@sparticuz/chromium');
 const {factory} = require('../test-support/war-room.cjs');
 const html = fs.readFileSync(join(__dirname, '../index.html'));
 const currentOnly =
+  process.env.EOT_ONLY_LOBBY ||
   process.env.EOT_ONLY_FRONT ||
   process.env.EOT_ONLY_REENTRY ||
   process.env.EOT_ONLY_COMMAND ||
@@ -46,7 +47,7 @@ for (const b of brokers)
 const to = 'LOR',
   from = factory.ADJ[to].find(n => !n.sea).id;
 function fixture() {
-  const st = factory.newGame(Date.now(), false); // historical board shared by the saved-room and v6 scenarios
+  const st = require('../test-support/historical-board.cjs')(factory, Date.now(), false); // historical board shared by the saved-room and v6 scenarios
   st.rev = 80;
   st.players.Utkarsh.role = 'soldier'; // make room for the synthetic Reich chief
   for (const team of ['reich', 'dawn']) {
@@ -146,6 +147,11 @@ const battle = p =>
       ctx.on('page', p => p.on('pageerror', e => errors.push(e.message)));
       return ctx;
     }
+    if (process.env.EOT_ONLY_LOBBY || !currentOnly) {
+      await require('./lobby-room-check.cjs')({origin, context, writes, latest, publish});
+      assert.deepEqual(errors, []);
+      if (process.env.EOT_ONLY_LOBBY) return;
+    }
     const worldFront = () =>
       require('./front-room-check.cjs')({origin, context, brokers, fixture, publish, latest, writes, live});
     if (process.env.EOT_ONLY_FRONT) {
@@ -188,16 +194,9 @@ const battle = p =>
     assert.equal(await old.evaluate(() => window.__eot.S.v), 6);
     assert.equal(await old.evaluate(() => window.__eot.S.terr.NIG.o), 'reich');
     assert.equal(await dawn.evaluate(() => window.__eot.S.terr.NIG.o), 'dawn');
-    // Long officer lists must not flex-shrink the Council view switch out of reach.
     await click(dawn, 'tab', '[data-k="council"]');
-    await click(dawn, 'councilview', '[data-k="hierarchy"]');
-    assert.equal(await dawn.locator('.charter-seats li h4').count(), 8);
-    assert.match(await dawn.locator('.charter-authority').textContent(), /equal deputy status/);
-    await dawn.setViewportSize({width: 320, height: 844});
-    assert.ok(await dawn.locator('#panel').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
-    await dawn.getByRole('button', {name: 'Posts & field duty'}).focus();
-    await dawn.keyboard.press('Enter');
     assert.equal(await dawn.locator('.council-roster').count(), 2);
+    assert.doesNotMatch(await dawn.locator('#panel').textContent(), /Legate|Black Dawn hierarchy/);
     await dawn.setViewportSize({width: 1440, height: 900});
     assert.equal(writes.length, mixedChangesStart);
     await research(dawn);
@@ -208,9 +207,8 @@ const battle = p =>
     assert.equal(continued.v, 7);
     assert.equal(continued.terr.NIG.o, 'dawn');
     assert.equal(continued.terr.BER.u.inf, original.terr.BER.u.inf + 21);
-    assert.equal(continued.players.Dhruv.team, 'reich');
-    for (const [n, p] of Object.entries(continued.players))
-      assert.ok(p.cp >= (n === 'Dhruv' ? 10 : original.teams[p.team].cp));
+    assert.equal(continued.players.Dhruv, undefined);
+    for (const p of Object.values(continued.players)) assert.ok(p.cp >= original.teams[p.team].cp);
     assert.ok(Object.values(continued.teams).every(side => !('cp' in side)));
     await old.waitForFunction(() => document.querySelector('#banner').textContent.includes('Incompatible'));
     await old.evaluate(() => window.__eot.act('contribute', {kind: 'prospect'}));

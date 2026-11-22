@@ -93,7 +93,7 @@ test('broker silence never retains a cache or new game; a late verified snapshot
   }
 });
 
-test('an empty room is playable: only the first explicit order persists the starting map', async t => {
+test('an unknown code cannot be claimed by visiting, spectating or issuing a legacy enlistment order', async t => {
   mockTime(t);
   const tab = launch({cached:'{broken'}); tab.sockets.forEach(s => s.subscribe());
   t.mock.timers.tick(650); checkReadOnly(tab);
@@ -103,12 +103,12 @@ test('an empty room is playable: only the first explicit order persists the star
   const preview = structuredClone(tab.game.S.terr);
   const held = team => Object.keys(preview).filter(id => preview[id].o === team);
   assert.deepEqual(held('reich'), ['BER']); assert.deepEqual(held('dawn'), ['NIG']);
-  assert.equal(held('neutral').length, 145); checkReadOnly(tab);
+  assert.equal(held('neutral').length, 199); checkReadOnly(tab);
   const order = tab.game.act('enlist', enlist); await finishOrder(t,order);
   assert.deepEqual(structuredClone(tab.game.S.terr), preview);
   assert.equal(tab.game.S.capitalStart, true);
-  assert.equal(tab.game.S.rev, 2); assert.ok(tab.game.S.players[enlist.name]);
-  assert.equal(publications(tab.sockets[0]).filter(p => p.retain).length, 1);
+  assert.equal(tab.game.S.rev, 1); assert.deepEqual(Object.keys(tab.game.S.players),[]);
+  assert.match(tab.$('#entry').innerHTML,/Room not found/); checkReadOnly(tab);
 });
 
 test('manual retry and room changes cancel pending probes, handlers and retry timers', t => {
@@ -335,7 +335,7 @@ test('mastery is read-only for soldiers; an order cannot override a concurrent p
 
 // Compare the actual combat resolver with identical rolls, not just the values on the cards.
 function skirmish({team='reich', foe='neutral', grp={inf:1000}, garrison={inf:1000}, study={}, enemyStudy={}, tactic='frontal', to='LOR'} = {}){
-  const st = factory.newGame(now), from = factory.ADJ[to].find(n => !n.sea).id;
+  const st = require('../test-support/historical-board.cjs')(factory,now), from = factory.ADJ[to].find(n => !n.sea).id;
   st.terr[from] = {o:team, u:{...grp}, f:0, st:'bunker'}; st.terr[to] = {o:foe, u:{...garrison}, f:0, st:'bunker'};
   Object.assign(st.teams[team].tech, {inf:2, art:2, arm:2, air:2}); st.teams[team].res.oil = 10000;
   st.teams[team].mastery = study; if(foe !== 'neutral') st.teams[foe].mastery = enemyStudy;
