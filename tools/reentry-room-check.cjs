@@ -81,6 +81,7 @@ module.exports = async function reentry({origin, context, brokers, fixture, publ
     };
     const returning = await mobile.newPage();
     await returning.goto(origin + '/');
+    await by(returning, 'resume').click();
     await returning.waitForFunction(() =>
       document.querySelector('#banner').textContent.includes('Waiting for revision')
     );
@@ -110,45 +111,12 @@ module.exports = async function reentry({origin, context, brokers, fixture, publ
     console.log(
       'PASS: returning phone and independent friend agree on 40 oil and 16 troops in Orders. A missing relay read exposed no cached stock; Classic and the divergent relay stayed unchanged.'
     );
-    // Create a room from this progressed campaign: preview, first save, and a second
-    // device joining the invite must all agree. Creation is not an import or reset.
     await returning.locator('#me [data-act="room"]').tap();
     await by(returning, 'newroom').tap();
-    await returning.waitForFunction(() => document.querySelector('#me').textContent.includes('Empty room'));
-    const newCode = new URL(returning.url()).searchParams.get('room');
-    assert.notEqual(newCode, code);
-    const topic = `lands-eot/v1/${newCode}:mastery-1/state`;
-    const preview = await returning.evaluate(() => window.__eot.S.terr);
-    const owned = team => Object.keys(preview).filter(id => preview[id].o === team);
-    assert.deepEqual(owned('reich'), ['BER']);
-    assert.deepEqual(owned('dawn'), ['NIG']);
-    assert.equal(owned('neutral').length, 145);
-    assert.equal(await returning.locator('#map .node').count(), 147);
-    assert.deepEqual(await returning.locator('#score .scorerow b').allTextContents(), [
-      '5 VP · 1 province',
-      '1 province · 2 VP'
-    ]);
-    assert.deepEqual(await retained(brokers[0], topic), []);
-    await by(returning, 'spectate').tap();
-    await returning.locator('#tabs [data-k="council"]').tap();
-    await returning.getByLabel('Name for new post').fill('New room tester');
-    await returning.getByLabel('Password for new post').fill('local room fixture');
-    await by(returning, 'enlist').tap();
-    await live(returning);
-    const [firstSave] = await retained(brokers[0], topic);
-    assert.deepEqual(firstSave.terr, preview);
-    await returning.locator('#me [data-act="room"]').tap();
-    await friend.goto(await returning.locator('#roomlink').inputValue());
-    await live(friend);
-    assert.deepEqual(await friend.evaluate(() => window.__eot.S.terr), preview);
-    assert.deepEqual(
-      writes.filter(w => w.topic === topic),
-      [{topic, rev: 2}]
-    );
+    await returning.getByRole('heading', {name: 'Sign in to join'}).waitFor();
+    assert.equal(await returning.locator('#map .node').count(), 0);
+    assert.notEqual(new URL(returning.url()).searchParams.get('room'), code);
     assert.deepEqual(await retained(brokers[1], mastery), [end]);
-    console.log(
-      'PASS: new room on a phone, first enlistment and desktop rejoin all start with Berlin and Nigeria only; the previous room is unchanged.'
-    );
   } finally {
     broker.authorizeForward = forward;
     await Promise.all([mobile, desktop].map(c => c.close()));

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {readFileSync} = require('node:fs');
 const {join} = require('node:path');
 const vm = require('node:vm');
+const historicalBoard = require('./historical-board.cjs');
 
 const html = readFileSync(join(__dirname, '../index.html'), 'utf8');
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1];
@@ -268,7 +269,7 @@ function launch({
 }
 const {game: factory} = launch({timers: {setTimeout() {}, setInterval() {}}, random: () => 0.5});
 function saved(rev) {
-  const st = factory.newGame(now - 60000, false); // previously saved, multi-territory campaign
+  const st = historicalBoard(factory, now - 60000, false); // previously saved, multi-territory campaign
   st.rev = rev;
   st.players.Veteran = {team: 'dawn', role: 'soldier', title: 'Saved post #' + rev, cd: 1234, cp: 10};
   st.teams.dawn.res.gold = 200 + rev;

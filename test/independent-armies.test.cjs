@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {inspect, launch, now, saved, ceiling} = require('../test-support/war-room.cjs');
 const script = inspect([
   'COUNTRIES',
+  'COUNTRY_IDS',
   'HOME',
   'PROVINCES',
   'frontRank',
@@ -40,7 +41,7 @@ function island() {
 }
 test('each historical starting neutral belongs to one country, with distinct home forces and no duplicate Lima or faction HQ', () => {
   const s = saved(71),
-    ids = Object.values(e.COUNTRIES).flatMap(c => c.homes);
+    ids = e.COUNTRY_IDS.flatMap(k => e.COUNTRIES[k].homes);
   assert.equal(ids.length, new Set(ids).size);
   assert.ok(ids.every(id => Object.hasOwn(e.TD, id) && !e.TD[id].fcap));
   assert.equal(Object.values(s.terr).filter(t => t.o === 'neutral').length, 112);
@@ -61,10 +62,10 @@ test('each historical starting neutral belongs to one country, with distinct hom
   assert.ok(e.validSave(s));
 });
 test('in a capital-start room independent home capitals start at home and the first front turn cannot take either HQ', () => {
-  const s = e.newGame(now),
+  const s = require('../test-support/historical-board.cjs')(e, now),
     berlin = cp(s.terr.BER),
     nigeria = cp(s.terr.NIG);
-  for (const [k, country] of Object.entries(e.COUNTRIES)) assert.equal(e.countryAt(s, country.homes[0]), k);
+  for (const k of e.COUNTRY_IDS) assert.equal(e.countryAt(s, e.COUNTRIES[k].homes[0]), k);
   assert.equal(e.countryAt(s, 'PAR'), 'FRA');
   assert.equal(e.countryAt(s, 'DEL'), 'IND');
   assert.ok(turn(s));

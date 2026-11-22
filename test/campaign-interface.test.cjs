@@ -36,13 +36,13 @@ test('each saved province has one navigable directory entry; North Africa is not
   const {tab} = purchaseRoom(saved(81), 'reich');
   const ids = () =>
     [...panel(tab).matchAll(/<button class="chip" data-act="goto" data-id="([A-Z]+)"/g)].map(m => m[1]);
-  assert.deepEqual(ids().sort(), Object.keys(factory.TD).sort());
+  assert.deepEqual(ids().sort(), Object.keys(tab.game.S.terr).sort());
   assert.equal(ids().length, 147);
   for (const region of ['Europe', 'Africa']) {
     tab.click('setreg', {r: region});
     assert.deepEqual(
       ids().sort(),
-      Object.keys(factory.TD)
+      Object.keys(tab.game.S.terr)
         .filter(id => factory.TD[id].reg === region)
         .sort()
     );
