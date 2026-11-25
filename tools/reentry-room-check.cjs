@@ -113,7 +113,7 @@ module.exports = async function reentry({origin, context, brokers, fixture, publ
     );
     await returning.locator('#me [data-act="room"]').tap();
     await by(returning, 'newroom').tap();
-    await returning.getByRole('heading', {name: 'Sign in to join'}).waitFor();
+    await returning.getByRole('heading', {name: 'Sign in to create a room'}).waitFor();
     assert.equal(await returning.locator('#map .node').count(), 0);
     assert.notEqual(new URL(returning.url()).searchParams.get('room'), code);
     assert.deepEqual(await retained(brokers[1], mastery), [end]);

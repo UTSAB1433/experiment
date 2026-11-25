@@ -619,3 +619,56 @@ test('a failing workspace capability on a legacy link is not permission to open 
   assert.equal(tab.sockets.length, 0);
   checkReadOnly(tab);
 });
+
+test('a pasted invite matches a cold visit, including a different pinned relay and the revision floor', t => {
+  mockTime(t);
+  const prefKey = 'eot-last-room:v1:/game';
+  for (const [link, relay, floor] of [
+    [mastery + '&rev=64', 'hivemq', 64],
+    [primary + '&rev=3', 'emqx', 62], // same room and source: don't roll back
+    [legacyLink, 'emqx', 62] // a Classic revision is never a Mastery floor
+  ]) {
+    const pref = () => new Map([[prefKey, new URL(primary + '&rev=62').search]]);
+    const pasted = launch({url: home, storage: pref(), identity: who});
+    const cold = launch({url: link, storage: pref(), identity: who});
+    pasted.$('#home-code').value = ' ' + link + ' ';
+    pasted.dispatch('submit', {target: {dataset: {form: 'joincode'}}, preventDefault() {}});
+    for (const tab of [pasted, cold]) {
+      assert.deepEqual(
+        tab.sockets.map(s => new URL(s.url).hostname),
+        [relay === 'emqx' ? 'broker.emqx.io' : 'broker.hivemq.com']
+      );
+      const socket = accept(tab, board(saved, floor - 1, 999, 5));
+      noBoard(tab);
+      const live = board(saved, floor, 43, 8);
+      socket.message('state', live);
+      checkBoard(tab, live);
+      assert.equal(new URL(tab.location.href).searchParams.get('rev'), String(floor));
+      checkReadOnly(tab);
+    }
+  }
+});
+
+test('invalid pasted links stay in the picker with an inline error and do not touch the last room', t => {
+  mockTime(t);
+  const key = 'eot-last-room:v1:/game',
+    last = new URL(primary + '&rev=36').search;
+  const tab = launch({url: home, storage: new Map([[key, last]])}),
+    input = tab.$('#home-code');
+  input.id = 'home-code';
+  for (const raw of [
+    primary.replace('example.test', 'other.test'),
+    primary.replace('/game/', '/other/'),
+    primary + '&room=x',
+    primary + '&rev=-3',
+    primary.replace('mastery-1', 'future'),
+    'Not a code'
+  ]) {
+    input.value = raw;
+    tab.dispatch('submit', {target: {dataset: {form: 'joincode'}}, preventDefault() {}});
+    assert.ok(tab.$('#home-code-error').textContent);
+    assert.equal(tab.location.href, home);
+    assert.equal(tab.sockets.length, 0);
+    assert.equal(tab.storage.get(key), last);
+  }
+});

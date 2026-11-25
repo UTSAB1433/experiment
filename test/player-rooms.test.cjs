@@ -401,3 +401,75 @@ test('RTDB numeric usernames survive array-shaped reads without becoming differe
   assert.equal(recovered.players['10'].account, st.players['10'].account);
   assert.equal(recovered.owner, '10');
 });
+
+test('only your own unappointed Soldier can correct sides in staging; never carry an appointment or switch in play', async t => {
+  mockTime(t);
+  const st = lobby();
+  member(st, beta, 'reich');
+  st.players[beta.name].title = 'Volunteer';
+  assert.equal(e.roomReady(st), false);
+  const pristine = copy(st);
+  for (const [who, dst] of [
+    [ctx(alpha, 'reich'), 'dawn'],
+    [{...ctx(beta, 'reich'), account: alpha.account}, 'dawn'],
+    [ctx(beta, 'reich'), 'reich']
+  ]) {
+    assert.ok(e.A.changeFaction(st, who, {team: dst}).err);
+    assert.deepEqual(copy(st), pristine);
+  }
+  for (const grant of [{attackSeat: true}, {role: 'chief'}, {role: 'diplomat'}]) {
+    const appointed = copy(st);
+    Object.assign(appointed.players[beta.name], grant);
+    assert.ok(e.A.changeFaction(appointed, ctx(beta, 'reich'), {team: 'dawn'}).err);
+  }
+  const guest = await enter(st, session(beta));
+  await finishOrder(t, guest.click('lobbyside', {team: 'dawn'}));
+  const assembled = guest.game.S;
+  assert.equal(assembled.rev, st.rev + 1);
+  assert.ok(e.roomReady(assembled) && e.validSave(assembled));
+  assert.deepEqual(copy(assembled.players[beta.name]), {
+    ...pristine.players[beta.name],
+    team: 'dawn',
+    title: ''
+  });
+  assert.deepEqual(copy(assembled.terr), pristine.terr);
+  assert.deepEqual(copy(assembled.teams), pristine.teams);
+  const race = guest.game.act('changeFaction', {team: 'reich'}),
+    launched = copy(assembled);
+  e.A.start(launched, ctx(alpha, 'reich'));
+  launched.rev++;
+  guest.sockets[0].message('state', launched);
+  await finishOrder(t, race);
+  assert.deepEqual(copy(guest.game.S), copy(launched), 'launch won the race; stale switch did not publish');
+  assert.ok(e.A.changeFaction(launched, ctx(beta, 'dawn'), {team: 'reich'}).err);
+  assert.match(guest.$('#panel').innerHTML, /Start with field duty/);
+});
+
+test('the Orders briefing follows live roles and sends a displaced faction to its own garrison, not its lost HQ', async t => {
+  mockTime(t);
+  const st = active();
+  st.terr.NIG.o = 'reich';
+  st.terr.CHA.o = 'dawn';
+  const tab = await enter(st, session(beta)),
+    panel = () => tab.$('#panel').innerHTML;
+  assert.match(panel(), /Start with field duty/);
+  assert.ok(panel().includes(`Ask ${alpha.name} to appoint`));
+  for (const [role, seat, title] of [
+    ['chief', false, 'Prepare your garrison'],
+    ['diplomat', false, 'Open negotiations'],
+    ['soldier', true, 'Use your attack seat'],
+    ['leader', false, 'Lead your faction']
+  ]) {
+    st.rev++;
+    st.players[beta.name].role = role;
+    if (seat) st.players[beta.name].attackSeat = true;
+    else delete st.players[beta.name].attackSeat;
+    tab.sockets[0].message('state', st);
+    const card = panel().split('</section>')[0];
+    assert.ok(card.includes(title));
+    if (role === 'diplomat') assert.ok(card.includes('Open diplomacy'));
+    else assert.match(card, /data-act="goto" data-id="CHA"/);
+    assert.doesNotMatch(card, /Open Nigeria orders/);
+  }
+  checkReadOnly(tab);
+});
