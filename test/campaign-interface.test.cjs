@@ -245,3 +245,36 @@ test('a cancelled sign-in cannot finish in a reopened password prompt, a replace
     checkReadOnly(tab);
   }
 });
+
+test('expiring scouting replaces exact live intelligence with an estimate without a peer order or a save', t => {
+  mockTime(t);
+  const st = saved(71);
+  st.intel.reich.TOK = now + 2500;
+  const {tab} = purchaseRoom(st, 'reich', 'soldier');
+  tab.click('sel', {id: 'TOK'});
+  assert.match(panel(tab), />Posture</);
+  assert.doesNotMatch(panel(tab), /Composition, fort and stance unknown/);
+  t.mock.timers.tick(3000);
+  assert.match(panel(tab), /Composition, fort and stance unknown/);
+  assert.doesNotMatch(panel(tab), />Posture</);
+  assert.equal(tab.game.S.rev, 71);
+  checkReadOnly(tab);
+});
+
+test('annex orders check borders and garrison strength before charging for a treaty', () => {
+  const st = saved(39),
+    who = {name: 'Negotiator', team: 'reich', now},
+    offer = {quote: {gold: 10000}};
+  st.players[who.name] = {team: 'reich', role: 'diplomat', cp: 10, cd: 0, pw: 'fixture'};
+  st.teams.reich.res.gold = 5000;
+  st.terr.DEN.o = 'neutral';
+  st.terr.DEN.u = {inf: 13};
+  const before = structuredClone(st);
+  assert.match(g.A.annex(st, who, {...offer, tid: 'TOK'}).err, /neighbor/);
+  assert.match(g.A.annex(st, who, {...offer, tid: 'DEN'}).err, /12 units/);
+  assert.deepEqual(structuredClone(st), before);
+  st.terr.DEN.u.inf = 12;
+  assert.ok(g.A.annex(st, who, {...offer, tid: 'DEN'}).ok);
+  assert.equal(st.terr.DEN.o, 'reich');
+  assert.equal(st.players[who.name].cp, 8);
+});

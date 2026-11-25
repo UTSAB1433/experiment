@@ -68,9 +68,12 @@ main.await-room .side{min-height:0}
 .legend{position:absolute;left:10px;bottom:10px;display:flex;gap:10px;flex-wrap:wrap;background:color-mix(in srgb,var(--bg) 82%,transparent);padding:5px 8px;border-radius:4px;font-size:11px;font-family:var(--mono)}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}
 .side{min-height:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
-.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
-.tab{background:none;border:0;border-bottom:2px solid transparent;padding:10px 12px;cursor:pointer;color:var(--mute);font-family:var(--display);font-size:16px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
-.tab.on{color:var(--ink);border-bottom-color:var(--acc)}
+.tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line);padding:4px;gap:2px}
+.tab{min-width:0;min-height:36px;background:none;border:1px solid transparent;border-radius:3px;padding:5px 2px;cursor:pointer;color:var(--mute);font-weight:600;line-height:1.15}
+.tab:hover,.tab:focus-visible{color:var(--ink)}.tab.on{color:var(--ink);border-color:var(--acc);background:var(--panel2)}
+.board-jump{display:none}.briefing{border-left:3px solid var(--acc)}.briefing h2{font-size:20px}.briefing p{margin:6px 0 10px}.briefing .eyebrow{color:var(--mute);margin:0 0 5px}.briefing details,.lobby-change{margin-top:12px}
+summary{cursor:pointer}.entry-steps{list-style:none;display:flex;flex-wrap:wrap;gap:4px 14px;padding:0;margin:10px 0;font:12px var(--mono);color:var(--mute)}.entry-steps [aria-current]{color:var(--ink);font-weight:bold;border-bottom:2px solid var(--dawn)}.needed{color:var(--ok)}.desk-exit{margin-top:16px}.form-note:not(:empty){display:block;margin-top:6px;color:var(--bad)}
+#me:empty,#hud:empty,#score:empty,#banner:empty{display:none}
 .panel{padding:12px;overflow:auto;min-height:0;flex:1;display:flex;flex-direction:column;gap:12px}
 .card{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:10px;min-width:0}
 .card h3,.card .card-heading{font-size:15px;margin-bottom:6px;color:var(--mute)}
@@ -163,9 +166,19 @@ input[type=text],input[type=number],input[type=password],select{background:var(-
   html,body{height:auto}
   .app{height:auto}
   main{grid-template-columns:1fr;display:flex;flex-direction:column}
-  .mapwrap{height:58vh}
+  .board-jump{display:flex;position:sticky;top:env(safe-area-inset-top,0px);z-index:4;gap:4px;padding:4px;background:var(--bg);border-bottom:1px solid var(--line)}.board-jump .btn{flex:1;min-height:36px}
+  .mapwrap,.side,#province-name,.briefing,#natdir{scroll-margin-top:52px}
+  .mapwrap{display:grid;grid-template-columns:auto minmax(0,1fr)}
+  .mapctl,.mapnav,.legend{position:static}.mapctl{flex-direction:row;align-items:flex-start;grid-column:1;padding:6px 4px}.mapnav{grid-column:2;grid-row:1;align-items:center;gap:3px;padding:6px 4px}.mapnav .btn{padding:4px 6px}
+  #map{grid-column:1/-1;grid-row:2;height:clamp(165px,34vh,360px)}.legend{grid-column:1/-1;gap:2px 10px}
   .side{min-height:60vh}
   .brand h1{font-size:22px}
+}
+@media (max-width:520px){
+  body{padding-inline:max(10px,env(safe-area-inset-left,0px)) max(10px,env(safe-area-inset-right,0px))}
+  .app,.top{gap:8px}.brand span{font-size:10px;letter-spacing:.05em}.me{gap:5px}.roompill{max-width:100%;overflow-wrap:anywhere}.scorerow{font-size:11px}
+  .hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.hudcell{min-width:0;flex-wrap:wrap;gap:2px 5px;padding:4px;font-size:12px}.hudcell .k{font-size:10px;letter-spacing:0}.hudcell .v{font-size:14px}.hudcell .r{font-size:10px}.hudcell.stock,.hudcell.sending{grid-column:1/-1}.hudcell.stock{border:0;background:transparent;align-items:baseline;padding:0}.hudcell.res{display:grid;align-content:start}.hudcell.cp,.hudcell.away{grid-column:span 2;align-items:center}.cpbar{display:none}
+  .panel{padding:9px;gap:8px}.tab{font-size:12px}.account-form .seg button{min-height:40px}.mapctl .btn{width:28px}
 }
 </style>
 
@@ -178,9 +191,10 @@ input[type=text],input[type=number],input[type=password],select{background:var(-
   <div class="hud" id="hud"></div>
   <div id="banner"></div>
   <div id="entry" role="main" aria-label="Campaign entry" hidden></div>
+  <nav class="board-jump" id="board-jump" aria-label="Board shortcuts" hidden><button class="btn" data-act="jump" data-to="map">Tactical map</button><button class="btn" data-act="jump" data-to="desk">Command desk</button></nav>
   <main>
     <section class="mapwrap">
-      <svg id="map" role="group" aria-label="Strategic world map"></svg>
+      <svg id="map" tabindex="-1" role="group" aria-label="Strategic world map"></svg>
       <div class="mapctl">
         <button class="btn" data-act="zoom" data-d="1" aria-label="Zoom in">+</button>
         <button class="btn" data-act="zoom" data-d="-1" aria-label="Zoom out">&minus;</button>
@@ -197,7 +211,7 @@ input[type=text],input[type=number],input[type=password],select{background:var(-
       <div class="legend" id="legend"></div>
     </section>
     <aside class="side">
-      <div class="tabs" id="tabs"></div>
+      <nav class="tabs" id="tabs" aria-label="Command desk sections"></nav>
       <div class="panel" id="panel"></div>
     </aside>
   </main>
@@ -1384,20 +1398,38 @@ A.decap = (s, c, p) => {
   }
   log(s, c.now, 'all', `A ${TEAMS[c.team].short} assassination team was destroyed near ${T_(p.tid)}.`, 'info', {tid:p.tid}); return {ok:'The team was lost.'};
 };
+function annexBlock(s,team,id){
+  const d = s.terr[id];
+  if(!d || d.o !== 'neutral') return 'Only neutral lands can be annexed.';
+  if(!neighbors(s,id).some(n => s.terr[n.id].o === team)) return 'Annexation needs a neighboring province held by your faction.';
+  return total(d.u) > 12 ? 'The garrison is too strong to buy (12 units or fewer).' : '';
+}
 A.annex = (s, c, p) => {
-  const d = s.terr[p.tid]; if(!d || d.o !== 'neutral') return {err:'Only neutral lands can be annexed.'};
-  if(!neighbors(s,p.tid).some(n => s.terr[n.id].o === c.team)) return {err:'You need a border with it.'}; const g = total(d.u); if(g > 12) return {err:'The garrison is too strong to buy (12 units or fewer).'};
-  const cost = annexCost(s, c.team, g); if(!withinQuote({gold:cost}, p.quote)) return {err:PRICE_CHANGED};
+  const block = annexBlock(s,c.team,p.tid); if(block) return {err:block};
+  const d = s.terr[p.tid], cost = annexCost(s, c.team, total(d.u)); if(!withinQuote({gold:cost}, p.quote)) return {err:PRICE_CHANGED};
   if(s.teams[c.team].res.gold < cost) return {err:`Needs ${cost} gold.`}; if(!spendCP(s, c, 2)) return {err:'Costs 2 command points.'};
   s.teams[c.team].res.gold -= cost; d.o = c.team; delete d.country; d.st = 'bunker'; log(s, c.now, 'all', `${c.name} brought ${T_(p.tid)} into the ${TEAMS[c.team].short} sphere by treaty.${captureNote(s,p.tid,c.team)}`, 'dip', {tid:p.tid}); return {ok:`${T_(p.tid)} joins you.`};
 };
+function tradeIssue(give,get){
+  if(!RK.includes(give?.r) || !RK.includes(get?.r) || give.r === get.r) return 'Choose two different resources.';
+  return [give,get].every(x => Number.isSafeInteger(x.n) && x.n >= 1) ? '' : 'Use a positive whole number for each amount.';
+}
 A.propose = (s, c, p) => {
+  if(!['trade','ceasefire'].includes(p.type)) return {err:'Choose a trade or ceasefire.'};
+  if(!Number.isSafeInteger(s.pid + 1)) return {err:'No further proposals can be numbered safely.'};
   if(s.props.some(x => x.from === c.team && x.type === p.type && x.open)) return {err:'You already have that proposal open.'};
   const pr = {id:s.pid, from:c.team, by:c.name, type:p.type, open:true, t:c.now};
   if(p.type === 'ceasefire'){ if(ceasefire(s, c.now)) return {err:'A ceasefire is already in force.'}; pr.mins = [60, 180, 360].includes(p.mins) ? p.mins : 60; }
-  else { const g = p.give, w = p.get; if(!RES[g.r] || !RES[w.r] || g.r === w.r || !(g.n > 0) || !(w.n > 0)) return {err:'Set two different resources and amounts.'}; if(s.teams[c.team].res[g.r] < g.n) return {err:'You do not have that much to offer.'}; pr.give = {r:g.r, n:Math.floor(g.n)}; pr.get = {r:w.r, n:Math.floor(w.n)}; }
+  else {
+    const issue = tradeIssue(p.give,p.get); if(issue) return {err:issue};
+    if(s.teams[c.team].res[p.give.r] < p.give.n) return {err:'You do not have that much to offer.'};
+    pr.give = {r:p.give.r,n:p.give.n}; pr.get = {r:p.get.r,n:p.get.n};
+  }
+  const discard = s.props.findIndex(x => !x.open);
+  if(s.props.length >= 20 && discard < 0) return {err:'Close an open offer first.'};
   if(!spendCP(s, c, 1)) return {err:'Costs 1 command point.'};
-  s.pid++; s.props.push(pr); if(s.props.length > 20) s.props.shift();
+  if(s.props.length >= 20) s.props.splice(discard,1); // Never evict an unanswered offer.
+  s.pid++; s.props.push(pr);
   log(s, c.now, 'all', `${c.name} proposes a ${p.type === 'ceasefire' ? pr.mins / 60 + 'h ceasefire' : 'trade'} to ${TEAMS[OTHER(c.team)].name}.`, 'dip'); return {ok:'Proposal sent.'};
 };
 A.answer = (s, c, p) => {
@@ -1406,7 +1438,16 @@ A.answer = (s, c, p) => {
   if(pr.from === c.team) return {err:'Wait for the other side to answer.'};
   if(!p.accept){ pr.open = false; log(s, c.now, 'all', `${TEAMS[c.team].name} rejects the ${pr.type} proposal.`, 'dip'); return {ok:'Rejected.'}; }
   if(pr.type === 'ceasefire'){ if(ceasefire(s, c.now)) return {err:'A ceasefire is already in force.'}; s.pact = {until:c.now + pr.mins * 60000, mins:pr.mins}; pr.open = false; log(s, c.now, 'all', `Ceasefire agreed for ${pr.mins / 60} hour(s).`, 'dip'); return {ok:'Ceasefire agreed.'}; }
-  const me = s.teams[c.team], they = s.teams[pr.from]; if(me.res[pr.get.r] < pr.get.n) return {err:'You cannot cover your side of the trade.'}; if(they.res[pr.give.r] < pr.give.n){ pr.open = false; return {err:'They can no longer cover it.'}; }
+  // Older builds could round a fractional offer down to zero. It can still be
+  // withdrawn or rejected, but must never transfer goods.
+  if(tradeIssue(pr.give,pr.get)) return {err:'Invalid trade terms. Reject this offer and request a new one.'};
+  const me = s.teams[c.team], they = s.teams[pr.from];
+  if(they.res[pr.give.r] < pr.give.n){
+    pr.open = false;
+    log(s,c.now,'all','Trade offer closed: the sender no longer has the offered resources. Nothing was exchanged.','dip');
+    return {ok:'Offer closed. The sender can no longer cover it.'};
+  }
+  if(me.res[pr.get.r] < pr.get.n) return {err:'You cannot cover your side of the trade.'};
   const tmDawn = dawnBonuses(s).tradeMult;
   const giveRecv = c.team === 'dawn' ? Math.round(pr.give.n * tmDawn) : pr.give.n;
   const getRecv = pr.from === 'dawn' ? Math.round(pr.get.n * tmDawn) : pr.get.n;
@@ -1439,6 +1480,19 @@ A.membership = (s,c,p) => {
   if(first) s.owner = c.name;
   log(s,c.now,'all',`${c.name} ${first?'created the room for':'joined'} ${TEAMS[p.team].name}.`,'sys');
   return {ok:first?'Room created. Invite the other faction.':'You joined as a Soldier.'};
+};
+// A guest can correct a mistaken choice before launch, never change sides
+// during play or take an appointed role/attack seat to the other faction.
+function canChangeFaction(s,name){
+  const pl = s.players[name];
+  return waitingRoom(s) && name !== s.owner && pl?.role === 'soldier' && !pl.attackSeat;
+}
+A.changeFaction = (s,c,p) => {
+  const pl = s.players[c.name];
+  if(!canChangeFaction(s,c.name) || pl.team!==c.team || pl.account!==c.account || pl.salt!==c.salt || p.team!==OTHER(c.team)) return {err:'Only an unappointed Soldier can change their own faction before launch.'};
+  pl.team=p.team; pl.title='';
+  log(s,c.now,'all',`${c.name} switched to ${TEAMS[p.team].name} before launch.`,'sys');
+  return {ok:'Faction changed. You are still a Soldier.'};
 };
 A.start = (s,c) => {
   if(!waitingRoom(s) || c.name!==s.owner || s.players[c.name]?.role!=='leader') return {err:'Only the room owner can start a waiting campaign.'};
@@ -1808,7 +1862,8 @@ function checkIdle(){
 const TAB = Math.random().toString(36).slice(2, 10);
 const validRoom = r => typeof r === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(r);
 const RELAYS = {emqx:'wss://broker.emqx.io:8084/mqtt', hivemq:'wss://broker.hivemq.com:8884/mqtt', mosquitto:'wss://test.mosquitto.org:8081/mqtt'};
-const LAST_ROOM = 'eot-last-room:v1:' + location.pathname.replace(/\/(?:index\.html)?$/i,'');
+const appPath = path => path.replace(/\/(?:index\.html)?$/i,'');
+const LAST_ROOM = 'eot-last-room:v1:' + appPath(location.pathname);
 function readPref(key){ try{ return localStorage.getItem(key); }catch(_){ return null; } }
 function putPref(key,value){ try{ localStorage.setItem(key,value); }catch(_){} }
 function firebaseRoot(value){
@@ -1834,11 +1889,15 @@ const knownRoute = lastQuery.has('room') && previous.valid && previous.rev > 0 &
 // room/backend, NOT a Mastery revision or MQTT relay. Rediscover that room's
 // Mastery copy unless this device already has a matching, confirmed Mastery route.
 const chosen = bare && knownRoute ? previous : requested;
-const matching = knownRoute && previous.rules === MASTERY_RULES && previous.room === chosen.room &&
-  (!chosen.via || previous.via === chosen.via) && (!(bare && knownRoute ? lastQuery : query).has('fb') || previous.fb === chosen.fb) &&
-  (!chosen.rules || !chosen.relay || previous.relay === chosen.relay);
-const address = matching ? {...previous,rev:Math.max(previous.rev,chosen.rules ? chosen.rev : 0)} :
-  chosen.rules ? chosen : {...chosen,relay:'',rev:0};
+// Cold links and pasted invites must make exactly the same source/floor decision.
+function resolveInvite(chosen,q,prior){
+  const matching = prior?.rules === MASTERY_RULES && prior.room === chosen.room &&
+    (!chosen.via || prior.via === chosen.via) && (!q.has('fb') || prior.fb === chosen.fb) &&
+    (!chosen.rules || !chosen.relay || prior.relay === chosen.relay);
+  return matching ? {...prior,rev:Math.max(prior.rev,chosen.rules ? chosen.rev : 0)} :
+    chosen.rules ? chosen : {...chosen,relay:'',rev:0};
+}
+const address = resolveInvite(chosen,bare ? lastQuery : query,knownRoute ? previous : null);
 let atHome = bare, creatingRoom = null;
 function creationIntent(code){
   creatingRoom=code;
@@ -1964,6 +2023,12 @@ function validPlayerRoom(p){
   }
   return waitingRoom(p) ? !p.win && !p.dom && !p.front : roomReady(p);
 }
+function validProposals(p){
+  if(!Number.isSafeInteger(p.pid) || p.pid<1 || !Array.isArray(p.props)) return false;
+  return p.props.every(q => sideId(q?.from) && Number.isSafeInteger(q.id) && q.id>0 && q.id<p.pid && (
+    q.type==='ceasefire' ? [60,180,360].includes(q.mins) : q.type==='trade' &&
+    [q.give,q.get].every(x=>x && RK.includes(x.r) && Number.isFinite(x.n)))); // historical zero offers may be rejected
+}
 function validSave(p){
   const validCountry = campaignRoom(p) ? countryId : k=>COUNTRY_IDS.includes(k);
   return (p?.v === LEGACY_V || ([POSTS_V,ROOM_V].includes(p?.v) && p.ruleset === MASTERY_RULES)) && Number.isSafeInteger(p.rev) && p.rev > 0 &&
@@ -1975,8 +2040,7 @@ function validSave(p){
     (!campaignRoom(p) || validPlayerRoom(p)) &&
     record(p.intel?.reich) && record(p.intel.dawn) && record(p.treach) && (!p.win || sideId(p.win.team)) && (!p.dom || sideId(p.dom.team)) &&
     Array.isArray(p.log) && p.log.every(l => Number.isFinite(l?.t) && typeof l.msg === 'string') &&
-    Array.isArray(p.props) && p.props.every(q => sideId(q?.from) && (q.type === 'ceasefire' || (q.type === 'trade' &&
-      [q.give, q.get].every(x => x && RK.includes(x.r) && Number.isFinite(x.n))))) &&
+    validProposals(p) &&
     ['reich','dawn'].every(t => { const T = p.teams?.[t]; return record(T?.tech) && TKEYS.every(k => levelIn(T.tech[k], 4)) &&
       (T.cp === undefined || Number.isFinite(T.cp)) && RK.every(r => Number.isFinite(T.res?.[r])) && validMastery(T.mastery, t); }) &&
     provincesOf(p).every(id => { const t = p.terr?.[id]; return record(t?.u) && (sideId(t.o) || t.o === 'neutral') &&
@@ -2495,7 +2559,7 @@ async function authenticate(){
     if(!readPref(SESSION_KEY)) toast('Signed in for this visit. Browser storage is unavailable.');
     applyIdentity(); NET.announce();
   }catch(e){if(current()) fail(e.message || 'Could not verify this account.');}
-  finally{if(gen===profileGeneration){accountBusy=false; if(button){button.disabled=false;button.textContent=signup?'Create account':'Sign in';} renderAll();}}
+  finally{if(gen===profileGeneration){accountBusy=false; if(button){button.disabled=false;button.textContent=signup?'Create account':'Sign in and continue';} renderAll();}}
 }
 const expectedPw = (n, state = S) => campaignRoom(state) ? state.players[n]?.account : state?.players[n]?.pw || (Object.hasOwn(PWH,n) ? PWH[n] : null);
 const officerIn = (st, who) => st?.players[who.name] && !!who.ph && expectedPw(who.name, st) === who.ph && can(st.players[who.name].role, 'research');
@@ -2545,12 +2609,13 @@ async function act(name, payload){
   const store = db, campaign = S.created, orderDialog = M;
   const began = Date.now(), who = {...me}, pl = S.players[who.name];
   const subject = ['setrole','remove','appointLeader'].includes(name) && S.players[payload?.name], subjectPw = subject && expectedPw(payload.name,S);
-  const needs = {start:'*',appointLeader:'*',applyupdate:'contribute',contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
+  const needs = {start:'*',appointLeader:'*',changeFaction:'contribute',applyupdate:'contribute',contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
   const memberOrder = name==='membership', profile = account, first = memberOrder && startingMap;
-  const allowed = st => !campaignRoom(st) ? !memberOrder && !['start','appointLeader'].includes(name) :
+  const allowed = st => !campaignRoom(st) ? !memberOrder && !['start','appointLeader','changeFaction'].includes(name) :
     !!profile && profile===account && (memberOrder ? (!first || (creatingRoom===ROOM && canStartEmpty())) :
       name!=='enlist' && name!=='applyupdate' && memberMatches(st,profile) &&
-      (!waitingRoom(st) || ['start','appointLeader','setrole','remove'].includes(name)));
+      (name!=='changeFaction' || canChangeFaction(st,who.name)) &&
+      (!waitingRoom(st) || ['start','appointLeader','changeFaction','setrole','remove'].includes(name)));
   if(!allowed(S)) return toast(waitingRoom(S) && profile ? 'Join your faction and wait for the owner to start the campaign.' : 'Sign in to a confirmed room first.', 'bad');
   if(!memberOrder && name !== 'enlist' && name !== 'noop'){
     if(!pl || !authed()) return toast('Choose your post and enter its password first.', 'bad');
@@ -2875,7 +2940,7 @@ function navigate(room,transport='',fb='',relay='',floor=0){
   if(!validRoom(room)) return toast('Choose a valid room first.');
   if(creatingRoom && creatingRoom!==room) creationIntent(null);
   atHome=false; accountError=''; accountMode='signin'; if(accountBusy){accountBusy=false;profileGeneration++;} badAddress = false; ROOM = room; via = transport; FB_URL = fb; relayPin = relay; minRev = floor;
-  ui.recruitAt = sel = M = PWASK = null; history.replaceState(null,'',roomUrl()); return boot();
+  ui.recruitAt = sel = M = PWASK = null; tab='orders'; ui.natQ=''; ui.natReg='all'; cameraSession=''; setRegion('world'); history.replaceState(null,'',roomUrl()); return boot();
 }
 let seen = 0, shown = new Set();
 function announce(){
@@ -2913,12 +2978,17 @@ function recruitButtons(team, u, unlocked, each, have){
 function refreshPrices(view, root = document){
   const team = myTeam() || 'reich', T = view.teams[team], cp = view.players[me.name]?.cp ?? 0;
   const paused = busy || !liveBoard();
+  refreshTrade(view); refreshDuty();
   root.querySelectorAll('[data-price]').forEach(el => {
     const enough = afford(view, team, el.dataset);
     // Only otherwise-eligible buttons carry a price; never unlock a role/tech/cap restriction.
     if(el.tagName === 'BUTTON'){
       const disabled = !enough || cp < Number(el.dataset.cp || 0) || paused;
       if(el.disabled !== disabled) el.disabled = disabled;
+      if(el.dataset.act==='answer' && el.dataset.accept){
+        const note=$('#answer-note-'+el.dataset.id);
+        if(note){const msg=!enough ? 'Your faction cannot cover its side of this trade yet.' : ''; if(note.textContent!==msg) note.textContent=msg;}
+      }
       if(el.dataset.act === 'confirm'){
         const note = $('#order-budget'), message = paused ? 'Waiting for the live room.' : !enough ? 'Not enough oil for this force.' :
           cp < Number(el.dataset.cp) ? `This order needs ${el.dataset.cp} command point${el.dataset.cp === '1' ? '' : 's'}.` : '';
@@ -2956,7 +3026,7 @@ const controlsSelector = 'button,input,select,summary,[tabindex]';
 function liveControl(root,old){
   if(!old) return null;
   if(root.contains(old) && !old.disabled) return old;
-  const keys = ['act','chg','k','u','d','n','id','m','to','kind','skill','type','mins','accept','cancel','r','team'];
+  const keys = ['act','chg','k','u','d','n','id','m','to','kind','skill','type','mins','accept','cancel','r','team','report','view'];
   return [...root.querySelectorAll(controlsSelector)].find(el => !el.disabled && el.tagName === old.tagName &&
     el.id === old.id && keys.every(k => el.dataset[k] === old.dataset?.[k]));
 }
@@ -2988,10 +3058,10 @@ function renderHud(){
   const pl = authed() ? S.players[me.name] : null, post = postView(S.players,me.name);
   updateMe(roomPillHtml() + (pl ? `<div class="who"><b>${esc(post.name)}</b><small>${esc(post.caption)}</small></div>${icon(pl.team)}<button class="btn sm" data-act="${campaignRoom(S)?'signout':'switch'}">${campaignRoom(S)?'Sign out':'Switch'}</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`));
   const T = P.teams[team], cp = P.players[me.name]?.cp, rate = r => S.win ? 'War ended' : !liveBoard() ? 'Last save' : !sawSavedRoom ? 'Starting stock' : '+' + inc[r].toFixed(1) + '/min';
-  $('#hud').innerHTML = (t ? `<div class="hudcell"><span class="k">Stockpiles</span>${TEAMS[t].name}</div>` : `<div class="hudcell"><span class="k">Spectating</span>Choose a post to see your faction’s stockpiles.</div>`) + (t ? RK : []).map(r => `<div class="hudcell"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
+  $('#hud').innerHTML = (t ? `<div class="hudcell stock"><span class="k">Stockpiles</span>${TEAMS[t].name}</div>` : `<div class="hudcell stock"><span class="k">Spectating</span>Choose a post to see your faction’s stockpiles.</div>`) + (t ? RK : []).map(r => `<div class="hudcell res"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
     (t ? `<div class="hudcell cp" title="Your personal command points"><span class="k">Your CP</span><span class="v">${Math.floor(cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${cp / CPMAX * 100}%"></i></span><span class="r">${S.win ? 'War ended' : !liveBoard() ? 'Last save' : cp >= CPMAX ? 'Full' : `+1/${CP_MS / 1000}s`}</span></div>` : '') +
-    (t ? `<div class="hudcell" title="Five minutes without input marks this device away. AFK players do not count toward World front operations."><span class="k">${isAway() ? 'AFK' : 'AFK in'}</span><span>${isAway() ? 'Interact to return' : clockText(lastInput+AFK_MS-Date.now())}</span></div>` : '') +
-    (busy ? `<div class="hudcell"><span class="k">Sending orders…</span></div>` : '');
+    (t ? `<div class="hudcell away" title="Five minutes without input marks this device away. AFK players do not count toward World front operations."><span class="k">${isAway() ? 'AFK' : 'AFK in'}</span><span>${isAway() ? 'Interact to return' : clockText(lastInput+AFK_MS-Date.now())}</span></div>` : '') +
+    (busy ? `<div class="hudcell sending"><span class="k">Sending orders…</span></div>` : '');
   let b = '';
   if(S.win) b = `<div class="banner win" style="color:${tcol(S.win.team)}">${TEAMS[S.win.team].name} wins. <span style="font-family:var(--body);font-size:14px;text-transform:none;letter-spacing:0;color:var(--ink)">${esc(S.win.why)}</span></div>`;
   else {
@@ -3020,20 +3090,52 @@ const REGIONS = {
 const INIT = REGIONS.world;
 let vb = Object.assign({}, INIT);
 const svg = $('#map');
-function setVB(){ vb.w = Math.max(260, Math.min(W, vb.w)); vb.h = Math.min(H, vb.w * (svg.clientHeight || 600) / (svg.clientWidth || 800)); vb.x = Math.max(0, Math.min(W - vb.w, vb.x)); vb.y = Math.max(0, Math.min(H - vb.h, vb.y)); svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+const mapSize = () => [svg.clientWidth || 800, svg.clientHeight || 600];
+function setVB(){
+  vb.x=Math.max(0,Math.min(W-vb.w,vb.x)); vb.y=Math.max(0,Math.min(H-vb.h,vb.y));
+  svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+}
+function camera(cx,cy,w,h){ vb={x:cx-w/2,y:cy-h/2,w,h}; setVB(); }
 function setRegion(r){
   if(!Object.hasOwn(REGIONS,r)) return;
-  ui.curReg = r; vb = {...REGIONS[r]}; setVB(); renderMapnav();
+  const box=REGIONS[r], [w,h]=mapSize(); ui.curReg=r;
+  // Fit BOTH dimensions. A very wide screen must not crop southern Africa;
+  // a portrait phone can letterbox the overview instead of stretching the atlas.
+  camera(box.x+box.w/2,box.y+box.h/2,Math.min(W,Math.max(box.w,box.h*w/h)),Math.min(H,Math.max(box.h,box.w*h/w)));
+  renderMapnav();
 }
-function focusTerr(id){ const D = TD[id]; if(!D) return; const w = Math.min(vb.w, 1200); vb.w = w; vb.h = Math.min(H, w * (svg.clientHeight || 600) / (svg.clientWidth || 800)); vb.x = D.x - vb.w / 2; vb.y = D.y - vb.h / 2; ui.curReg = ''; setVB(); renderMapnav(); }
+function focusTerr(id){
+  const d=TD[id]; if(!d) return;
+  const w=Math.min(1200,vb.w), [sw,sh]=mapSize(); ui.curReg='';
+  camera(d.x,d.y,w,Math.min(H,w*sh/sw)); renderMapnav();
+}
+function resizeMap(){
+  if(ui.curReg) return setRegion(ui.curReg);
+  const [sw,sh]=mapSize(); camera(vb.x+vb.w/2,vb.y+vb.h/2,vb.w,Math.min(H,vb.w*sh/sw));
+}
 function renderMapnav(){
   document.querySelectorAll('.mapnav [data-r]').forEach(b => {
     const on = b.dataset.r === ui.curReg; b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on));
   });
 }
-function zoomAt(f, cx, cy){ const px = vb.x + vb.w * cx, py = vb.y + vb.h * cy; const nw = Math.max(260, Math.min(W, vb.w * f)); const r = nw / vb.w; vb.x = px - (px - vb.x) * r; vb.y = py - (py - vb.y) * r; vb.w = nw; setVB(); ui.curReg = ''; renderMapnav(); }
+function zoomAt(f,cx,cy){
+  const [sw,sh]=mapSize(), scale=Math.max(vb.w/sw,vb.h/sh), world=Math.max(W/sw,H/sh);
+  const next=Math.max(260/sw,Math.min(world,scale*f));
+  if(next>=world) return setRegion('world');
+  const w=Math.min(W,sw*next), h=Math.min(H,sh*next);
+  camera(vb.x+vb.w/2+(cx-.5)*sw*(scale-next),vb.y+vb.h/2+(cy-.5)*sh*(scale-next),w,h);
+  ui.curReg=''; renderMapnav();
+}
 const polyPts = p => { const o = []; for(let i = 0; i < p.length; i += 2){ const [x, y] = proj(p[i], p[i+1]); o.push(x.toFixed(1) + ',' + y.toFixed(1)); } return o.join(' '); };
-let baseMap = '';
+let baseMap='', paintedMap=null;
+function paintMap(markup){
+  // Most remote revisions (e.g. a trade or a field duty) don't change geography.
+  // Keep native keyboard focus and ongoing pointer gestures in that case.
+  if(markup===paintedMap) return;
+  const active=document.activeElement, id=svg.contains(active) && active?.dataset?.id;
+  svg.innerHTML=paintedMap=markup;
+  if(id && S?.terr[id]) $(`#map .node[data-id="${id}"]`)?.focus({preventScroll:true});
+}
 function buildBase(){
   const grid = []; for(let lon = -160; lon <= 180; lon += 20){ const [x] = proj(lon, 0); grid.push(`<line x1="${x}" y1="0" x2="${x}" y2="${H}"/>`); } for(let lat = -50; lat <= 70; lat += 20){ const [, y] = proj(0, lat); grid.push(`<line x1="0" y1="${y}" x2="${W}" y2="${y}"/>`); }
   baseMap = `<rect width="${W}" height="${H}" fill="var(--sea)"/><g stroke="#1b2a2e" stroke-width="1" opacity=".5">${grid.join('')}</g>` +
@@ -3041,8 +3143,8 @@ function buildBase(){
     `<g fill="var(--sea)" stroke="#2c3b35" stroke-width="1.2">${WATER.map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g><polygon points="${polyPts(CRIMEA)}" fill="var(--land)" stroke="#2c3b35" stroke-width="1.2"/>`;
 }
 function renderMap(){
-  if(!S || needsDesk()){ svg.innerHTML = baseMap; return; }
-  const viewer = myTeam() || 'spectator'; const now = Date.now();
+  if(!S || needsDesk()){ paintMap(baseMap); return; }
+  const viewer = myTeam() || 'spectator';
   const links = linksOf(S).map(l => { const A_ = TD[l.a], B_ = TD[l.b], oa = S.terr[l.a].o, ob = S.terr[l.b].o; const front = oa !== ob && oa !== 'neutral' && ob !== 'neutral'; const hot = sel && (l.a === sel || l.b === sel);
     return `<line x1="${A_.x}" y1="${A_.y}" x2="${B_.x}" y2="${B_.y}" stroke="${front ? '#ff7a5c' : hot ? '#e6e3d8' : '#3b4a44'}" stroke-width="${front ? 2.4 : hot ? 1.8 : 1}" ${l.sea ? 'stroke-dasharray="3 5"' : ''} opacity="${front || hot ? .95 : .7}"/>`; }).join('');
   const sels = sel ? neighbors(S,sel).map(n => n.id) : [];
@@ -3058,13 +3160,19 @@ function renderMap(){
       (D.fcap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="9" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">⚑</text>` : (D.cap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="8" fill="#d9c98e" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">◆</text>` : '')) +
       (D.vp >= 3 ? `<text x="${D.x + r - 2}" y="${D.y - r + 6}" font-size="8" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">★${D.vp}</text>` : '') +
       `<text class="nlabel" x="${D.x}" y="${D.y + r + 10}" text-anchor="middle">${esc(D.name)}</text></g>`; }).join('');
-  svg.innerHTML = baseMap + `<g>${links}</g><g>${nodes}</g>`;
+  paintMap(baseMap + `<g>${links}</g><g>${nodes}</g>`);
 }
 function renderLegend(){ $('#legend').innerHTML = `<span><i style="background:var(--reich)"></i>Reich</span><span><i style="background:var(--dawn)"></i>Black Dawn</span><span><i style="background:var(--neutral)"></i>Neutral</span><span>⚑ faction HQ</span><span>◆ capital</span><span>★ VP</span><span>dashed = sea</span><span>~ = unscouted</span>`; }
 
 /* --- panels --- */
 const TABS = [['orders','Orders'],['front','World front'],['troops','Troops'],['tech','Research'],['dip','Diplomacy'],['council','Council'],['log','Log'],['rules','Rules']];
-function renderTabs(){ $('#tabs').innerHTML = TABS.map(([k, n]) => `<button class="tab ${tab === k ? 'on' : ''}" data-act="tab" data-k="${k}">${n}</button>`).join(''); }
+let shownTab='';
+function renderTabs(){
+  const root=$('#tabs'); if(shownTab===tab && root.innerHTML) return;
+  const focused=root.contains(document.activeElement) && document.activeElement; shownTab=tab;
+  root.innerHTML=TABS.map(([k,n])=>`<button class="tab ${tab===k?'on':''}" data-act="tab" data-k="${k}" aria-pressed="${tab===k}">${n}</button>`).join('');
+  liveControl(root,focused)?.focus({preventScroll:true});
+}
 function divBarHtml(kind, cur, team){
   const list = divsFor(team);
   if(!list.includes(cur)) cur = 'all';
@@ -3072,7 +3180,7 @@ function divBarHtml(kind, cur, team){
 }
 function unitsHtml(id){
   const t = S.terr[id], viewer = myTeam() || 'spectator', ex = visible(S, viewer, id); const n = total(t.u);
-  if(!ex) return `<div class="mut sm">Garrison about <b class="mono">${n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0'}</b> units. Composition, fort and stance unknown. Send a spy or research Intelligence 3.</div>`;
+  if(!ex) return `<div class="mut sm">Garrison about <b class="mono">${n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0'}</b> units. Composition, fort and stance unknown. ${t.o==='neutral'?'Scout this province to reveal the garrison.':'Send a spy or research Intelligence 3.'}</div>`;
   const own = t.o === 'neutral' ? 'reich' : t.o;
   const list = divsFor(own);
   const f = list.includes(ui.gdiv) ? ui.gdiv : 'all';
@@ -3129,11 +3237,46 @@ function orderRecruitment(team){
   }).join('');
   return `<section class="card">${toggle}<div id="order-recruits" style="margin-top:8px">${divBarHtml('div', curDiv, team)}${rows}</div></section>`;
 }
+function friendlyBase(team){
+  const hq=team==='reich'?'BER':'NIG';
+  return S.terr[hq]?.o===team ? hq : provincesOf(S).find(id=>S.terr[id].o===team);
+}
+function ordersBriefing(){
+  const team=myTeam(), role=myRole(), base=team && friendlyBase(team), pl=S.players[me.name];
+  const link=(k,label,primary=false)=>`<button class="btn ${primary?'pri':''}" data-act="tab" data-k="${k}">${label}</button>`;
+  const garrison=base ? `<button class="btn pri" data-act="goto" data-id="${base}">Open ${esc(TD[base].name)} orders</button>` : '';
+  let title, text, actions;
+  if(S.win){
+    title='Campaign complete'; text=S.win.why; actions=link('log','Read the campaign log',true);
+  } else if(!team){
+    title='Explore the campaign'; text='Choose your post to give orders, or use the directory below to inspect a province.';
+    actions=deskButton('switch','Choose your post',true);
+  } else if(role==='leader'){
+    title='Lead your faction'; text='Open a friendly garrison to plan an attack along one map line. To recruit troops, appoint a teammate as Chief of staff in Council.';
+    actions=garrison+link('council','Manage posts');
+  } else if(role==='chief'){
+    title='Prepare your garrison'; text='Open a friendly province and choose Recruit here to raise troops. Use Attack from here to preview an advance before spending points.';
+    actions=garrison;
+  } else if(postCan(pl,'attack')){
+    title='Use your attack seat'; text='Your leader has authorized you to order attacks. Open a friendly garrison and choose a neighboring target. Your regular role is unchanged.';
+    actions=garrison+link('council','View your post');
+  } else if(role==='diplomat'){
+    title='Open negotiations'; text='Offer a trade or propose a ceasefire in Diplomacy. You can also scout a province or buy a weak neutral neighbor by treaty.';
+    actions=link('dip','Open diplomacy',true);
+  } else {
+    title='Start with field duty'; text='Add manpower, steel or oil to your faction for free. You can also spy on a foreign province. ' +
+      (campaignRoom(S) && !seats(S.players,team).leaders ? `Ask ${S.owner} to appoint your side’s first commander in Council.` : 'Your leader assigns command roles in Council.');
+    actions=link('council','Open field duty',true);
+  }
+  const goal=campaignRoom(S)?'Secure the enemy homeland and take their last province. Taking their capital alone does not win the war.':'Capture the enemy headquarters or take their last province.';
+  return `<section class="card briefing"><p class="eyebrow">Command desk${team?' / '+ROLES[role]:''}</p><h2 id="briefing-title" tabindex="-1">${title}</h2><p>${esc(text)}</p><div class="row">${actions}</div>
+    <details data-keep="guide"><summary id="guide-summary">How do I play?</summary><p>${goal} You can also win by holding ${DOM_SHARE*100}% of victory points for ${DOM_MS/60000} minutes.</p><p>Each province supplies your whole faction. Command points (CP) are yours alone; they refill as you play. Inspecting a province or previewing an order costs nothing.</p>${link('rules','Read the rules')}</details></section>`;
+}
 function panelOrders(){
-  if(!sel) return `<div class="front-entry"><span><b>Independent powers</b><small>Field intelligence &amp; operations</small></span><button class="btn sm" data-act="tab" data-k="front">World front →</button></div><div class="card"><h3>Select a territory</h3><p class="sm mut" style="margin:0">Tap any province or capital on the map, or pick a region button at the top-left of the map to jump across continents. Your own lands show exact troop counts; enemy and neutral lands show estimates until scouted.</p></div>` + nationDirectory() + frontList();
+  if(!sel) return ordersBriefing()+nationDirectory()+frontList()+`<div class="front-entry"><span><b>Independent powers</b><small>Field intelligence &amp; operations</small></span><button class="btn sm" data-act="tab" data-k="front">World front →</button></div>`;
   const D = TD[sel], t = S.terr[sel], team = myTeam(), role = myRole(), mine = t.o === team, ex = visible(S, team || 'spectator', sel);
   const nb = neighbors(S,sel).map(n => `<button class="chip" data-act="goto" data-id="${n.id}"><span class="dot" style="background:${tcol(S.terr[n.id].o)}"></span>${esc(TD[n.id].name)}${n.sea ? ' ≈' : ''}</button>`).join('');
-  let h = `<div class="card"><div class="row sb"><h2 class="tname" id="province-name" tabindex="-1">${esc(D.name)}</h2><div class="row"><button class="btn sm" data-act="goto" data-id="${sel}" title="Center map">Locate</button><button class="btn sm" data-act="clearsel">Directory</button></div></div>
+  let h = `<div class="card"><div class="row sb"><h2 class="tname" id="province-name" tabindex="-1">${esc(D.name)}</h2><div class="row"><button class="btn sm" data-act="goto" data-id="${sel}" data-view="map" title="Center map">Locate</button><button class="btn sm" data-act="clearsel">Directory</button></div></div>
     <div class="row sb" style="margin-top:2px"><span class="mut sm">${D.reg} · ${D.terr[0].toUpperCase() + D.terr.slice(1)} · ${D.amt} ${RES[D.res]}/min · ${D.vp} VP</span><span style="color:${tcol(t.o)};font-family:var(--display);font-size:16px;letter-spacing:.06em;text-transform:uppercase">${t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].name}</span></div>
     ${D.fcap ? '<div class="sm" style="margin-top:4px;color:var(--ink)"><b>⚑ Faction Capital:</b> '+(campaignRoom(S)?'the rest of the faction’s territory still stands.':'lose it, lose the war.')+'</div>' : (D.cap ? '<div class="sm mut" style="margin-top:4px"><b style="color:var(--ink)">◆ National Capital</b></div>' : '')}`;
   if(ex) h += `<div class="row sm" style="margin-bottom:8px"><span class="mut">Fort</span><span>${[1,2,3].map(i => `<span class="pip ${t.f >= i ? 'on' : ''}"></span>`).join('')}</span><span class="mut" style="margin-left:10px">Posture</span><b>${STANCES[t.st]}</b></div>`;
@@ -3161,8 +3304,8 @@ function panelOrders(){
     if(moveReason && can(role,'move')) ord += `<div class="sm mut">${moveReason}</div>`;
     if(mayAttack && !routes.length && (total(t.u) || !can(role,'move'))) ord += `<div class="sm mut">${!total(t.u) ? 'This garrison has no troops to send.' : neighbors(S,sel).map(n=>attackBlock(S,team,n.id,now)).find(Boolean) || 'No foreign province is connected to this garrison.'}</div>`;
     if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}" ${k === t.st ? 'disabled' : priceAttrs({}, 1)}>${STANCES[k]}</button>`).join('')}</div>`;
-    if(ord.length > 30 || can(role, 'stance')) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
-    if(!mayAttack && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. ${can(role,'dip') ? 'Use Diplomacy or visit Council for field duty.' : 'Visit Council for field duty.'}</div>`;
+    if(mayAttack || ['move','fort','stance'].some(action=>can(role,action))) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
+    if(!mayAttack && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. ${can(role,'dip') ? '<button class="btn sm" data-act="tab" data-k="dip">Open diplomacy</button>' : '<button class="btn sm" data-act="tab" data-k="council">Open field duty</button>'}</div>`;
     h += garrison;
     if(can(role,'recruit')) h += orderRecruitment(team);
   } else {
@@ -3173,8 +3316,8 @@ function panelOrders(){
     if(can(role, 'sabotage') && S.teams[team].tech.intel >= 2) a += `<button class="btn" data-act="sabotage" ${priceAttrs({gold:25}, 3)}>Sabotage · 3cp 25G</button>`;
     if(can(role, 'decap') && t.o !== 'neutral' && S.teams[team].tech.intel >= 4) a += `<button class="btn" data-act="decap" title="A successful strike razes the fort and costs one enemy officer up to 6 CP" ${priceAttrs({gold:60}, 4)}>Decapitate · 4cp 60G</button>`;
     if(can(role, 'annex') && t.o === 'neutral'){
-      const gold = annexCost(S, team, total(t.u));
-      a += `<button class="btn" data-act="annex" ${priceAttrs({gold}, 2)}>Annex by treaty · ${gold}G</button>`;
+      const gold = annexCost(S, team, total(t.u)), reason = annexBlock(S,team,sel);
+      a += `<button class="btn" data-act="annex" ${reason ? 'disabled aria-describedby="annex-note"' : priceAttrs({gold}, 2)}>Annex by treaty · ${gold} gold + 2 CP</button>${reason ? `<span id="annex-note" class="sm mut">${reason}</span>` : ''}`;
     }
     a += '</div>';
     if(mayAttack && !routes.length) a += `<div class="sm mut" style="margin-top:8px">${attackBlock(S,team,sel,now) || 'No friendly troops border this territory. Move an army up first.'}</div>`;
@@ -3262,22 +3405,53 @@ function panelTech(){
     const L = T.tech[k], nx = L + 1, cost = researchCost(S, team, nx);
     return `<div class="card tech"><div><b>${TECH[k].n}</b> <span style="margin-left:6px">${[1,2,3,4].map(i => `<span class="pip ${L >= i ? 'on' : ''}"></span>`).join('')}</span></div>${L >= 4 ? '<span class="mut sm">Maxed</span>' : `<button class="btn sm" ${can_ ? priceAttrs(cost) : 'disabled'} data-act="research" data-k="${k}" data-rank="${nx}">Level ${nx} ${costHtml(cost)}</button>`}<div class="desc">${L ? 'Have: ' + Array.from({length:L},(_,i) => doctrineText(team,k,i+1)).join(' · ') + '<br>' : ''}${L < 4 ? 'Next: ' + doctrineText(team,k,nx) : ''}</div></div>`; }).join('');
 }
+const tradeDraft = () => ({type:'trade',give:{r:ui.trade.give,n:Number(ui.trade.gn)},get:{r:ui.trade.get,n:Number(ui.trade.wn)}});
+function refreshTrade(view){
+  if(tab !== 'dip' || !myTeam() || !can(myRole(),'dip') || S.win) return;
+  const send = $('#trade-submit'), note = $('#trade-note'); if(!send || !note) return;
+  const p = tradeDraft(), team = myTeam();
+  const reason = !liveBoard() || busy ? 'Waiting for the live room.' : S.props.some(x=>x.open && x.type==='trade' && x.from===team) ? 'Withdraw your open trade before sending another.' :
+    tradeIssue(p.give,p.get) || (view.teams[team].res[p.give.r] < p.give.n ? `Not enough ${RES[p.give.r].toLowerCase()} to offer.` : view.players[me.name].cp < 1 ? 'You need 1 command point.' : '');
+  send.disabled = !!reason;
+  if(note.textContent !== reason) note.textContent = reason;
+}
+function proposalRow(p,team,ok,cf){
+  const trade=p.type==='trade', mine=p.from===team;
+  const what=trade ? `${p.give.n} ${RES[p.give.r]} for ${p.get.n} ${RES[p.get.r]}` : `${p.mins/60}h ceasefire`;
+  const issue=trade ? tradeIssue(p.give,p.get) : cf ? 'A ceasefire is already in force.' : '';
+  const attrs=issue ? 'disabled' : priceAttrs(trade ? {[p.get.r]:p.get.n} : {});
+  let buttons='';
+  if(ok) buttons=mine ? `<button class="btn sm" data-act="answer" data-id="${p.id}" data-cancel="1" data-price>Withdraw</button>` :
+    `<button class="btn pri sm" data-act="answer" data-id="${p.id}" data-accept="1" aria-describedby="answer-note-${p.id}" ${attrs}>Accept</button><button class="btn sm" data-act="answer" data-id="${p.id}" data-price>Reject</button>`;
+  return `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line)"><span><b style="color:${tcol(p.from)}">${TEAMS[p.from].short}</b> offers ${what}</span><span class="row">${buttons}</span>
+    ${ok && !mine ? `<span class="sm mut" id="answer-note-${p.id}">${issue ? `${issue} Reject this offer or ask for a new one.` : ''}</span>` : ''}</div>`;
+}
 function panelDip(keepEditor = false){
   const team = myTeam(), role = myRole(), ok = team && can(role, 'dip') && !S.win, now = Date.now(), cf = ceasefire(S, now);
-  const terms = cf && ok ? breakTerms(S,team) : null;
-  let h = `<div class="card" id="diplomacy-treaty"><h2 class="card-heading">Treaty</h2>${cf ? `<div>Ceasefire in force for <b id="treaty-minutes">${Math.ceil((cf.until - now) / 60000)}</b> more minutes. Neither side may attack the other.</div>${ok ? `<button class="btn danger sm" style="margin-top:8px" data-act="breakpact" data-until="${cf.until}" ${priceAttrs({gold:terms.gold})}>Tear it up · ${terms.gold}G, -10% attack for ${terms.minutes} min</button>` : ''}` : `<div class="mut sm">No treaty. Propose a ceasefire to buy time, like a certain non-aggression pact.</div>${ok ? `<div class="row" style="margin-top:8px">${[60, 180, 360].map(m => `<button class="btn sm" data-act="propose" data-type="ceasefire" data-mins="${m}" ${priceAttrs({}, 1)}>${m / 60}h ceasefire</button>`).join('')}</div>` : ''}`}</div>`;
-  const tr = ui.trade, trade = ok ? `<div class="card" id="trade-editor"><h2 class="card-heading">Trade offer · 1 command point</h2><div class="row"><span class="sm">Give</span><input type="number" min="1" id="tgn" aria-label="Amount to give" value="${esc(tr.gn)}" style="width:70px" data-chg="gn"><select id="tgr" aria-label="Resource to give" data-chg="give">${RK.map(r => `<option value="${r}" ${tr.give === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><div class="row" style="margin-top:6px"><span class="sm">Get&nbsp;</span><input type="number" min="1" id="twn" aria-label="Amount to receive" value="${esc(tr.wn)}" style="width:70px" data-chg="wn"><select id="twr" aria-label="Resource to receive" data-chg="get">${RK.map(r => `<option value="${r}" ${tr.get === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><button class="btn pri sm" style="margin-top:8px" data-act="propose" data-type="trade" ${priceAttrs({}, 1)}>Send offer</button></div>` : '';
-  const open = S.props.filter(p => p.open).reverse(), proposals = `<div class="card" id="diplomacy-proposals"><h2 class="card-heading">Proposals</h2>${open.length ? open.map(p => { const mineP = p.from === team; const what = p.type === 'ceasefire' ? `${p.mins / 60}h ceasefire` : `${p.give.n} ${RES[p.give.r]} for ${p.get.n} ${RES[p.get.r]}`; return `<div class="row sb" style="padding:5px 0;border-bottom:1px solid var(--line)"><span><b style="color:${tcol(p.from)}">${TEAMS[p.from].short}</b> offers ${what}</span>${ok ? (mineP ? `<button class="btn sm" data-act="answer" data-id="${p.id}" data-cancel="1">Withdraw</button>` : `<span class="row"><button class="btn pri sm" data-act="answer" data-id="${p.id}" data-accept="1">Accept</button><button class="btn sm" data-act="answer" data-id="${p.id}">Reject</button></span>`) : ''}</div>`; }).join('') : '<div class="mut sm">Nothing on the table.</div>'}</div>`;
+  const terms = cf && ok ? breakTerms(S,team) : null, pending=S.props.some(p=>p.open && p.type==='ceasefire' && p.from===team);
+  let h = `<div class="card" id="diplomacy-treaty"><h2 class="card-heading">Treaty</h2>${cf ? `<div>Ceasefire in force for <b id="treaty-minutes">${Math.ceil((cf.until - now) / 60000)}</b> more minutes. Neither side may attack the other.</div>${ok ? `<button class="btn danger sm" style="margin-top:8px" data-act="breakpact" data-until="${cf.until}" ${priceAttrs({gold:terms.gold})}>Tear it up · ${terms.gold}G, -10% attack for ${terms.minutes} min</button>` : ''}` : `<div class="mut sm">${pending?'Withdraw your open ceasefire proposal before sending another.':'No treaty. An accepted ceasefire pauses attacks between the two factions.'}</div>${ok ? `<div class="row" style="margin-top:8px">${[60, 180, 360].map(m => `<button class="btn sm" data-act="propose" data-type="ceasefire" data-mins="${m}" ${pending?'disabled':priceAttrs({}, 1)}>${m / 60}h ceasefire</button>`).join('')}</div>` : ''}`}</div>`;
+  const tr = ui.trade, trade = ok ? `<div class="card" id="trade-editor"><h2 class="card-heading">Trade offer · 1 command point</h2><div class="row"><span class="sm">Give</span><input type="number" min="1" id="tgn" aria-label="Amount to give" value="${esc(tr.gn)}" style="width:70px" data-chg="gn"><select id="tgr" aria-label="Resource to give" data-chg="give">${RK.map(r => `<option value="${r}" ${tr.give === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><div class="row" style="margin-top:6px"><span class="sm">Get&nbsp;</span><input type="number" min="1" id="twn" aria-label="Amount to receive" value="${esc(tr.wn)}" style="width:70px" data-chg="wn"><select id="twr" aria-label="Resource to receive" data-chg="get">${RK.map(r => `<option value="${r}" ${tr.get === r ? 'selected' : ''}>${RES[r]}</option>`).join('')}</select></div><button class="btn pri sm" style="margin-top:8px" id="trade-submit" data-act="propose" data-type="trade" aria-describedby="trade-note">Send offer</button><p class="sm mut" id="trade-note" role="status"></p></div>` : '';
+  const open = S.props.filter(p => p.open).reverse();
+  const proposals = `<div class="card" id="diplomacy-proposals"><h2 class="card-heading">Proposals</h2>${open.map(p=>proposalRow(p,team,ok,cf)).join('') || '<div class="mut sm">Nothing on the table.</div>'}</div>`;
   if(keepEditor){
     $('#diplomacy-treaty').outerHTML = h; $('#diplomacy-proposals').outerHTML = proposals; return;
   }
   h += trade + proposals + `<div class="card sm mut">Diplomats can run a honeytrap on an enemy province (intel, plus one enemy officer loses up to 2 CP) and can also annex weak neutral lands (select one on the map) and run spy missions. Annexing needs a border and a garrison of 12 units or fewer.</div>`;
   return h;
 }
-function panelCouncil(){
+function refreshDuty(){
+  if(tab!=='council' || !myTeam() || S.win) return;
+  const note=$('#duty-note'); if(!note) return;
+  const cd=Math.max(0,(S.players[me.name].cd || 0)-Date.now());
+  const msg=cd ? `Next field duty in ${clockText(cd)}.` : 'Ready. Most posts can do one job every 3 minutes.';
+  for(const button of document.querySelectorAll('[data-act="duty"]')) button.disabled=!!cd || busy || !liveBoard();
+  if(note.textContent!==msg) note.textContent=msg;
+}
+function panelCouncil(keepEnlist = false){
   const team = myTeam(), lead = myRole() === 'leader';
   let h = '<h2 class="card-heading">Council · Posts &amp; field duty</h2>';
-  if(team){ const pl = S.players[me.name], cd = Math.max(0, pl.cd - Date.now()); h += `<div class="card"><h3>Field duty · free, no command points</h3><div class="row"><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="drill">Drill +6 Manpower</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="scavenge">Scavenge +5 Steel</button><button class="btn sm" ${cd ? 'disabled' : ''} data-act="duty" data-k="prospect">Prospect +4 Oil</button></div><div class="mut sm" style="margin-top:6px">${cd ? `Ready in ${Math.ceil(cd / 1000)}s.` : 'Every player can do one duty every 3 minutes. Soldiers keep the war machine fed.'}</div></div>`; }
+  if(team && !S.win) h += `<div class="card"><h3>Field duty · free, no command points</h3><p class="sm">Choose one job to add resources to your faction. Each job uses the same personal cooldown.</p>
+    <div class="row">${[['drill','Drill +6 Manpower'],['scavenge','Scavenge +5 Steel'],['prospect','Prospect +4 Oil']].map(([k,label])=>`<button class="btn sm" data-act="duty" data-k="${k}" aria-describedby="duty-note">${label}</button>`).join('')}</div><div class="mut sm" id="duty-note"></div></div>`;
   ['reich','dawn'].forEach(tm => {
     const ps = roomPosts(S,tm,true), nSeats = seats(S.players,tm);
     h += `<div class="card council-roster" style="--post-color:${TEAMS[tm].css}"><h3>${TEAMS[tm].name} · ${ps.length}</h3><p class="sm">Staff chiefs: <b>${nSeats.chiefs}/${MAX_CHIEFS}</b> · Attack seats: <b>${nSeats.attackers}/${MAX_ATTACKERS}</b> + leader. Chiefs use one attack seat each. All attacks from these posts follow one map line.</p>`;
@@ -3285,7 +3459,7 @@ function panelCouncil(){
       const post = postView(S.players,n), label = esc(post.name), key = esc(n);
       const chiefFull = nSeats.chiefs >= MAX_CHIEFS || (!usesAttackSeat(p) && nSeats.attackers >= MAX_ATTACKERS);
       const roleOption = r => p.role === r ? 'selected' : p.role === 'leader' || r === 'leader' || (r === 'chief' && chiefFull) ? 'disabled' : '';
-      if(lead && tm === team) return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)">
+      if(lead && tm === team && !S.win) return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)">
         <span class="council-name"><b>${label}</b></span>
         <select aria-label="Game role for ${label}" data-chg="role" data-n="${key}">${Object.keys(ROLES).map(r => `<option value="${r}" ${roleOption(r)}>${ROLES[r]}</option>`).join('')}</select>
         ${p.role === 'chief' || p.role === 'leader' ? '<span class="mut sm">Can order attacks</span>' : `<button class="btn sm" data-act="attackseat" data-n="${key}" data-grant="${p.attackSeat ? '0' : '1'}" aria-label="${p.attackSeat ? 'Release' : 'Assign'} attack seat: ${label}" ${!p.attackSeat && nSeats.attackers >= MAX_ATTACKERS ? 'disabled' : ''}>${p.attackSeat ? 'Release attack seat' : 'Assign attack seat'}</button>`}
@@ -3294,8 +3468,10 @@ function panelCouncil(){
       return `<div class="row sb" style="padding:3px 0"><span class="council-name"><b>${label}</b> </span><span class="mut sm">${esc(post.caption)}${p.attackSeat ? ' · Attack seat' : ''}</span>${appointmentButton(S,n)}</div>`;
     }).join('') + '</div>';
   });
-  if(!campaignRoom(S)) h += `<div class="card"><h3>Enlist someone new</h3><div class="row"><input type="text" id="enl" aria-label="Name for new post" placeholder="Name" style="flex:1;min-width:100px"><input type="password" autocomplete="new-password" id="enlpw" aria-label="Password for new post" placeholder="Choose a password" style="flex:1;min-width:100px"><select id="enlt" aria-label="Faction for new post"><option value="reich">Reich</option><option value="dawn">Black Dawn</option></select><button class="btn pri sm" data-act="enlist">Enlist</button></div></div>`;
   if(lead && (!campaignRoom(S) || S.owner===me.name)) h += `<div class="card"><h3>Reset</h3><div class="sm mut">Start a fresh war. Everyone keeps their post.</div><button class="btn danger sm" style="margin-top:8px" data-act="reset">${ui.confirmReset === S ? 'Press again to confirm' : 'Reset the map'}</button></div>`;
+  if(keepEnlist){ $('#council-live').innerHTML=h; return; }
+  h=`<div id="council-live" style="display:contents">${h}</div>`;
+  if(!campaignRoom(S) && !S.win) h += `<div class="card" id="council-enlist"><h3>Enlist someone new</h3><div class="row"><input type="text" id="enl" aria-label="Name for new post" placeholder="Name" style="flex:1;min-width:100px"><input type="password" autocomplete="new-password" id="enlpw" aria-label="Password for new post" placeholder="Choose a password" style="flex:1;min-width:100px"><select id="enlt" aria-label="Faction for new post"><option value="reich">Reich</option><option value="dawn">Black Dawn</option></select><button class="btn pri sm" data-act="enlist">Enlist</button></div></div>`;
   return h;
 }
 const logProvinceNames = new Map(ATLAS.map(id => [TD[id].name,id]));
@@ -3361,7 +3537,7 @@ function panelLog(){
   const open = new Set(Array.from($('#panel').querySelectorAll('details.log-sites[open]'),el => el.dataset.report));
   const rows = visibleLog().map(l => {
     const keys = activeLogCountries(l), key = reportKey(l), expanded = open.has(key);
-    const sites = keys.length ? `<details class="log-sites" data-report="${key}"${expanded ? ' open' : ''}><summary>Countries active this turn (${keys.length})</summary><p class="sm mut">One location per country for this turn.</p><div class="chips">${expanded ? logSiteButtons(l,keys) : ''}</div></details>` : '';
+    const sites = keys.length ? `<details class="log-sites" data-report="${key}"${expanded ? ' open' : ''}><summary data-report="${key}">Countries active this turn (${keys.length})</summary><p class="sm mut">One location per country for this turn.</p><div class="chips">${expanded ? logSiteButtons(l,keys) : ''}</div></details>` : '';
     const color = l.kind === 'battle' ? tcol(l.by) : l.kind === 'front' ? '#9ac6c6' : l.kind === 'win' ? 'var(--ok)' : 'var(--line)';
     return `<article style="border-left-color:${color}"><small>${new Date(l.t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</small>${logMessageHtml(l)}${sites}</article>`;
   }).join('');
@@ -3409,9 +3585,9 @@ function panelFront(){
     const key = point(k), drill = (S.front?.drill[k] || 0) % DRILLS_PER_RANK;
     return `<article class="power-row"><span class="power-code" aria-hidden="true">${k}</span><div><h4>${power.name}</h4><div class="sm mut">${DOCTRINE_NAME[power.specialty]} · ${n} independent ${n===1?'province':'provinces'}</div></div>
       <div class="power-rating"><span>${!n ? 'In exile · ' : ''}Rank ${RANK_NUM[level]}</span><span class="power-marks" aria-hidden="true">${marks}</span></div>
-      <div class="power-foot"><span>${level === FRONT_MAX ? 'Fully trained' : `Training ${drill}/${DRILLS_PER_RANK} toward rank ${RANK_NUM[level+1]}`}</span><button class="btn sm" data-act="goto" data-id="${key}" aria-label="Locate ${power.name} on the map">Locate ↗</button></div></article>`;
+      <div class="power-foot"><span>${level === FRONT_MAX ? 'Fully trained' : `Training ${drill}/${DRILLS_PER_RANK} toward rank ${RANK_NUM[level+1]}`}</span><button class="btn sm" data-act="goto" data-id="${key}" data-view="map" aria-label="Locate ${power.name} on the map">Locate ↗</button></div></article>`;
   }).join('');
-  const controlled = campaignRoom(S) ? `<details class="card sm"><summary>Country control · state by state</summary><p>Controlling a capital alone is not enough. Select a country to inspect its states.</p><div class="chips">${ATLAS_COUNTRIES.map(k=>{
+  const controlled = campaignRoom(S) ? `<details class="card sm" data-keep="countries"><summary id="front-countries">Country control · state by state</summary><p>Controlling a capital alone is not enough. Select a country to inspect its states.</p><div class="chips">${ATLAS_COUNTRIES.map(k=>{
     const {homes,reich,dawn,controller}=occupation(S,k);
     return `<button class="chip" data-act="goto" data-id="${homes[0]}">${COUNTRIES[k].name} · ${sideId(controller)?TEAMS[controller].short+' controls all':reich||dawn?`Reich ${reich}/${homes.length}, Dawn ${dawn}/${homes.length}`:`${homes.length} ${homes.length===1?'state':'states'}`}</button>`;
   }).join('')}</div></details>` : '';
@@ -3420,13 +3596,13 @@ function panelFront(){
   return `<section class="card front-hero"><div class="front-brow">Field intelligence <span>OP / ${String(turn).padStart(3,'0')}</span></div>
     <h2>World front</h2><p>Beyond the two factions, independent armies are fighting for their own borders.</p>
     <div class="front-watch"><b id="front-signal" class="${frontWatch?.active()?'on':''}">${label}</b><span class="sm" id="front-countdown">${detail}</span></div></section>
-    <section class="card dispatch"><h3>Latest dispatch</h3>${report ? `<small class="mut mono">${new Date(report.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small><p>${esc(report.msg)}</p>${Object.hasOwn(TD,report.tid) ? `<button class="btn sm" data-act="goto" data-id="${esc(report.tid)}">Show battle on map ↗</button>`:''}` : '<p>No operations yet. Operations need an active player from either faction: normally 90 seconds, or 3 minutes in a busy room.</p>'}</section>
-    <details class="card sm"><summary>Occupied national capitals (${occupied.length})</summary><div class="chips" style="margin-top:8px">${occupied.map(k=>{
+    <section class="card dispatch"><h3>Latest dispatch</h3>${report ? `<small class="mut mono">${new Date(report.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</small><p>${esc(report.msg)}</p>${Object.hasOwn(TD,report.tid) ? `<button class="btn sm" data-act="goto" data-id="${esc(report.tid)}" data-view="map">Show battle on map ↗</button>`:''}` : '<p>No operations yet. Operations need an active player from either faction: normally 90 seconds, or 3 minutes in a busy room.</p>'}</section>
+    <details class="card sm" data-keep="capitals"><summary id="front-capitals">Occupied national capitals (${occupied.length})</summary><div class="chips" style="margin-top:8px">${occupied.map(k=>{
       const cap = capitalOf(k), stock = S.front?.resistance?.[k] || 0;
       return `<button class="chip" data-act="goto" data-id="${cap}">${COUNTRIES[k].name} · ${TD[cap].name}${stock ? ` · Resistance ${stock}/${resistanceCap(frontRank(S,k))}` : ''}</button>`;
     }).join('') || 'All independent capitals are home-held.'}</div></details>
     ${controlled}<section class="power-list"><div class="front-brow">Major powers <span>Force readiness</span></div>${roster}</section>
-    <details class="card sm"><summary>Other independent countries (${minor.length})</summary><div class="chips" style="margin-top:8px">${minor.map(k=>`<button class="chip" data-act="goto" data-id="${point(k)}">${COUNTRIES[k].name} · ${RANK_NUM[frontRank(S,k)]}</button>`).join('') || 'None remaining.'}</div></details>
+    <details class="card sm" data-keep="minors"><summary id="front-minors">Other independent countries (${minor.length})</summary><div class="chips" style="margin-top:8px">${minor.map(k=>`<button class="chip" data-act="goto" data-id="${point(k)}">${COUNTRIES[k].name} · ${RANK_NUM[frontRank(S,k)]}</button>`).join('') || 'None remaining.'}</div></details>
     <div class="card sm"><h3>Rules of engagement</h3>One active player from either faction keeps operations running. Busy rooms slow from 90 seconds to 3 minutes. Independent countries train, reinforce their own garrisons and fight for occupied home capitals. If no army can reach its capital, local resistance recruits there, even in exile. A full reserve can challenge the occupier; victory is not automatic. ${campaignRoom(S)?'Active armies also raid neighboring faction-held states, even with only one side online.':'Other border raids need both factions active.'} At most one battle happens per turn. Sea expeditions need a fleet, and neither faction HQ is a target. Major powers rebuild faster; training doubles if either faction holds eight originally independent provinces or reaches rank III in doctrine or mastery. After five minutes without input, this device is AFK and stops counting. Missed turns never stack.</div>`;
 }
 
@@ -3441,14 +3617,14 @@ function panelRules(){
   <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Nigeria); ◆ marks national capitals.</div>
   <div class="card sm"><h3>Roles</h3><b>Leader</b>: commands attacks and appoints posts. Only the four staff chiefs can recruit, in any friendly province. The leader can fill six non-leader attack seats; chiefs count toward the six. Attack-only appointments keep their normal game role. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
 }
-let panelContext = '';
+let panelContext='', deferredPanel=false;
 function renderPanel(refreshBudget = true){
   if(needsDesk()) return;
   const root = $('#panel'), el = document.activeElement;
   const context = JSON.stringify([bootId,S?.created,mode,me.name,myTeam(),myRole(),!!S?.win,tab,sel,ui.natReg]);
-  const same = context === panelContext; panelContext = context;
+  const same = context === panelContext; panelContext = context; deferredPanel=false;
   if(badAddress){
-    $('#panel').innerHTML = `<section class="card"><h3>Unsupported room address</h3><p>No save was changed. Open your group’s exact Mastery invite or enter a room code.</p><label>Room code <input type="text" id="home-room" maxlength="32"></label> <button class="btn pri" data-act="homeroom">Open room</button> <button class="btn" data-act="rooms">Back to rooms</button></section>`; return;
+    $('#panel').innerHTML = `<section class="card"><h3>Unsupported room address</h3><p>No save was changed. Open your group’s exact Mastery invite or enter a room code.</p><label>Room code or invite link <input type="text" id="home-room" aria-describedby="home-room-error" placeholder="Code or invite link"></label> <button class="btn pri" data-act="homeroom">Open room</button> <button class="btn" data-act="rooms">Back to rooms</button><span class="form-note" id="home-room-error" role="status"></span></section>`; return;
   }
   if(mode === 'conflict'){
     $('#panel').innerHTML = `<section class="card"><h3>Choose the shared copy</h3><p class="sm">Nothing was merged or overwritten. Ask your friend for their Room invite, or select the relay and revision you recognize, then share its link.</p><div class="row">${relayChoices.map(c => `<button class="btn" data-act="pickrelay" data-id="${c.id}" ${c.rev ? '' : 'disabled'}>${c.id} · ${c.rev ? 'revision '+c.rev : 'unreadable'}</button>`).join('')}</div></section>`; return;
@@ -3456,9 +3632,15 @@ function renderPanel(refreshBudget = true){
   if(!S || !liveBoard()){ $('#panel').innerHTML = `<section class="card"><h3>Waiting for the live room</h3><p class="sm">${esc(syncText())}</p><div class="row"><button class="btn sm" data-act="reconnect">Reconnect</button><button class="btn sm" data-act="room">Room &amp; backups</button><button class="btn sm" data-act="rooms">Back to rooms</button></div></section>`; return; }
   const sc = root.scrollTop, focused = same && root.contains(el) && el;
   if(same && tab === 'dip' && root.querySelector?.('#trade-editor')) panelDip(true);
+  else if(focused && el.matches('input[type=text],input[type=number],input[type=password]') && !el.closest('#council-enlist')){
+    deferredPanel=true; return; // Preserve the native search/title editor until focus leaves it.
+  } else if(same && tab==='council' && root.querySelector?.('#council-enlist')) panelCouncil(true);
   else {
-    if(focused && el.matches('input[type=text],input[type=number],input[type=password],#enlt')) return;
+    const disclosures=same ? [...root.querySelectorAll('details[data-keep][open]')].map(d=>d.dataset.keep) : [];
+    const directory=same && !sel && root.querySelector?.('#natdir .chips')?.scrollTop;
     root.innerHTML = {orders:panelOrders, front:panelFront, troops:panelTroops, tech:panelTech, dip:panelDip, council:panelCouncil, log:panelLog, rules:panelRules}[tab]();
+    for(const d of root.querySelectorAll('details[data-keep]')) if(disclosures.includes(d.dataset.keep)) d.open=true;
+    if(directory && root.querySelector('#natdir .chips')) root.querySelector('#natdir .chips').scrollTop=directory;
   }
   if(focused && focused !== document.activeElement) liveControl(root,focused)?.focus({preventScroll:true});
   root.scrollTop = sc;
@@ -3482,10 +3664,12 @@ function showDialog(key,html,initial){
   if(!same) loginAttempt = null;
   // Keep the room form, disclosure and scroll position usable while friends publish orders.
   const dialog = root.querySelector?.('[role=dialog]'), scroll = same && dialog ? dialog.scrollTop : 0;
-  const roomDraft = same && M === 'room' ? {room:$('#roomin').value,fb:$('#fbin').value,open:$('#room-backup').open} : null;
+  const roomDraft = same && M === 'room' ? {room:$('#roomin').value,fb:$('#fbin').value,open:$('#room-backup').open,error:$('#roomin-error')?.textContent} : null;
   const selection = focused?.tagName === 'INPUT' && typeof focused.selectionStart === 'number' ? [focused.selectionStart,focused.selectionEnd] : null;
   modalKey = key; modalMarkup = html; root.innerHTML = html; $('.app').inert = true;
-  if(roomDraft){ $('#roomin').value = roomDraft.room; $('#fbin').value = roomDraft.fb; $('#room-backup').open = roomDraft.open; }
+  if(roomDraft){ $('#roomin').value = roomDraft.room; $('#fbin').value = roomDraft.fb; $('#room-backup').open = roomDraft.open;
+    if(roomDraft.error){$('#roomin-error').textContent=roomDraft.error;$('#roomin').setAttribute('aria-invalid','true');}
+  }
   const next = liveControl(root,focused) || (initial && root.querySelector?.(initial)) || root.querySelector?.('[role=dialog]');
   next?.focus({preventScroll:true});
   if(selection && next?.tagName === 'INPUT') next.setSelectionRange(...selection);
@@ -3520,7 +3704,7 @@ function renderModal(refreshBudget = true){
       <div class="sm mut">Source: <b>${esc(NET.transport)}</b>${canShare ? ` · Live · Revision #${S.rev}` : startingMap ? ' · Confirmed empty' : ` · ${esc(syncText())}`}</div>
       <div class="card sm" id="room-presence">${roomPresenceHtml()}</div>
       <div class="card sm"><h3>Invite friends</h3><div class="row"><input type="text" readonly id="roomlink" aria-label="Room invite link" value="${canShare ? esc(roomUrl()) : ''}" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn pri sm" data-act="copyroom" ${canShare ? '' : 'disabled'}>Copy link</button></div><div class="mut sm" style="margin-top:6px">${canShare ? 'Share this exact link. It selects the same room, rules and data source on every device.' : 'Share the link once the saved campaign is live.'}</div></div>
-      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" aria-label="Room code" value="${esc(ROOM)}" placeholder="room-code" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New Mastery room</button></div><p class="mut sm" style="margin:6px 0 0">In a new room, the Reich starts with Berlin and Black Dawn with Nigeria. Every other province starts neutral. Joining an existing room keeps its saved borders.</p></div>
+      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" aria-label="Room code or invite link" aria-describedby="roomin-error" value="${esc(ROOM)}" placeholder="Code or invite link" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New Mastery room</button></div><span class="form-note" id="roomin-error" role="status"></span><p class="mut sm" style="margin:6px 0 0">In a new room, the Reich starts with Berlin and Black Dawn with Nigeria. Every other province starts neutral. Joining an existing room keeps its saved borders.</p></div>
       <details class="card sm" id="room-backup"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
         <div class="mut sm" style="margin:6px 0">Public relays can lose retained saves. Export a backup you want to keep. Selecting a Firebase database opens a different data source; it does not move or upload this campaign.</div>
         <div class="row" style="margin-bottom:8px"><input type="text" id="fbin" aria-label="Firebase database URL" value="${esc(FB_URL)}" placeholder="https://your-app-default-rtdb.firebaseio.com" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn sm" data-act="savefb">Use</button>${FB_URL ? '<button class="btn sm" data-act="clearfb">Clear</button>' : ''}</div>
@@ -3611,7 +3795,17 @@ const recentRoom = () => { const q=new URLSearchParams(readPref(LAST_ROOM)||''),
 const deskButton = (act,label,primary=false) => `<button type="button" class="btn ${primary?'pri':''}" data-act="${act}">${label}</button>`;
 const backToRooms = () => deskButton('rooms','Back to rooms');
 function appointmentButton(s,n){
-  const pl=s.players[n]; return campaignRoom(s) && s.owner===me.name && authed() && pl.team!==myTeam() && !seats(s.players,pl.team).leaders ? `<button class="btn sm" data-act="commander" data-n="${esc(n)}" ${!liveBoard() || busy?'disabled':''}>Appoint ${esc(n)} as ${TEAMS[pl.team].leader}</button>` : '';
+  const pl=s.players[n]; return campaignRoom(s) && !s.win && s.owner===me.name && authed() && pl.team!==myTeam() && !seats(s.players,pl.team).leaders ? `<button class="btn sm" data-act="commander" data-n="${esc(n)}" ${!liveBoard() || busy?'disabled':''}>Appoint ${esc(n)} as ${TEAMS[pl.team].leader}</button>` : '';
+}
+function entrySteps(step){
+  const last=waitingRoom(S)?'Launch':'Play';
+  return `<ol class="entry-steps" aria-label="Room setup">${['Account','Choose side',last].map((label,i)=>`<li ${i+1===step?'aria-current="step"':''}>${i+1}. ${label}</li>`).join('')}</ol>`;
+}
+function factionChoice(t,first,ready){
+  const n=roomPosts(S,t).length, missing=!first && !n && waitingRoom(S);
+  return `<section style="--flag:${TEAMS[t].css}"><h3>${TEAMS[t].name}</h3><p>Headquarters: ${t==='reich'?'Berlin':'Nigeria'}<br>Starting role: ${first?TEAMS[t].leader:'Soldier'}</p>
+    ${first?'':`<p class="sm ${missing?'needed':'mut'}">${n} ${n===1?'player':'players'}${missing?' · Needs a player to start':''}</p>`}
+    <button class="btn pri" data-act="membership" data-team="${t}" ${ready?'':'disabled'}>Join ${TEAMS[t].name}</button></section>`;
 }
 function renderDesk(){
   const root=$('#entry'); root.hidden=!needsDesk(); $('main').hidden=!root.hidden;
@@ -3619,62 +3813,96 @@ function renderDesk(){
   let page='', html=''; const ready=liveBoard()&&!busy;
   if(atHome){
     page='home'; const last=recentRoom();
-    html=`<p class="eyebrow">Multiplayer · Mastery</p><h2>Enter the war room</h2><p>Join your group’s campaign, or open a new map for both factions.</p>
-      <div class="desk-grid"><form data-form="joincode"><h3>Join with a code</h3><label>Room code<input type="text" id="home-code" maxlength="32" autocomplete="off" autocapitalize="none" required placeholder="war-…"></label><button class="btn pri">Join room</button></form>
-      <section><h3>Create a campaign</h3><p>Start with your capital. Invite your opponent before launching.</p>${deskButton('newroom','New Mastery room')}</section></div>
+    html=`<p class="eyebrow">Multiplayer · Mastery</p><h2>Enter the war room</h2><p>Join your friends’ campaign or start a new map together.</p>
+      <div class="desk-grid"><form data-form="joincode"><h3>Join with a code or link</h3><label>Room code or invite link<input type="text" id="home-code" aria-describedby="home-code-error" autocomplete="off" autocapitalize="none" required placeholder="Code or full invite link"></label><button class="btn pri">Join room</button><span class="form-note" id="home-code-error" role="status"></span></form>
+      <section><h3>Create a campaign</h3><p>Pick your side, then invite a friend to the other side. You decide when to start.</p>${deskButton('newroom','New Mastery room')}</section></div>
       ${last?deskButton('resume','Return to '+esc(last.room)):''}`;
   } else if(startingMap && creatingRoom!==ROOM){
     page='missing'; html=`<p class="eyebrow">Room lookup</p><h2>Room not found</h2><p>No saved campaign was found at <b>${esc(ROOM)}</b>. Check the code or ask the owner for the full invite. No new room was created.</p>${backToRooms()}`;
   } else if(restoring || !account){
     const signup=accountMode==='signup'; page='account:'+bootId+':'+accountMode;
-    html=`<p class="eyebrow">Mastery / ${esc(ROOM)}</p><h2>${restoring?'Restoring your session':signup?'Create your account':'Sign in to join'}</h2>
-      ${restoring?'<p>Checking the saved sign-in on this device…</p>':`<p>Your username is your call sign in every room. This browser remembers you until you sign out or clear its storage.</p>
-      <form data-form="account" class="account-form"><label>Username<input type="text" id="account-name" autocomplete="username" maxlength="30" autocapitalize="none" required></label>
+    html=`<p class="eyebrow">Mastery / ${esc(ROOM)}</p><h2>${restoring?'Restoring your session':signup?'Create your account':startingMap?'Sign in to create a room':'Sign in to join'}</h2>${entrySteps(1)}
+      ${restoring?'<p>Checking the saved sign-in on this device…</p>':`<p>${startingMap?'Sign in or sign up, then choose which side to lead. You’ll get an invite link in the lobby.':'Sign in to your existing game account, or sign up if this is your first visit.'} This browser remembers your sign-in.</p>
+      <form data-form="account" class="account-form"><div class="seg" role="group" aria-label="Account access">${[['signin','Sign in'],['signup','Sign up']].map(([k,label])=>`<button type="button" class="${accountMode===k?'on':''}" aria-pressed="${accountMode===k}" data-act="${k}">${label}</button>`).join('')}</div><label>Username<input type="text" id="account-name" autocomplete="username" maxlength="30" autocapitalize="none" required></label>
       <label>Password<input id="account-password" type="password" autocomplete="${signup?'new-password':'current-password'}" maxlength="256" required></label>
-      ${signup?'<small class="mut">Use a game-only password of at least eight characters. This shared game publishes a salted verification fingerprint, never your password.</small>':''}<span id="account-error" role="status"></span>
-      <div class="row"><button class="btn pri" id="account-submit">${signup?'Create account':'Sign in'}</button>${deskButton(signup?'signin':'signup',signup?'Already registered? Sign in':'New player? Sign up')}</div></form>`}${backToRooms()}`;
+      ${signup?'<small class="mut">Use a game-only password of at least eight characters. Don’t reuse a password from another site. There is no password reset.</small>':''}<span id="account-error" role="status"></span>
+      <div class="row"><button class="btn pri" id="account-submit">${signup?'Create account':'Sign in and continue'}</button></div></form>`}${backToRooms()}`;
   } else if(!myTeam() && Object.keys(S.players).some(n=>n.toLowerCase()===account.name.toLowerCase())){
     page='occupied-name'; html=`<h2>Username already in this room</h2><p>This post belongs to another account. Sign in with the password used for this room or choose another username.</p>${deskButton('signout','Sign out')} ${backToRooms()}`;
   } else if(!myTeam()){
-    page='faction'; const first=startingMap;
-    html=`<p class="eyebrow">${esc(account.name)} / ${esc(ROOM)}</p><h2>Choose your faction</h2><p>${first?'You are creating this room. You will lead the side you choose.':S.win?'This campaign has ended. Create or join another room.':'Join as a Soldier. Your faction leader can appoint you to another role later.'}</p>
-      <div class="desk-grid">${['reich','dawn'].map(t=>`<section style="--flag:${TEAMS[t].css}"><h3>${TEAMS[t].name}</h3><p>Headquarters: ${t==='reich'?'Berlin':'Nigeria'}<br>Starting role: ${first?TEAMS[t].leader:'Soldier'}</p><button class="btn pri" data-act="membership" data-team="${t}" ${!ready||S.win?'disabled':''}>Join ${TEAMS[t].name}</button></section>`).join('')}</div>
-      <div class="row">${backToRooms()}${deskButton('signout','Sign out')}</div>`;
+    if(S.win){page='ended'; html=`<h2>Campaign has ended</h2><p>This room no longer accepts players. Join another room or create one to play.</p>${backToRooms()}`;}
+    else {page='faction'; const first=startingMap;
+    html=`<p class="eyebrow">${esc(account.name)} / ${esc(ROOM)}</p><h2>Choose your faction</h2>${entrySteps(2)}<p>${first?'You are creating this room. You will lead the side you choose.':'Join as a Soldier. Your faction leader can appoint you to another role later.'}</p>
+      <div class="desk-grid">${['reich','dawn'].map(t=>factionChoice(t,first,ready)).join('')}</div>
+      <div class="row">${backToRooms()}${deskButton('signout','Sign out')}</div>`;}
   } else {
     page='staging'; const owner=S.owner===account.name, filled=roomReady(S);
-    html=`<p class="eyebrow">Mastery / Assembly</p><h2>Campaign lobby</h2><p>Room code: <strong class="mono">${esc(ROOM)}</strong> · Owner: ${esc(S.owner)}</p>
+    const other=OTHER(myTeam()), missing=['reich','dawn'].find(t=>!roomPosts(S,t).length);
+    const vacant=filled && owner && !seats(S.players,other).leaders;
+    html=`<p class="eyebrow">Mastery / Assembly</p><h2>Campaign lobby</h2>${entrySteps(3)}<p>Room code: <strong class="mono">${esc(ROOM)}</strong> · Owner: ${esc(S.owner)}</p>
       <div class="desk-grid">${['reich','dawn'].map(t=>{const posts=roomPosts(S,t,true);return `<section style="--flag:${TEAMS[t].css}"><h3>${TEAMS[t].name} · ${posts.length}</h3>${posts.length?posts.map(([n,p])=>`<div class="desk-post"><b>${esc(n)}</b>${n===me.name?' (you)':''} · ${p.role==='leader'?TEAMS[t].leader:ROLES[p.role]} ${appointmentButton(S,n)}</div>`).join(''):'<p>Waiting for a player…</p>'}</section>`;}).join('')}</div>
-      <p role="status">${filled?'Both factions have joined.':'At least one player must join each faction.'} ${owner?'Only you can start the campaign.':'Waiting for the owner to start the campaign.'} No income or independent operations run before launch.</p>
-      <div class="row">${owner?`<button class="btn pri" data-act="startcampaign" ${ready&&filled?'':'disabled'}>Start campaign</button>`:''}<button class="btn" data-act="room">Room invite</button>${backToRooms()}${deskButton('signout','Sign out')}</div>`;
+      <p role="status">${filled?'Both factions have joined.':`Invite someone to join <b>${TEAMS[missing].name}</b> to unlock the start button.`} ${owner?'Only you can start this game.':`<b>${esc(S.owner)}</b> starts the game.`} Until then the map and resources stay still.</p>
+      ${vacant?`<p class="sm">${TEAMS[other].name} has no commander yet. Use <b>Appoint</b> beside a player above to let them lead that faction. Starting the game will not promote them.</p>`:''}
+      <div class="row"><button class="btn ${filled&&owner?'':'pri'}" data-act="copyroom" ${canInvite()?'':'disabled'}>Copy invite link</button>${owner?`<button class="btn pri" data-act="startcampaign" ${ready&&filled?'':'disabled'}>Start campaign</button>`:''}<button class="btn" data-act="room">Room invite</button></div>
+      ${canChangeFaction(S,me.name)?`<details class="lobby-change" data-keep="change-side"><summary>Picked the wrong side?</summary><p>You can switch before launch as an unappointed Soldier. Your room title won’t carry over.</p><button class="btn" data-act="lobbyside" data-team="${other}" ${ready?'':'disabled'}>Switch to ${TEAMS[other].name}</button></details>`:''}
+      <div class="row desk-exit">${backToRooms()}${deskButton('signout','Sign out')}</div>`;
   }
   if(busy) html+='<p class="sm mut" role="status">Waiting for the room to confirm…</p>';
   const signature=page+'|'+html;
   if(entryMarkup!==signature){
     const active=document.activeElement, focused=root.contains(active) && active;
-    root.innerHTML=html; if(!atHome && page.startsWith('account:') && accountError && $('#account-error')) $('#account-error').textContent=accountError;
+    const changing = entryPage===page && root.querySelector?.('.lobby-change[open]');
+    root.innerHTML=html; if(changing && root.querySelector('.lobby-change')) root.querySelector('.lobby-change').open=true;
+    if(!atHome && page.startsWith('account:') && accountError && $('#account-error')) $('#account-error').textContent=accountError;
     const next=liveControl(root,focused); if(next) next.focus({preventScroll:true}); else if(entryPage!==page){const title=root.querySelector?.('h2'); if(title){title.tabIndex=-1;title.focus({preventScroll:true});}}
     entryMarkup=signature; entryPage=page;
   }
   return true;
 }
-function openCode(code){
-  const raw=code.trim(), room=/^war-[a-f0-9]{12}$/i.test(raw) ? raw.toLowerCase() : raw; if(!validRoom(room)) return toast('Enter a room code of 1–32 letters, numbers, underscores or hyphens.','bad');
-  const last=recentRoom(); if(last?.room===room) return navigate(room,last.via,last.fb,last.relay,last.rev);
+function openCode(input){
+  const raw=input.value.trim(), last=recentRoom();
+  const reject = msg => {
+    input.setAttribute('aria-invalid','true');
+    const note = $('#'+input.id+'-error'); if(note) note.textContent=msg; else toast(msg,'bad');
+    input.focus();
+  };
+  if(!validRoom(raw)){
+    let u; try{u=new URL(raw);}catch(_){return reject('Enter a room code (1–32 letters, numbers, underscores or hyphens), or paste a whole invite link.');}
+    if(!['https:','http:'].includes(u.protocol) || u.origin!==location.origin || appPath(u.pathname)!==appPath(location.pathname) || u.username || u.password)
+      return reject('That link is not for this game page. Open the original invite directly or enter the room code.');
+    const r=readAddress(u.searchParams);
+    if(!r.valid) return reject('This invite is incomplete or unsupported. Ask the owner to copy a fresh Room invite.');
+    const dest=resolveInvite(r,u.searchParams,last);
+    return navigate(dest.room,dest.via,dest.fb,dest.relay,dest.rev);
+  }
+  const room=/^war-[a-f0-9]{12}$/i.test(raw) ? raw.toLowerCase() : raw;
+  if(!atHome && !badAddress && room===ROOM){closeModal();renderAll();return;}
+  if(last?.room===room) return navigate(room,last.via,last.fb,last.relay,last.rev);
   if(/^war-[a-f0-9]{12}$/.test(room)) return navigate(room,'mqtt','','emqx');
   const fb=firebaseRoot(readPref('eot-fb:'+room)); return navigate(room,fb?'firebase':'',fb);
 }
-let displayedTruce = false;
+let displayedTruce=false, nextIntelExpiry=Infinity, cameraSession='';
 function renderAll(){
-  displayedTruce = !!(S && ceasefire(S,Date.now()));
-  $('main').classList.toggle('await-room',!S);
-  if(renderDesk()){ $('#panel').innerHTML=$('#tabs').innerHTML=''; svg.innerHTML=baseMap; renderModal(false);renderHud();return; }
+  const now=Date.now(), team=S && myTeam();
+  displayedTruce=!!(S && ceasefire(S,now));
+  nextIntelExpiry=Infinity;
+  if(team) for(const until of Object.values(S.intel[team])) if(until>now && until<nextIntelExpiry) nextIntelExpiry=until;
+  $('main').classList.toggle('await-room',!S); $('#board-jump').hidden=!S || needsDesk();
+  const enteringPlay=!!entryPage && campaignRoom(S) && !needsDesk() && liveBoard();
+  if(enteringPlay){tab='orders';sel=ui.recruitAt=null;}
+  if(renderDesk()){ $('#panel').innerHTML=$('#tabs').innerHTML=''; paintMap(baseMap); renderModal(false);renderHud();return; }
+  if(campaignRoom(S) && myTeam()){
+    const key=JSON.stringify([ROOM,S.created,myTeam()]);
+    if(key!==cameraSession){cameraSession=key; const base=friendlyBase(myTeam()); setRegion(base ? TD[base].reg.toLowerCase().replace('middle east','mideast') : 'world');}
+  }
   renderTabs(); renderMap(); renderLegend(); renderPanel(false); renderModal(false);
   renderHud(); // One projected balance for the HUD and all newly rendered prices.
+  if(enteringPlay && !M){ $('#briefing-title')?.focus({preventScroll:true}); if(narrowBoard()) $('.side').scrollIntoView?.({block:'start'}); }
 }
 
 /* --- events --- */
 document.addEventListener('submit', e=>{
-  if(e.target.dataset?.form==='joincode'){e.preventDefault();return openCode($('#home-code').value);}
+  if(e.target.dataset?.form==='joincode'){e.preventDefault();return openCode($('#home-code'));}
   if(e.target.dataset?.form==='account'){e.preventDefault();return authenticate();}
 });
 document.addEventListener('click', e => {
@@ -3683,32 +3911,48 @@ document.addEventListener('click', e => {
     creationIntent(null); atHome=true; accountBusy=false; accountError=''; M=PWASK=sel=null; const url=new URL(location.href);url.search=url.hash=''; history.replaceState(null,'',url.href);return boot();
   }
   if(a==='resume' && atHome){const r=recentRoom();if(r)return navigate(r.room,r.via,r.fb,r.relay,r.rev);return;}
-  if(a==='signup' || a==='signin'){profileGeneration++; accountBusy=false; accountMode=a;accountError='';renderAll();return;}
+  if(a==='signup' || a==='signin'){
+    if(accountMode===a) return;
+    const draft=$('#account-name')?.value || ''; profileGeneration++; accountBusy=false; accountMode=a; accountError=''; renderAll();
+    if($('#account-name')){ $('#account-name').value=draft; $(draft?'#account-password':'#account-name')?.focus(); }
+    return;
+  }
   if(a==='signout') return signOut();
   if(a==='membership') return act('membership',{team:d.team});
   if(a==='startcampaign') return act('start');
+  if(a==='lobbyside') return act('changeFaction',{team:d.team});
   if(a==='commander') return act('appointLeader',{name:d.n});
-  if(a === 'sel'){ if(!drag.moved) selectTerritory(d.id); return; }
+  if(a === 'jump'){
+    if(d.to==='map') showMap();
+    else { $('#tabs .on')?.focus({preventScroll:true}); $('.side').scrollIntoView?.({block:'start'}); }
+    return;
+  }
+  if(a === 'sel'){
+    if(!el.matches?.('.node') || !drag.moved || e.detail===0){ selectTerritory(d.id); if(tab==='orders' && narrowBoard()) showProvince(); }
+    return;
+  }
   if(a === 'goto'){
     if(!S || !provinceId(d.id) || !S.terr[d.id]) return;
     if(sel !== d.id) ui.recruitAt = null;
     sel = d.id; focusTerr(sel);
-    if(tab === 'log'){
-      renderMap(); // Keep the timeline, expanded countries and panel scroll position intact.
-      $(`#map .node[data-id="${sel}"]`)?.focus({preventScroll:true});
-      svg.scrollIntoView?.({block:'center',inline:'nearest'}); // on a phone the map may be above the log
-    } else { tab = 'orders'; $('#panel').scrollTop = 0; renderAll(); $('#province-name')?.focus({preventScroll:true}); }
+    if(tab === 'log'){ renderMap(); showMap(); } // Leave the timeline and its scroll position intact.
+    else {
+      tab='orders'; $('#panel').scrollTop=0; renderAll();
+      if(d.view==='map') showMap(); else showProvince();
+    }
     return;
   }
   if(a === 'clearsel'){
     const previous = sel; ui.recruitAt = sel = null; $('#panel').scrollTop = 0; renderAll();
-    ($(`#natdir [data-id="${previous}"]`) || $('#natq'))?.focus({preventScroll:true}); return;
+    ($(`#natdir [data-id="${previous}"]`) || $('#natq'))?.focus({preventScroll:true});
+    if(narrowBoard()) $('#natdir')?.scrollIntoView?.({block:'start'}); return;
   }
   if(a === 'setreg'){ ui.natReg = d.r; renderPanel(); return; }
   if(a === 'reg'){ setRegion(d.r); return; }
   if(a === 'tab'){
     if(tab !== d.k) $('#panel').scrollTop = 0;
-    tab = d.k; ui.confirmReset = false; renderAll(); return;
+    if(!TABS.some(([k])=>k===d.k)) return;
+    tab = d.k; ui.confirmReset = false; renderAll(); $('#tabs .on')?.focus({preventScroll:true}); if(narrowBoard()) $('.side').scrollIntoView?.({block:'start'}); return;
   }
   if(a === 'researchbranch'){
     if(d.k !== 'doctrine' && d.k !== 'mastery') return;
@@ -3724,7 +3968,7 @@ document.addEventListener('click', e => {
   }
   if(a === 'setdiv'){ ui[d.kind || 'div'] = d.d; renderPanel(); return; }
   if(a === 'zoom'){ zoomAt(d.d === '1' ? 0.7 : 1.4, .5, .5); return; }
-  if(a === 'homeroom' && badAddress) return openCode($('#home-room').value);
+  if(a === 'homeroom' && badAddress) return openCode($('#home-room'));
   if(a === 'pickrelay' && mode === 'conflict'){
     const choice = relayChoices.find(c => c.id === d.id && c.rev);
     if(choice) return navigate(ROOM,'mqtt','',choice.id,Math.max(minRev,choice.rev));
@@ -3737,17 +3981,17 @@ document.addEventListener('click', e => {
   if(a === 'room'){ M = 'room'; renderModal(); return; }
   if(a === 'copyroom'){
     if(!canInvite()) return;
-    const u = roomUrl();
-    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(() => toast('Invite link copied.'), () => toast('Copy failed — select and copy the link manually.', 'bad'));
-    else { const el2 = $('#roomlink'); if(el2){ el2.select(); document.execCommand('copy'); toast('Invite link copied.'); } }
-    return;
+    const u=roomUrl(), store=db;
+    const manual=()=>{
+      if(db!==store || !canInvite()) return;
+      if(M!=='room'){opener=el;M='room';renderModal();}
+      const field=$('#roomlink'); field?.focus(); field?.select();
+      toast('Copy the selected invite link and send it to your friend.');
+    };
+    if(typeof navigator==='undefined' || !navigator.clipboard?.writeText) return manual();
+    return navigator.clipboard.writeText(u).then(()=>toast('Invite link copied. Send it to your friend.'),manual);
   }
-  if(a === 'joinroom'){
-    const nr = $('#roomin').value.trim();
-    if(!validRoom(nr)) return toast('Enter a valid room code. No room changed.');
-    if(nr === ROOM){ closeModal(); renderAll(); return; }
-    return openCode(nr);
-  }
+  if(a === 'joinroom') return openCode($('#roomin'));
   if(a === 'newroom'){
     creationIntent('war-'+randomHex(6));
     return navigate(creatingRoom,'mqtt','','emqx');
@@ -3846,7 +4090,7 @@ document.addEventListener('click', e => {
   if(a === 'annex') return act(a, {tid:sel, quote:displayedQuote(d)});
   if(a === 'spy' || a === 'honey' || a === 'sabotage' || a === 'decap') return act(a, {tid:sel});
   if(a === 'duty') return act('contribute', {kind:d.k});
-  if(a === 'propose'){ if(d.type === 'ceasefire') return act('propose', {type:'ceasefire', mins:+d.mins}); return act('propose', {type:'trade', give:{r:ui.trade.give, n:+ui.trade.gn}, get:{r:ui.trade.get, n:+ui.trade.wn}}); }
+  if(a === 'propose'){ if(d.type === 'ceasefire') return act('propose', {type:'ceasefire', mins:+d.mins}); return act('propose', tradeDraft()); }
   if(a === 'answer') return act('answer', {id:+d.id, accept:!!d.accept, cancel:!!d.cancel});
   if(a === 'breakpact') return act('breakpact',{until:Number(d.until),quote:displayedQuote(d)});
   if(a === 'attackseat') return act('setrole', {name:d.n,attackSeat:d.grant === '1'});
@@ -3858,7 +4102,9 @@ document.addEventListener('click', e => {
     return pwHash(n,pw).then(async h => {
       if(store !== db || epoch !== authorityEpoch || !liveBoard() || created !== S.created || who.name !== me.name || who.ph !== me.ph || (popup && M!=='legacy-signup')) return;
       await act('enlist',{name:n,team:t,pw:h});
-      if(store !== db || epoch !== authorityEpoch || !liveBoard() || S.players[n]?.pw !== h || who.name !== me.name || who.ph !== me.ph || (S.players[me.name] && authed())) return;
+      if(store !== db || epoch !== authorityEpoch || !liveBoard() || S.players[n]?.pw !== h || who.name !== me.name || who.ph !== me.ph) return;
+      if(!popup && $('#enl')?.value.trim()===n && $('#enlpw')?.value===pw){ $('#enl').value=$('#enlpw').value=''; }
+      if(S.players[me.name] && authed()) return;
       if(popup) closeModal(); me.name = n; me.ph = h; try{ localStorage.setItem('eot-me',n); localStorage.setItem('eot-ph',h); }catch(_){} NET.announce(); renderAll();
     }).catch(() => toast('Could not complete enlistment. Check the live roster before retrying.','bad'));
   }
@@ -3868,6 +4114,8 @@ document.addEventListener('click', e => {
   }
 });
 document.addEventListener('input', e => {
+  if(['home-code','home-room','roomin'].includes(e.target?.id)){ e.target.removeAttribute('aria-invalid'); const note=$('#'+e.target.id+'-error'); if(note) note.textContent=''; }
+  if(['gn','wn'].includes(e.target?.dataset?.chg) && S){ui.trade[e.target.dataset.chg]=e.target.value; refreshTrade(projectedEconomy());}
   if(e.target && e.target.id === 'natq'){
     ui.natQ = e.target.value;
     const dir = $('#natdir');
@@ -3892,9 +4140,18 @@ document.addEventListener('change', e => {
     }
     renderModal(); return;
   }
-  if(['give','get','gn','wn'].includes(k)) ui.trade[k] = el.value;
+  if(['give','get','gn','wn'].includes(k) && S){ui.trade[k] = el.value; refreshTrade(projectedEconomy());}
   else if(k === 'role') act('setrole', {name:el.dataset.n, role:el.value}); else if(k === 'title') act('setrole', {name:el.dataset.n, title:el.value});
 });
+const narrowBoard=()=>window.matchMedia?.('(max-width:900px)').matches;
+function showMap(){
+  (sel && $(`#map .node[data-id="${sel}"]`) || svg).focus({preventScroll:true});
+  svg.scrollIntoView?.({block:'center',inline:'nearest'});
+}
+function showProvince(){
+  const title=$('#province-name'); title?.focus({preventScroll:true});
+  if(narrowBoard()) title?.scrollIntoView?.({block:'start'});
+}
 function selectTerritory(id){
   if(!provinceId(id) || !S?.terr[id]) return;
   if(sel !== id) ui.recruitAt = null;
@@ -3923,18 +4180,24 @@ document.addEventListener('keydown', e => {
 });
 /* pan / zoom */
 const drag = {moved:false}; const ptrs = new Map(); let last = null, pinch0 = 0;
-svg.addEventListener('pointerdown', e => { ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); drag.moved = false; last = {x:e.clientX, y:e.clientY}; if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); } });
+svg.addEventListener('pointerdown', e => { ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY}); drag.moved = ptrs.size>1; last = {x:e.clientX, y:e.clientY}; if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); } });
 svg.addEventListener('pointermove', e => {
   if(!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
-  if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; const dd = Math.hypot(a.x - b.x, a.y - b.y); if(pinch0){ const r = svg.getBoundingClientRect(); zoomAt(pinch0 / dd, ((a.x + b.x) / 2 - r.left) / r.width, ((a.y + b.y) / 2 - r.top) / r.height); } pinch0 = dd; drag.moved = true; return; }
+  if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; const dd = Math.hypot(a.x - b.x, a.y - b.y); if(pinch0 && dd>0){ const r = svg.getBoundingClientRect(); zoomAt(pinch0 / dd, ((a.x + b.x) / 2 - r.left) / r.width, ((a.y + b.y) / 2 - r.top) / r.height); } pinch0 = dd; drag.moved = true; return; }
   const dx = e.clientX - last.x, dy = e.clientY - last.y; if(!drag.moved && Math.hypot(dx, dy) < 5) return; drag.moved = true; svg.classList.add('drag');
   if(ui.curReg){ ui.curReg = ''; renderMapnav(); }
-  const sc = vb.w / svg.clientWidth; vb.x -= dx * sc; vb.y -= dy * sc; last = {x:e.clientX, y:e.clientY}; setVB();
+  const [sw,sh]=mapSize(), sc=Math.max(vb.w/sw,vb.h/sh); vb.x -= dx * sc; vb.y -= dy * sc; last = {x:e.clientX, y:e.clientY}; setVB();
 });
-const endp = e => { ptrs.delete(e.pointerId); svg.classList.remove('drag'); pinch0 = 0; setTimeout(() => drag.moved = false, 30); };
+const endp = e => {
+  if(!ptrs.delete(e.pointerId)) return;
+  // Re-anchor to the remaining finger instead of applying the distance between
+  // fingers as the next pan. Only the next pointerdown starts a fresh tap.
+  last=ptrs.values().next().value || null; pinch0=0;
+  if(!last) svg.classList.remove('drag');
+};
 svg.addEventListener('pointerup', endp); svg.addEventListener('pointercancel', endp); svg.addEventListener('pointerleave', endp);
 svg.addEventListener('wheel', e => { e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 0.85 : 1.18, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); }, {passive:false});
-window.addEventListener('resize', setVB);
+window.addEventListener('resize', resizeMap);
 
 /* Presence is ephemeral: the simulation clock is never part of tick() or a HUD projection. */
 for(const event of ['pointerdown','pointermove','keydown','wheel','click','input']) document.addEventListener(event,noteInput,{capture:true,passive:true});
@@ -3964,12 +4227,13 @@ setInterval(() => frontWatch?.poll(), MUSTER_MS);
 /* clock: live resource display and delayed domination check */
 setInterval(() => {
   checkIdle(); if(!S) return;
-  // A pact can expire without anyone publishing a new revision.
-  if(displayedTruce !== !!ceasefire(S,Date.now())) renderAll(); else renderHud();
+  // Expired scouting or a truce changes the visible board without a new save.
+  if(Date.now()>=nextIntelExpiry || displayedTruce !== !!ceasefire(S,Date.now())) renderAll(); else renderHud();
+  if(deferredPanel && liveBoard() && !M && !document.activeElement?.matches?.('input,select')) renderPanel();
   updateFrontClock();
   if(mode === 'live' && [POSTS_V,ROOM_V].includes(confirmed?.v) && (!campaignRoom(S) || authed()) && S.dom && !S.win && Date.now() - S.dom.since >= DOM_MS && !busy) act('noop').catch(() => {});
 }, 1000);
-setInterval(() => { if(S && tab === 'council') { const el = document.activeElement; if(!(el && el.matches && el.matches('input,select'))) renderPanel(); } }, 5000);
+
 
 buildBase(); setVB(); renderMapnav();
 if(window.claude && window.claude.hot && window.claude.hot.snapshot){ try{ window.claude.hot.snapshot(() => ({sel, tab})); }catch(e){} }

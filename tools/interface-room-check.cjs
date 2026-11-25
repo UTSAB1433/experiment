@@ -162,6 +162,7 @@ module.exports = async function interfaceRoom({
     assert.equal(await newPass.inputValue(), 'unsaved fixture');
     assert.ok(await focused(newPass));
     assert.equal(await guest.getByLabel('Name for new post').inputValue(), 'Unsubmitted cadet');
+    await newPass.blur(); // The unsubmitted form also survives a peer order while not focused.
     // A live revision must not drop Room's draft, disclosure, focus trap or return target.
     const sw = dip.locator('#me [data-act="switch"]'),
       roomBtn = dip.locator('#me [data-act="room"]');
@@ -204,7 +205,9 @@ module.exports = async function interfaceRoom({
     await chief.locator('[data-act="step"][data-u="air"][data-d="1"]').tap(); // mixed group, Air 4
     assert.ok(await confirm.isEnabled());
     await confirm.tap();
-    await rev(dip, 83);
+    await Promise.all([rev(dip, 83), rev(guest, 83)]);
+    assert.equal(await newPass.inputValue(), 'unsaved fixture');
+    assert.equal(await guest.getByLabel('Name for new post').inputValue(), 'Unsubmitted cadet');
     assert.equal(await dialog.getByLabel('Room code').inputValue(), 'unsent-room-draft');
     assert.ok(await focused(dialog.getByLabel('Room code')));
     assert.ok(await dialog.locator('details').evaluate(el => el.open));

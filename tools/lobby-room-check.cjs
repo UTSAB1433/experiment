@@ -30,9 +30,9 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     await owner.setViewportSize({width: 320, height: 780});
     await deskAudit(owner);
     await act(owner, 'newroom').click();
-    await title(owner, 'Sign in to join').waitFor();
+    await title(owner, 'Sign in to create a room').waitFor();
     await owner.reload();
-    await title(owner, 'Sign in to join').waitFor();
+    await title(owner, 'Sign in to create a room').waitFor();
     await deskAudit(owner);
     const code = new URL(owner.url()).searchParams.get('room'),
       topic = `lands-eot/v1/${code}:mastery-1/state`;
@@ -66,14 +66,34 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     assert.deepEqual(revisions(), [2]);
     await owner.reload();
     await title(owner, 'Campaign lobby').waitFor();
-    await owner.getByRole('button', {name: 'Room invite', exact: true}).click();
+    // Clipboard access is optional (e.g. embedded/mobile browsers). Manual copy must still work.
+    await owner.evaluate(() =>
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {writeText: () => Promise.reject(Error('denied'))},
+        configurable: true
+      })
+    );
+    await owner.getByRole('button', {name: 'Copy invite link', exact: true}).click();
+    await owner.waitForFunction(() => {
+      const e = document.querySelector('#roomlink');
+      return e && document.activeElement === e && e.selectionStart === 0 && e.selectionEnd === e.value.length;
+    });
     const invite = await owner.getByLabel('Room invite link').inputValue();
     await act(owner, 'closem').click();
     // Code and invite both identify the same room. Neither enrolls or starts automatically.
-    await Promise.all([guest.goto(invite), third.goto(origin + '/')]);
-    await third.getByLabel('Room code', {exact: true}).fill(code.toUpperCase());
+    await Promise.all([guest, third].map(p => p.goto(origin + '/')));
+    const codeField = guest.getByLabel('Room code or invite link', {exact: true});
+    await codeField.fill(invite + '&via=unknown');
+    await codeField.press('Enter');
+    assert.match(await guest.locator('#home-code-error').innerText(), /invite/i);
+    assert.equal(guest.url(), origin + '/');
+    await codeField.fill(invite);
+    assert.equal(await codeField.inputValue(), invite);
+    await codeField.press('Enter');
+    await third.getByLabel('Room code or invite link', {exact: true}).fill(code.toUpperCase());
     await third.getByRole('button', {name: 'Join room', exact: true}).click();
     await Promise.all([guest, third].map(p => title(p, 'Sign in to join').waitFor()));
+    assert.equal(new URL(guest.url()).search, new URL(invite).search);
     await account(guest, 'Amber Fox', true);
     await guest.waitForFunction(() =>
       document.querySelector('#account-error')?.textContent.includes('post in this room')
@@ -81,7 +101,7 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     await Promise.all([account(third, 'Blue Finch', true), account(guest, 'Gray Falcon', true)]);
     await Promise.all([guest, third].map(p => title(p, 'Choose your faction').waitFor()));
     await Promise.all(
-      [guest, third].map(p => p.locator('[data-act="membership"][data-team="reich"]').click())
+      [guest, third].map(p => p.locator('[data-act="membership"][data-team="dawn"]').click())
     );
     await Promise.all([guest, third].map(p => title(p, 'Campaign lobby').waitFor()));
     const st = latest.get(topic);
@@ -90,14 +110,32 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     assert.equal(st.players['Gray Falcon'].role, 'soldier');
     await guest.evaluate(() => window.__eot.act('start'));
     assert.equal(latest.get(topic).phase, 'lobby');
+    assert.ok(await act(owner, 'startcampaign').isDisabled(), 'all three joined the same side');
+    assert.equal(await act(owner, 'lobbyside').count(), 0);
+    for (const p of [guest, third]) {
+      await p.getByText('Picked the wrong side?', {exact: true}).click();
+      await p.getByRole('button', {name: 'Switch to The Reich'}).click();
+      await p.waitForFunction(
+        () => document.querySelector('[data-act="lobbyside"]')?.dataset.team === 'dawn'
+      );
+    }
+    await owner.waitForFunction(() => !document.querySelector('[data-act="startcampaign"]').disabled);
     await owner.getByRole('button', {name: /Appoint Gray Falcon as/}).click();
     await owner.waitForFunction(() => window.__eot.S.players['Gray Falcon'].role === 'leader');
+    await guest.waitForFunction(
+      () =>
+        window.__eot.S.players['Gray Falcon'].role === 'leader' &&
+        !document.querySelector('[data-act="lobbyside"]')
+    );
     await act(owner, 'startcampaign').click();
     for (const p of [owner, guest, third])
       await p.waitForFunction(
         () => window.__eot.S.phase === 'active' && document.querySelectorAll('#map .node').length === 201
       );
     assert.deepEqual(latest.get(topic).terr, preview);
+    assert.match(await third.locator('#briefing-title').innerText(), /field duty/i);
+    await third.getByRole('button', {name: 'Open field duty'}).click();
+    assert.ok(await third.getByRole('button', {name: 'Prospect +4 Oil'}).isEnabled());
     await guest.locator('#tabs [data-k="council"]').click();
     await guest.getByLabel('Game role for Blue Finch').selectOption('chief');
     await third.waitForFunction(() => window.__eot.S.players['Blue Finch'].role === 'chief');
@@ -122,13 +160,13 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     await third.waitForFunction(() => document.querySelector('#me')?.textContent.includes('Amber Fox'));
     await third.reload();
     await third.waitForFunction(() => document.querySelector('#me')?.textContent.includes('Amber Fox'));
-    assert.deepEqual(revisions(), [2, 3, 4, 5, 6, 7]);
+    assert.deepEqual(revisions(), [2, 3, 4, 5, 6, 7, 8, 9]);
     // The remembered profile is not a faction or command grant in a different room.
     await third.goto(origin + '/');
     await act(third, 'newroom').click();
     await title(third, 'Choose your faction').waitFor();
     assert.equal(await third.locator('#map .node').count(), 0);
-    assert.deepEqual(revisions(), [2, 3, 4, 5, 6, 7]);
+    assert.deepEqual(revisions(), [2, 3, 4, 5, 6, 7, 8, 9]);
     // A clean sign-in outside an existing membership uses the directory, not that other room’s roster.
     await act(third, 'signout').click();
     await account(third, 'Amber Fox', true);
@@ -142,7 +180,7 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     // A cancelled creation is no longer a claim on that code, even on the same tab.
     const abandoned = new URL(third.url()).searchParams.get('room');
     await act(third, 'rooms').click();
-    await third.getByLabel('Room code', {exact: true}).fill(abandoned);
+    await third.getByLabel('Room code or invite link', {exact: true}).fill(abandoned);
     await third.getByRole('button', {name: 'Join room', exact: true}).click();
     await title(third, 'Room not found').waitFor();
     await third.evaluate(() => window.__eot.act('membership', {team: 'reich'}));
@@ -159,7 +197,7 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     await third.waitForFunction(() => document.querySelectorAll('#map .node').length === 201);
     assert.equal(latest.get(topic).players['Late Rook'].role, 'soldier');
     assert.equal(latest.get(topic).owner, 'Amber Fox');
-    assert.deepEqual(revisions(), [2, 3, 4, 5, 6, 7, 8]);
+    assert.deepEqual(revisions(), [2, 3, 4, 5, 6, 7, 8, 9, 10]);
     // A legitimate active v8 room with a captured state, one active device and no
     // occupied independent capitals. Let the real presence/lease path run the turn.
     const isolated = structuredClone(latest.get(topic)),
@@ -188,6 +226,15 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
       writes.filter(w => w.topic === raidTopic).map(w => w.rev),
       [41]
     );
+    await require('./briefing-room-check.cjs')({
+      origin,
+      page: owner,
+      peer: guest,
+      state: latest.get(topic),
+      publish,
+      latest,
+      writes
+    });
     console.log(
       'PASS: phone room picker, signup, portable sign-in and remembered session; code/invite, concurrent Soldiers, two-side launch, opposing appointments, accessible staging at 320px, 201 playable states and a real solo counterattack.'
     );
