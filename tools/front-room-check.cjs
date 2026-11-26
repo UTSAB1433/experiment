@@ -12,7 +12,7 @@ module.exports = async function frontRoom({
   live
 }) {
   const code = 'world-front-test',
-    topic = 'lands-eot/v1/' + code + ':mastery-1/state',
+    topic = 'lands-eot/v2/' + code + ':mastery-1/state',
     url = origin + '/?room=' + code + '&rules=mastery-1&via=mqtt&relay=emqx';
   const board = fixture();
   board.rev = 310;

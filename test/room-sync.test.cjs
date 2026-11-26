@@ -114,7 +114,7 @@ test('old 12k-oil Classic and stale Mastery caches never flash; the home shortcu
 
 test('no remembered room or a malformed preference opens the room chooser; unknown invite addresses fail closed, without touching the last good route', t => {
   mockTime(t);
-  const storage = new Map([['eot-last-room:v1:/game', '?room=wrong&via=ftp&rev=550']]);
+  const storage = new Map([['eot-last-room:v2:/game', '?room=wrong&via=ftp&rev=550']]);
   const empty = launch({storage, url: home});
   noBoard(empty);
   assert.equal(empty.sockets.length, 0);
@@ -131,7 +131,7 @@ test('no remembered room or a malformed preference opens the room chooser; unkno
   a.message('state', st);
   empty.click('pickrelay', {id: 'emqx'});
   accept(empty, st);
-  const last = storage.get('eot-last-room:v1:/game');
+  const last = storage.get('eot-last-room:v2:/game');
   assert.match(last, /rules=mastery-1/);
   for (const q of [
     'rules=future',
@@ -149,9 +149,9 @@ test('no remembered room or a malformed preference opens the room chooser; unkno
     assert.equal(tab.sockets.length, 0);
     checkReadOnly(tab);
   }
-  const fresh = launch({storage: new Map([['eot-last-room:v1:/other', last]]), url: home});
+  const fresh = launch({storage: new Map([['eot-last-room:v2:/other', last]]), url: home});
   assert.equal(fresh.sockets.length, 0);
-  assert.equal(storage.get('eot-last-room:v1:/game'), last);
+  assert.equal(storage.get('eot-last-room:v2:/game'), last);
   checkReadOnly(empty);
 });
 
@@ -622,7 +622,7 @@ test('a failing workspace capability on a legacy link is not permission to open 
 
 test('a pasted invite matches a cold visit, including a different pinned relay and the revision floor', t => {
   mockTime(t);
-  const prefKey = 'eot-last-room:v1:/game';
+  const prefKey = 'eot-last-room:v2:/game';
   for (const [link, relay, floor] of [
     [mastery + '&rev=64', 'hivemq', 64],
     [primary + '&rev=3', 'emqx', 62], // same room and source: don't roll back
@@ -651,7 +651,7 @@ test('a pasted invite matches a cold visit, including a different pinned relay a
 
 test('invalid pasted links stay in the picker with an inline error and do not touch the last room', t => {
   mockTime(t);
-  const key = 'eot-last-room:v1:/game',
+  const key = 'eot-last-room:v2:/game',
     last = new URL(primary + '&rev=36').search;
   const tab = launch({url: home, storage: new Map([[key, last]])}),
     input = tab.$('#home-code');
