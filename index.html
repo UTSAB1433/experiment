@@ -1889,22 +1889,9 @@ const TAB = Math.random().toString(36).slice(2, 10);
 const validRoom = r => typeof r === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(r);
 const RELAYS = {emqx:'wss://broker.emqx.io:8084/mqtt', hivemq:'wss://broker.hivemq.com:8884/mqtt', mosquitto:'wss://test.mosquitto.org:8081/mqtt'};
 const appPath = path => path.replace(/\/(?:index\.html)?$/i,'');
-const LAST_ROOM = 'eot-last-room:v2:' + appPath(location.pathname);
-const RESET_KEY = 'eot-reset:v2';
+const LAST_ROOM = 'eot-last-room:v1:' + appPath(location.pathname);
 function readPref(key){ try{ return localStorage.getItem(key); }catch(_){ return null; } }
 function putPref(key,value){ try{ localStorage.setItem(key,value); }catch(_){} }
-(function resetLegacyStorage(){
-  try{
-    if(typeof localStorage === 'undefined' || typeof localStorage.key !== 'function' || readPref(RESET_KEY) === '1') return;
-    const stale = [];
-    for(let i = 0; i < localStorage.length; i++){
-      const k = localStorage.key(i);
-      if(k && k.startsWith('eot-') && !k.includes(':v2')) stale.push(k);
-    }
-    for(const k of stale) localStorage.removeItem(k);
-    putPref(RESET_KEY, '1');
-  }catch(_){}
-})();
 function firebaseRoot(value){
   try{ const u = new URL(value); return u.protocol === 'https:' && /\.(firebaseio\.com|firebasedatabase\.app)$/.test(u.hostname) && !u.username && !u.password && !u.port && u.pathname === '/' && !u.search && !u.hash ? u.origin : ''; }catch(_){ return ''; }
 }
@@ -2098,7 +2085,7 @@ function loadLiveCache(room){
   }catch(e){ return null; }
 }
 function createMqttDb(room){
-  const PFX = 'lands-eot/v2/' + room + '/';
+  const PFX = 'lands-eot/v1/' + room + '/';
   const DIAL_MS = 2000, DISCOVERY_MS = 600, RETRY_MS = 350, LEASE_MS = 1500;
   const clients = new Set(), floors = new Map(); // warnings survive a redial, but are never published as saves
   let active = null, onSnap = null, dead = false, conflict = false;
@@ -2479,7 +2466,7 @@ const savedPost = {name:readPref('eot-me'),ph:readPref('eot-ph')}; // old room l
 let me = savedPost;
 // A portable game identity is separate from membership in any one room. Only
 // salt + public fingerprint go on the relay; neither is a usable session key.
-const SESSION_KEY = 'eot-profile:v2';
+const SESSION_KEY = 'eot-profile:v1';
 const KEYRING_KEY = 'eot-keyring:v2';
 const ROOMS_KEY = 'eot-rooms:v2';
 const STATS_KEY = 'eot-stats:v2';
@@ -2664,7 +2651,7 @@ function checkAttackNotifications(st, isInitial){
 // fails closed. Sign-in is read-only; signup confirms the retained record itself.
 function directoryRecord(topic,candidate,current){
   return new Promise((resolve,reject)=>{
-    const prefix = 'lands-eot/profiles/v2/'+topic+'/', nonce = randomHex(12), leaseMs = 1500;
+    const prefix = 'lands-eot/profiles/v1/'+topic+'/', nonce = randomHex(12), leaseMs = 1500;
     const ws = new WebSocket(RELAYS.emqx,'mqtt'); ws.binaryType = 'arraybuffer';
     let rx = new Uint8Array(), joined = false, echoed = false, warmed = false, claiming = false, writing = false, locked = '', deadline = 0, done = false, warm;
     const timer = setTimeout(()=>finish(null,'Account directory did not confirm. Check your connection and retry.'),10000);

@@ -174,7 +174,7 @@ test('v6 preview and failed orders are read-only; a confirmed first order settle
   assert.ok(!st.win);
   assert.ok(g.validSave(st));
   assert.equal(writes(tab).length, 1);
-  assert.equal(writes(tab)[0].topic, 'lands-eot/v2/' + masterWire + '/state');
+  assert.equal(writes(tab)[0].topic, 'lands-eot/v1/' + masterWire + '/state');
   same(st.terr.NIG, {o: 'dawn', u: {}, f: 3, st: 'elastic'});
   assert.equal(st.terr.BER.u.inf, old.terr.BER.u.inf + 17);
   assert.equal(st.terr.BER.u.arm, old.terr.BER.u.arm + 4);

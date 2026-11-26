@@ -13,7 +13,7 @@ module.exports = async function interfaceRoom({
   factory
 }) {
   const room = 'interface-check',
-    topic = `lands-eot/v2/${room}:mastery-1/state`,
+    topic = `lands-eot/v1/${room}:mastery-1/state`,
     st = fixture();
   const url = `${origin}/?room=${room}&rules=mastery-1&via=mqtt&relay=emqx`;
   const name = 'Interface cadet',

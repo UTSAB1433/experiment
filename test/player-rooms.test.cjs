@@ -64,7 +64,7 @@ function active() {
 }
 const copy = structuredClone;
 const session = (p, key = p.key) =>
-  new Map([['eot-profile:v2', JSON.stringify({name: p.name, key, salt: p.salt, id: p.account})]]);
+  new Map([['eot-profile:v1', JSON.stringify({name: p.name, key, salt: p.salt, id: p.account})]]);
 async function enter(st, storage, identity) {
   const t = launch({script, storage, identity, relay: 'emqx'});
   const r = t.sockets[0];

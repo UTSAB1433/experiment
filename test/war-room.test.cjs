@@ -120,7 +120,7 @@ test('manual retry and room changes cancel pending probes, handlers and retry ti
   assert.ok(tab.channels.every(c => c.closed)); assert.equal(tab.game.S, null);
   const s = tab.sockets.slice(6); s.forEach(r => r.subscribe());
   s.slice(1).forEach(r => r.message('sync',publications(r).find(p => p.data.type === 'req').data));
-  s[0].receive(publication('lands-eot/v2/another-test:mastery-1/state', saved(9)));
+  s[0].receive(publication('lands-eot/v1/another-test:mastery-1/state', saved(9)));
   old({data:Uint8Array.from(publication(prefix + 'state', saved(99))).buffer});
   t.mock.timers.tick(5000);
   assert.equal(tab.sockets.length, 9); assert.equal(tab.game.S.rev, 9);

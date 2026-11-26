@@ -21,7 +21,7 @@ if (!currentOnly && !process.env.EOT_V6_HTML)
   throw Error('Set EOT_V6_HTML to index.html from the previous v6 Mastery build.');
 const legacy = currentOnly ? null : fs.readFileSync(process.env.EOT_V6_HTML);
 const room = 'mixed-test',
-  prefix = 'lands-eot/v2/' + room,
+  prefix = 'lands-eot/v1/' + room,
   classic = prefix + '/state',
   mastery = prefix + ':mastery-1/state';
 const brokers = [aedes(), aedes(), aedes()],
@@ -139,7 +139,6 @@ const battle = p =>
               else super.send(data);
             }
           };
-          localStorage.setItem('eot-reset:v2', '1');
           localStorage.setItem('eot-me', 'Fixture ' + team);
           localStorage.setItem('eot-ph', 'fixture-only');
         },

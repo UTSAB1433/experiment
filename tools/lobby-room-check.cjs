@@ -35,7 +35,7 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     await title(owner, 'Sign in to create a room').waitFor();
     await deskAudit(owner);
     const code = new URL(owner.url()).searchParams.get('room'),
-      topic = `lands-eot/v2/${code}:mastery-1/state`;
+      topic = `lands-eot/v1/${code}:mastery-1/state`;
     const revisions = () => writes.filter(w => w.topic === topic).map(w => w.rev);
     const preview = await owner.evaluate(() => window.__eot.S.terr);
     assert.equal(Object.keys(preview).length, 201);
@@ -53,7 +53,7 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     await title(owner, 'Campaign lobby').waitFor();
     assert.equal(await act(owner, 'startcampaign').isDisabled(), true);
     await deskAudit(owner);
-    const privateSession = await owner.evaluate(() => JSON.parse(localStorage.getItem('eot-profile:v2')));
+    const privateSession = await owner.evaluate(() => JSON.parse(localStorage.getItem('eot-profile:v1')));
     assert.ok(
       !JSON.stringify(latest.get(topic)).includes(privateSession.key) &&
         !JSON.stringify(latest.get(topic)).includes(password)
@@ -205,7 +205,7 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     await third.getByRole('button', {name: 'Join room', exact: true}).click();
     await title(third, 'Room not found').waitFor();
     await third.evaluate(() => window.__eot.act('membership', {team: 'reich'}));
-    assert.equal(latest.has(`lands-eot/v2/${abandoned}:mastery-1/state`), false);
+    assert.equal(latest.has(`lands-eot/v1/${abandoned}:mastery-1/state`), false);
     assert.equal(await third.locator('#map .node').count(), 0);
     // First enlistment AFTER launch, including a reload between signup and the faction choice.
     await third.goto(invite);
@@ -223,7 +223,7 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
     // occupied independent capitals. Let the real presence/lease path run the turn.
     const isolated = structuredClone(latest.get(topic)),
       raidCode = 'solo-state-test',
-      raidTopic = `lands-eot/v2/${raidCode}:mastery-1/state`;
+      raidTopic = `lands-eot/v1/${raidCode}:mastery-1/state`;
     isolated.rev = 40;
     delete isolated.frontTraffic;
     isolated.terr.HEN.o = 'reich';

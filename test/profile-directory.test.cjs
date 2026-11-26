@@ -3,7 +3,7 @@ const test = require('node:test'),
 const {inspect, launch, mockTime, publications, publication} = require('../test-support/war-room.cjs');
 const script = inspect(['directoryRecord']);
 const hash = 'f'.repeat(64),
-  prefix = `lands-eot/profiles/v2/${hash}/`;
+  prefix = `lands-eot/profiles/v1/${hash}/`;
 const profile = {name: 'Field mouse', salt: 'b'.repeat(32), id: 'a'.repeat(64)};
 function lookup(profile, current = () => true) {
   const tab = launch({script, url: 'https://example.test/'});
