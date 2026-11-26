@@ -120,6 +120,16 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
       );
     }
     await owner.waitForFunction(() => !document.querySelector('[data-act="startcampaign"]').disabled);
+    assert.match(
+      await guest.locator('#entry').innerText(),
+      /The Reich has no commander yet[\s\S]*only a commander can move or attack/
+    );
+    await act(owner, 'room').click();
+    await owner.waitForFunction(() =>
+      document.querySelector('#room-presence')?.textContent.includes('Gray Falcon')
+    );
+    assert.doesNotMatch(await owner.locator('#room-presence').innerText(), /Joining…/);
+    await act(owner, 'closem').click();
     await owner.getByRole('button', {name: /Appoint Gray Falcon as/}).click();
     await owner.waitForFunction(() => window.__eot.S.players['Gray Falcon'].role === 'leader');
     await guest.waitForFunction(
@@ -134,6 +144,17 @@ module.exports = async function lobby({origin, context, writes, latest, publish}
       );
     assert.deepEqual(latest.get(topic).terr, preview);
     assert.match(await third.locator('#briefing-title').innerText(), /field duty/i);
+    await third.locator('#map .node[data-id="BER"]').press('Enter');
+    assert.match(
+      await third.locator('#panel').innerText(),
+      /As Soldier you cannot command troops\. Your Führer assigns command roles in Council/
+    );
+    await third.locator('#map .node[data-id="NIG"]').press('Enter');
+    assert.match(
+      await third.locator('#panel').innerText(),
+      /As Soldier you can scout with Spy\. Only commanders or an appointed attack seat can attack/
+    );
+    await third.locator('[data-act="clearsel"]').click();
     await third.getByRole('button', {name: 'Open field duty'}).click();
     assert.ok(await third.getByRole('button', {name: 'Prospect +4 Oil'}).isEnabled());
     await guest.locator('#tabs [data-k="council"]').click();

@@ -178,7 +178,7 @@ input[type=text],input[type=number],input[type=password],select{background:var(-
   body{padding-inline:max(10px,env(safe-area-inset-left,0px)) max(10px,env(safe-area-inset-right,0px))}
   .app,.top{gap:8px}.brand span{font-size:10px;letter-spacing:.05em}.me{gap:5px}.roompill{max-width:100%;overflow-wrap:anywhere}.scorerow{font-size:11px}
   .hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.hudcell{min-width:0;flex-wrap:wrap;gap:2px 5px;padding:4px;font-size:12px}.hudcell .k{font-size:10px;letter-spacing:0}.hudcell .v{font-size:14px}.hudcell .r{font-size:10px}.hudcell.stock,.hudcell.sending{grid-column:1/-1}.hudcell.stock{border:0;background:transparent;align-items:baseline;padding:0}.hudcell.res{display:grid;align-content:start}.hudcell.cp,.hudcell.away{grid-column:span 2;align-items:center}.cpbar{display:none}
-  .panel{padding:9px;gap:8px}.tab{font-size:12px}.account-form .seg button{min-height:40px}.mapctl .btn{width:28px}
+  .panel{padding:9px;gap:8px}.tab{font-size:12px}.account-form .seg button{min-height:40px}.mapctl .btn{width:28px}.me .who{text-align:left}
 }
 </style>
 
@@ -2503,7 +2503,7 @@ function directoryRecord(topic,candidate,current){
     };
   });
 }
-let account = null, accountBusy = false, accountMode = 'signin', accountError = '', profileGeneration = 0, restoring = false;
+let account = null, accountBusy = false, accountMode = 'signin', accountError = '', profileGeneration = 0, restoring = false, announcedIdentity = '';
 function memberMatches(st,profile){
   const pl=profile && st?.players[profile.name];
   return !!pl && pl.account===profile.id && pl.salt===profile.salt;
@@ -2515,6 +2515,12 @@ function applyIdentity(){
   }
   else me = savedPost;
 }
+function syncPresence(announceNow = true){
+  const next = [authed(), me.name || '', myTeam() || ''].join('|');
+  if(next === announcedIdentity) return;
+  announcedIdentity = next;
+  if(announceNow && mode === 'live' && NET.status === 'live') NET.announce();
+}
 async function restoreProfile(){
   const gen = ++profileGeneration; restoring = true; accountBusy = false; account = null;
   try{
@@ -2523,11 +2529,11 @@ async function restoreProfile(){
       const id = await accountId(session.name,session.key,session.salt);
       if(id===session.id && gen===profileGeneration) account = {name:session.name,id,salt:session.salt};
     }
-  }catch(_){} finally{if(gen===profileGeneration){restoring=false;applyIdentity();renderAll();}}
+  }catch(_){} finally{if(gen===profileGeneration){restoring=false;applyIdentity();syncPresence();renderAll();}}
 }
 function signOut(){
   frontWatch?.depart(); profileGeneration++; account = null; accountBusy = restoring = false; accountError=''; accountMode='signin';
-  try{localStorage.removeItem(SESSION_KEY);}catch(_){} applyIdentity(); closeModal(); NET.announce(); renderAll();
+  try{localStorage.removeItem(SESSION_KEY);}catch(_){} applyIdentity(); syncPresence(false); closeModal(); NET.announce(); renderAll();
 }
 async function authenticate(){
   if(accountBusy || restoring || !campaignRoom(S) || (startingMap && creatingRoom!==ROOM)) return;
@@ -2557,7 +2563,7 @@ async function authenticate(){
     if(!current()) return;
     account={...profile,verified:true}; putPref(SESSION_KEY,JSON.stringify({name:profile.name,key,salt:profile.salt,id:profile.id}));
     if(!readPref(SESSION_KEY)) toast('Signed in for this visit. Browser storage is unavailable.');
-    applyIdentity(); NET.announce();
+    applyIdentity(); syncPresence(false); NET.announce();
   }catch(e){if(current()) fail(e.message || 'Could not verify this account.');}
   finally{if(gen===profileGeneration){accountBusy=false; if(button){button.disabled=false;button.textContent=signup?'Create account':'Sign in and continue';} renderAll();}}
 }
@@ -2871,7 +2877,7 @@ function createSharedDb(cap,wire){
 }
 let bootId = 0;
 async function boot(){
-  frontWatch?.depart(); frontWatch = null; frontWrite = null; busy = false;
+  frontWatch?.depart(); frontWatch = null; frontWrite = null; busy = false; announcedIdentity = '';
   const id = ++bootId, wire = wireRoom(); confirmed = null; cutoverAt = 0; ui.confirmReset = null; sawSavedRoom = startingMap = false; homeReceipt = readPref(LAST_ROOM); authorityEpoch++;
   if(NET.destroy) NET.destroy();
   clearTimeout(loadTimer); NET.peers.clear(); db = NET.destroy = NET.reconnect = null; NET.announce = () => {};
@@ -2925,11 +2931,11 @@ async function boot(){
       if(wasLive && wasSaved && sameSave(confirmed,st,via === 'firebase')) return;
       if(st.v === LEGACY_V && (!confirmed || confirmed.created !== st.created)) cutoverAt = Date.now();
       confirmed = clone(st); startingMap = false; S = st.v === LEGACY_V ? upgradeV6(confirmed,cutoverAt) : clone(confirmed);
-      applyIdentity();
+      applyIdentity(); syncPresence(wasLive);
       if(creatingRoom===ROOM) creationIntent(null);
       rememberBoard(confirmed);
       if(!wasSaved || st.origin === TAB) seen = Date.now(); else announce();
-    } else if(!S){ S = newGame(Date.now()); startingMap = true; applyIdentity(); } // confirmed empty, never published just by visiting
+    } else if(!S){ S = newGame(Date.now()); startingMap = true; applyIdentity(); syncPresence(false); } // confirmed empty, never published just by visiting
     renderAll();
   }
   db.doc('game/state').onSnapshot(receive, () => { if(id === bootId){ pauseRoom('error'); NET.status = 'off'; NET.transport = 'Cannot read the shared workspace. Reconnect or check access.'; renderAll(); } });
@@ -3305,7 +3311,7 @@ function panelOrders(){
     if(mayAttack && !routes.length && (total(t.u) || !can(role,'move'))) ord += `<div class="sm mut">${!total(t.u) ? 'This garrison has no troops to send.' : neighbors(S,sel).map(n=>attackBlock(S,team,n.id,now)).find(Boolean) || 'No foreign province is connected to this garrison.'}</div>`;
     if(can(role, 'stance')) ord += `<div class="sm mut" style="margin:10px 0 4px">Defensive posture · 1 command point. The enemy must guess it.</div><div class="seg">${Object.keys(STANCES).map(k => `<button class="${t.st === k ? 'on' : ''}" data-act="stance" data-k="${k}" ${k === t.st ? 'disabled' : priceAttrs({}, 1)}>${STANCES[k]}</button>`).join('')}</div>`;
     if(mayAttack || ['move','fort','stance'].some(action=>can(role,action))) h += `<div class="card"><h3>Orders</h3>${ord}</div>`;
-    if(!mayAttack && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. ${can(role,'dip') ? '<button class="btn sm" data-act="tab" data-k="dip">Open diplomacy</button>' : '<button class="btn sm" data-act="tab" data-k="council">Open field duty</button>'}</div>`;
+    if(!mayAttack && !can(role, 'move')) h += `<div class="card sm mut">As ${ROLES[role]} you cannot command troops. ${campaignRoom(S) && !seats(S.players, team).leaders ? `Ask ${esc(S.owner)} to appoint your side’s ${TEAMS[team].leader} in Council.` : `Your ${TEAMS[team].leader} assigns command roles in Council.`} ${can(role,'dip') ? '<button class="btn sm" data-act="tab" data-k="dip">Open diplomacy</button>' : '<button class="btn sm" data-act="tab" data-k="council">Open field duty</button>'}</div>`;
     h += garrison;
     if(can(role,'recruit')) h += orderRecruitment(team);
   } else {
@@ -3321,6 +3327,7 @@ function panelOrders(){
     }
     a += '</div>';
     if(mayAttack && !routes.length) a += `<div class="sm mut" style="margin-top:8px">${attackBlock(S,team,sel,now) || 'No friendly troops border this territory. Move an army up first.'}</div>`;
+    if(!mayAttack && !can(role, 'annex')) a += `<div class="sm mut" style="margin-top:8px">As ${ROLES[role]} you can scout with Spy. Only commanders or an appointed attack seat can attack.${campaignRoom(S) && !seats(S.players, team).leaders ? ` Ask ${esc(S.owner)} to appoint your side’s ${TEAMS[team].leader} in Council.` : ''}</div>`;
     h += `<div class="card"><h3>Operations</h3>${a}</div>` + garrison;
   }
   return h;
@@ -3359,7 +3366,7 @@ function panelTroops(){
       </div>`;
     }).join('') + `</div>`;
   }).join('');
-  return `<div class="card sm"><div class="row sb"><h3>Troops &amp; Divisions</h3><span class="mut sm">${canRec ? `Recruiting in ${esc(TD[sel].name)}` : S.win ? 'Recruitment is closed: the war has ended.' : !can(myRole(),'recruit') ? 'Only staff chiefs can recruit.' : 'Select one of your territories to recruit'}</span></div>${divBarHtml('tdiv', curDiv, team)}</div>${passHtml}${sections}`;
+  return `<div class="card sm"><div class="row sb"><h3>Troops &amp; Divisions</h3><span class="mut sm">${canRec ? `Recruiting in ${esc(TD[sel].name)}` : S.win ? 'Recruitment is closed: the war has ended.' : !can(myRole(),'recruit') ? `Only staff chiefs can recruit${myRole() === 'leader' ? ' (appoint a teammate in Council).' : '.'}` : 'Select one of your territories to recruit'}</span></div>${divBarHtml('tdiv', curDiv, team)}</div>${passHtml}${sections}`;
 }
 function frontList(){
   const team = myTeam() || 'reich'; const rows = linksOf(S).filter(l => { const a = S.terr[l.a].o, b = S.terr[l.b].o; return a !== b && a !== 'neutral' && b !== 'neutral'; }).map(l => { const mineA = S.terr[l.a].o === team; const my = mineA ? l.a : l.b, en = mineA ? l.b : l.a; return `<div class="row sb"><button class="chip" data-act="sel" data-id="${my}">${esc(TD[my].name)}</button><span class="mut">faces</span><button class="chip" data-act="sel" data-id="${en}">${esc(TD[en].name)}</button></div>`; }).join('');
@@ -3466,7 +3473,7 @@ function panelCouncil(keepEnlist = false){
         <input type="text" aria-label="Room title for ${label}" placeholder="Room title" maxlength="40" value="${esc(post.roomTitle)}" data-chg="title" data-n="${key}" style="flex:1;min-width:90px">
         ${n === me.name ? '' : `<button class="btn sm danger" aria-label="Remove ${label}" data-act="remove" data-n="${key}">×</button>`}</div>`;
       return `<div class="row sb" style="padding:3px 0"><span class="council-name"><b>${label}</b> </span><span class="mut sm">${esc(post.caption)}${p.attackSeat ? ' · Attack seat' : ''}</span>${appointmentButton(S,n)}</div>`;
-    }).join('') + '</div>';
+    }).join('') + (!lead && campaignRoom(S) && !nSeats.leaders && !S.win ? `<div class="sm mut" style="padding-top:4px">No commander yet. Ask ${esc(S.owner)} to appoint this side’s ${TEAMS[tm].leader}.</div>` : '') + '</div>';
   });
   if(lead && (!campaignRoom(S) || S.owner===me.name)) h += `<div class="card"><h3>Reset</h3><div class="sm mut">Start a fresh war. Everyone keeps their post.</div><button class="btn danger sm" style="margin-top:8px" data-act="reset">${ui.confirmReset === S ? 'Press again to confirm' : 'Reset the map'}</button></div>`;
   if(keepEnlist){ $('#council-live').innerHTML=h; return; }
@@ -3842,7 +3849,7 @@ function renderDesk(){
     html=`<p class="eyebrow">Mastery / Assembly</p><h2>Campaign lobby</h2>${entrySteps(3)}<p>Room code: <strong class="mono">${esc(ROOM)}</strong> · Owner: ${esc(S.owner)}</p>
       <div class="desk-grid">${['reich','dawn'].map(t=>{const posts=roomPosts(S,t,true);return `<section style="--flag:${TEAMS[t].css}"><h3>${TEAMS[t].name} · ${posts.length}</h3>${posts.length?posts.map(([n,p])=>`<div class="desk-post"><b>${esc(n)}</b>${n===me.name?' (you)':''} · ${p.role==='leader'?TEAMS[t].leader:ROLES[p.role]} ${appointmentButton(S,n)}</div>`).join(''):'<p>Waiting for a player…</p>'}</section>`;}).join('')}</div>
       <p role="status">${filled?'Both factions have joined.':`Invite someone to join <b>${TEAMS[missing].name}</b> to unlock the start button.`} ${owner?'Only you can start this game.':`<b>${esc(S.owner)}</b> starts the game.`} Until then the map and resources stay still.</p>
-      ${vacant?`<p class="sm">${TEAMS[other].name} has no commander yet. Use <b>Appoint</b> beside a player above to let them lead that faction. Starting the game will not promote them.</p>`:''}
+      ${vacant?`<p class="sm">${TEAMS[other].name} has no commander yet. Use <b>Appoint</b> beside a player above to let them lead that faction. Starting the game will not promote them.</p>`:!owner?`<p class="sm">${!seats(S.players,myTeam()).leaders?`${TEAMS[myTeam()].name} has no commander yet. As a Soldier you can do field duty and scout, while only a commander can move or attack with troops. Ask ${esc(S.owner)} to appoint you as ${TEAMS[myTeam()].leader} before or after starting.`:myRole()==='soldier'?`As a Soldier you can do field duty and scout; your ${TEAMS[myTeam()].leader} assigns troop command and other roles in Council.`:''}</p>`:''}
       <div class="row"><button class="btn ${filled&&owner?'':'pri'}" data-act="copyroom" ${canInvite()?'':'disabled'}>Copy invite link</button>${owner?`<button class="btn pri" data-act="startcampaign" ${ready&&filled?'':'disabled'}>Start campaign</button>`:''}<button class="btn" data-act="room">Room invite</button></div>
       ${canChangeFaction(S,me.name)?`<details class="lobby-change" data-keep="change-side"><summary>Picked the wrong side?</summary><p>You can switch before launch as an unappointed Soldier. Your room title won’t carry over.</p><button class="btn" data-act="lobbyside" data-team="${other}" ${ready?'':'disabled'}>Switch to ${TEAMS[other].name}</button></details>`:''}
       <div class="row desk-exit">${backToRooms()}${deskButton('signout','Sign out')}</div>`;

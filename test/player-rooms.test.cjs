@@ -10,6 +10,7 @@ const {
   mockTime,
   finishOrder,
   checkReadOnly,
+  publications,
   ceiling,
   saved
 } = require('../test-support/war-room.cjs');
@@ -472,4 +473,60 @@ test('the Orders briefing follows live roles and sends a displaced faction to it
     assert.doesNotMatch(card, /Open Nigeria orders/);
   }
   checkReadOnly(tab);
+});
+
+test('presence announces immediately on membership, faction switch and late session restore; Soldier guidance explains command and scouting', async t => {
+  mockTime(t);
+  const st = lobby();
+  member(st, beta, 'reich');
+  const presOf = sock =>
+    publications(sock)
+      .filter(p => p.topic.endsWith('/pres'))
+      .map(p => p.data);
+  const guest = launch({script, storage: session(beta), identity: beta, relay: 'emqx'});
+  const sock = guest.sockets[0];
+  sock.subscribe();
+  sock.message('state', st);
+  assert.equal(presOf(sock).at(-1).name, 'Joining…');
+  await guest.game.restoreProfile();
+  assert.deepEqual(
+    presOf(sock)
+      .slice(-1)
+      .map(p => [p.name, p.team]),
+    [[beta.name, 'reich']]
+  );
+  // Switching factions in staging announces the new team immediately.
+  await finishOrder(t, guest.click('lobbyside', {team: 'dawn'}));
+  assert.deepEqual(
+    presOf(sock)
+      .slice(-1)
+      .map(p => [p.name, p.team]),
+    [[beta.name, 'dawn']]
+  );
+  const stagingText = guest.$('#entry').innerHTML;
+  assert.match(stagingText, /Black Dawn has no commander yet/);
+  assert.match(stagingText, /only a commander can move or attack/);
+  // After launch, a Soldier sees clear guidance in Council, Orders (friendly & foreign), and Troops (for Leader).
+  const launched = copy(guest.game.S);
+  e.A.start(launched, ctx(alpha, 'reich'));
+  launched.rev++;
+  sock.message('state', launched);
+  guest.click('tab', {k: 'council'});
+  assert.match(guest.$('#panel').innerHTML, /No commander yet\. Ask Amber Fox to appoint this side’s Prophet King/);
+  guest.click('sel', {id: 'NIG'});
+  assert.match(
+    guest.$('#panel').innerHTML,
+    /As Soldier you cannot command troops\. Ask Amber Fox to appoint your side’s Prophet King in Council/
+  );
+  guest.click('sel', {id: 'BER'});
+  assert.match(
+    guest.$('#panel').innerHTML,
+    /As Soldier you can scout with Spy\. Only commanders or an appointed attack seat can attack/
+  );
+  const leaderTab = await enter(launched, session(alpha));
+  leaderTab.click('tab', {k: 'troops'});
+  assert.match(
+    leaderTab.$('#panel').innerHTML,
+    /Only staff chiefs can recruit \(appoint a teammate in Council\)\./
+  );
 });
