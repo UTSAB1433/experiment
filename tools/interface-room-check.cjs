@@ -13,7 +13,7 @@ module.exports = async function interfaceRoom({
   factory
 }) {
   const room = 'interface-check',
-    topic = `lands-eot/v1/${room}:mastery-1/state`,
+    topic = `lands-eot/v2/${room}:mastery-1/state`,
     st = fixture();
   const url = `${origin}/?room=${room}&rules=mastery-1&via=mqtt&relay=emqx`;
   const name = 'Interface cadet',
@@ -96,7 +96,7 @@ module.exports = async function interfaceRoom({
     assert.equal(await chief.locator('[data-act="recruit"]').count(), 77);
     await select(dip, 'NIG');
     await tab(dip, 'troops');
-    assert.match(await dip.locator('#panel').innerText(), /Only staff chiefs can recruit/i);
+    assert.match(await dip.locator('#panel').innerText(), /Leaders and chiefs of staff can recruit/i);
     assert.equal(await dip.locator('[data-act="recruit"]').count(), 0);
     await tab(dip, 'tech');
     assert.doesNotMatch(

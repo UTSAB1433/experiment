@@ -37,7 +37,7 @@ function mqtt(st) {
     writes = [],
     messages = [];
   const wire = st.ruleset ? room + ':' + RULES : room,
-    pfx = 'lands-eot/v1/' + wire + '/';
+    pfx = 'lands-eot/v2/' + wire + '/';
   const net = {before: null, filter: null, state: copy(st), sleepOffset: 0};
   const WallClock = class extends Date {
     static now() {

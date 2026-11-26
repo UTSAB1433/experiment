@@ -23,7 +23,7 @@ const {
   purchaseRoom
 } = require('../test-support/war-room.cjs');
 const {firebase, prune, filePicker} = require('../test-support/document-room.cjs');
-const MP = 'lands-eot/v1/' + masterWire + '/';
+const MP = 'lands-eot/v2/' + masterWire + '/';
 const identity = {name: 'Fixture officer', ph: 'room-fixture'};
 const officer = st => {
   st.players[identity.name] = {team: 'dawn', role: 'chief', pw: identity.ph, cd: 0, cp: 10};

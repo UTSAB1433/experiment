@@ -64,7 +64,7 @@ function active() {
 }
 const copy = structuredClone;
 const session = (p, key = p.key) =>
-  new Map([['eot-profile:v1', JSON.stringify({name: p.name, key, salt: p.salt, id: p.account})]]);
+  new Map([['eot-profile:v2', JSON.stringify({name: p.name, key, salt: p.salt, id: p.account})]]);
 async function enter(st, storage, identity) {
   const t = launch({script, storage, identity, relay: 'emqx'});
   const r = t.sockets[0];
@@ -505,8 +505,7 @@ test('presence announces immediately on membership, faction switch and late sess
   );
   const stagingText = guest.$('#entry').innerHTML;
   assert.match(stagingText, /Black Dawn has no commander yet/);
-  assert.match(stagingText, /only a commander can move or attack/);
-  // After launch, a Soldier sees clear guidance in Council, Orders (friendly & foreign), and Troops (for Leader).
+  // After launch, a Soldier sees clear guidance in Council, Orders (friendly & foreign), and Troops (for Leader & Soldier).
   const launched = copy(guest.game.S);
   e.A.start(launched, ctx(alpha, 'reich'));
   launched.rev++;
@@ -523,10 +522,10 @@ test('presence announces immediately on membership, faction switch and late sess
     guest.$('#panel').innerHTML,
     /As Soldier you can scout with Spy\. Only commanders or an appointed attack seat can attack/
   );
+  guest.click('tab', {k: 'troops'});
+  assert.match(guest.$('#panel').innerHTML, /Leaders and chiefs of staff can recruit\./);
   const leaderTab = await enter(launched, session(alpha));
+  leaderTab.click('sel', {id: 'BER'});
   leaderTab.click('tab', {k: 'troops'});
-  assert.match(
-    leaderTab.$('#panel').innerHTML,
-    /Only staff chiefs can recruit \(appoint a teammate in Council\)\./
-  );
+  assert.match(leaderTab.$('#panel').innerHTML, /Recruiting in Berlin/);
 });

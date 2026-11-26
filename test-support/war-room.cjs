@@ -16,7 +16,7 @@ const room = 'sync-test',
   masterWire = room + ':' + RULES,
   key = 'eot-live-state:' + masterWire,
   masterKey = key + '|mqtt|emqx',
-  prefix = 'lands-eot/v1/' + masterWire + '/';
+  prefix = 'lands-eot/v2/' + masterWire + '/';
 const ceiling = {man: 10000, gold: 10000, steel: 10000, oil: 10000};
 const flush = () => new Promise(resolve => setImmediate(resolve));
 // Advance the virtual clock in sub-lease steps, allowing the subscription warmup,
@@ -189,7 +189,7 @@ function launch({
       this.receive([0x90, 3, 0, 1, 0]);
     }
     message(sub, data) {
-      this.receive(publication((this.prefix || 'lands-eot/v1/' + wire + '/') + sub, data));
+      this.receive(publication((this.prefix || 'lands-eot/v2/' + wire + '/') + sub, data));
     }
   }
   class Channel {

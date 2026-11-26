@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 module.exports = async function reentry({origin, context, brokers, fixture, publish, writes, live}) {
   const code = 'return-fixture',
-    prefix = 'lands-eot/v1/' + code,
+    prefix = 'lands-eot/v2/' + code,
     classic = prefix + '/state',
     mastery = prefix + ':mastery-1/state';
   const starting = structuredClone(fixture()),

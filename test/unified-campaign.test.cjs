@@ -174,7 +174,7 @@ test('v6 preview and failed orders are read-only; a confirmed first order settle
   assert.ok(!st.win);
   assert.ok(g.validSave(st));
   assert.equal(writes(tab).length, 1);
-  assert.equal(writes(tab)[0].topic, 'lands-eot/v1/' + masterWire + '/state');
+  assert.equal(writes(tab)[0].topic, 'lands-eot/v2/' + masterWire + '/state');
   same(st.terr.NIG, {o: 'dawn', u: {}, f: 3, st: 'elastic'});
   assert.equal(st.terr.BER.u.inf, old.terr.BER.u.inf + 17);
   assert.equal(st.terr.BER.u.arm, old.terr.BER.u.arm + 4);
@@ -324,8 +324,9 @@ for (const team of ['dawn', 'reich'])
     same(full, st);
     const tid = team === 'reich' ? 'BER' : 'NIG',
       unit = team === 'reich' ? 'inf' : 'bd_init';
-    for (const name of [one, two, extra, lead.name])
+    for (const name of [one, two, extra])
       assert.match(g.A.recruit(st, ctx(team, name), {tid, unit, n: 1, quote: ceiling}).err, /staff chief/);
+    assert.ok(g.A.recruit(copy(st), ctx(team, lead.name), {tid, unit, n: 1, quote: ceiling}).ok);
     const ch = chief(team);
     st.terr.SUV.o = team;
     assert.ok(g.A.recruit(st, ctx(team, ch), {tid: 'SUV', unit, n: 1, quote: ceiling}).ok);

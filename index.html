@@ -3,23 +3,37 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout concept: a war-room table. Slim command bar on top, resource strip, the map as the table, a tabbed dossier on the right. Dark only, by choice. */
+/* Layout concept: clean strategy table with natural map palette and crisp readable panels. */
 :root{
-  --bg:#0c0f0e; --panel:#131816; --panel2:#1a211e; --line:#2a342f; --ink:#e6e3d8; --mute:#8a948c;
-  --reich:#d9573f; --dawn:#e6ac35; --neutral:#586870; --sea:#091215; --land:#1f2c26; --land2:#1d2924;
-  --ok:#72c28f; --bad:#e06a5a; --acc:#c9c3ae; --acc-ink:#0c0f0e;
-  --display:'Big Shoulders Display','Arial Narrow',Impact,sans-serif; --body:'IBM Plex Sans',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --bg:#101720; --panel:#17212d; --panel2:#1f2c3b; --line:#324357; --ink:#eef2f6; --mute:#a2b2c5;
+  --reich:#f27563; --dawn:#e6aa38; --neutral:#738899; --sea:#1a4b6e; --land:#4d7049; --land2:#436340;
+  --ok:#6ed090; --bad:#f27563; --acc:#8fc7f0; --acc-ink:#0c141d;
+  --body:'IBM Plex Sans',system-ui,-apple-system,sans-serif; --display:var(--body); --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 button,select,input{font:inherit;color:inherit}
-h1,h2,h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;margin:0;font-weight:800;text-wrap:balance}
+h1,h2,h3{font-family:var(--display);letter-spacing:.02em;margin:0;font-weight:700;text-wrap:balance}
+.top-loader{position:fixed;top:0;left:0;right:0;height:3px;z-index:60;background:rgba(143,199,240,.18);overflow:hidden;pointer-events:none}
+.top-loader-bar{height:100%;width:40%;background:linear-gradient(90deg,transparent,var(--dawn),var(--acc),transparent);animation:loadslide 1.1s ease-in-out infinite}
+@keyframes loadslide{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.top-loader-bar,.spinner,.tgt{animation:none}}
+.google-btn{background:#fff;color:#1f2937;border:1px solid #d1d5db;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.google-btn:hover:not(:disabled){border-color:#93c5fd;background:#f8fafc}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;margin:10px 0}
+.stat-box{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px 10px}
+.stat-box .k{display:block;font-size:11px;color:var(--mute)}
+.stat-box .v{display:block;font-size:18px;font-weight:700;font-family:var(--mono);margin-top:2px}
+.room-list{display:grid;gap:8px;margin-top:10px}
+.room-item{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .app{display:flex;flex-direction:column;height:100%;gap:10px;padding-block:10px}
 .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between}
-.brand h1{font-size:26px;line-height:1}
-.brand span{font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:.12em;text-transform:uppercase}
+.brand h1{font-size:22px;line-height:1.1}
+.brand span{font-family:var(--mono);font-size:11px;color:var(--mute);letter-spacing:.06em;text-transform:uppercase}
 .score{flex:1 1 320px;min-width:0;max-width:560px}
 .scorerow{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;gap:8px}
 .scorerow b{font-weight:500}
@@ -112,15 +126,15 @@ summary{cursor:pointer}.entry-steps{list-style:none;display:flex;flex-wrap:wrap;
 .mastery-card h3{color:var(--ink);margin:0;font-size:18px}.mastery-card .pip{width:8px;height:8px}
 .mastery-gain{font-family:var(--mono);font-size:12px}.mastery-gain b{color:var(--ink);color:color-mix(in srgb,var(--acc) 65%,var(--ink))}
 .mastery-talent{border-left:3px solid var(--acc)}
-.front-hero,.power-list{--front:#9ac6c6}
-.front-hero{border-top:2px solid var(--front);background:linear-gradient(125deg,#22312f,var(--panel2) 75%);padding:16px}
+.front-hero,.power-list{--front:#9fd0f0}
+.front-hero{border-top:2px solid var(--front);background:linear-gradient(125deg,#1d3345,var(--panel2) 75%);padding:16px}
 .front-brow,.power-code,.power-rating,.power-foot,.front-watch b{font:11px var(--mono)}
 .front-brow{display:flex;justify-content:space-between;gap:8px;color:var(--front);text-transform:uppercase;letter-spacing:.08em}
-.front-hero h2{margin-top:12px;font-size:34px;line-height:1.1}.front-hero p,.dispatch p{margin:6px 0 10px}
-.front-watch{border-top:1px solid #42524c;padding-top:9px;display:grid;gap:4px}.front-watch b{color:var(--ink);text-transform:uppercase}.front-watch b::before{content:'○ ';color:var(--mute)}.front-watch b.on::before{content:'● ';color:var(--ok)}
-.front-entry,.power-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.front-entry{background:#1d2a28;border-left:2px solid #9ac6c6;padding:8px 10px}.front-entry small{display:block;color:var(--mute)}
+.front-hero h2{margin-top:12px;font-size:28px;line-height:1.15}.front-hero p,.dispatch p{margin:6px 0 10px}
+.front-watch{border-top:1px solid #354c61;padding-top:9px;display:grid;gap:4px}.front-watch b{color:var(--ink);text-transform:uppercase}.front-watch b::before{content:'○ ';color:var(--mute)}.front-watch b.on::before{content:'● ';color:var(--ok)}
+.front-entry,.power-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.front-entry{background:#1b2c3b;border-left:2px solid #9fd0f0;padding:8px 10px}.front-entry small{display:block;color:var(--mute)}
 .power-list{display:grid;gap:6px}.power-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 9px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:10px}
-.power-code{color:var(--front);border:1px solid #475c58;border-radius:3px;min-width:40px;padding:6px 2px;text-align:center}.power-row h4{margin:0;font:700 16px var(--display)}.power-rating{text-align:right}.power-marks{display:flex;gap:2px;margin-top:4px}.power-marks i{width:8px;height:4px;background:#46524c}.power-marks i.trained{background:var(--front)}.power-foot{grid-column:2/-1;color:var(--mute)}
+.power-code{color:var(--front);border:1px solid #415d75;border-radius:3px;min-width:40px;padding:6px 2px;text-align:center}.power-row h4{margin:0;font:700 16px var(--display)}.power-rating{text-align:right}.power-marks{display:flex;gap:2px;margin-top:4px}.power-marks i{width:8px;height:4px;background:#3a4c5e}.power-marks i.trained{background:var(--front)}.power-foot{grid-column:2/-1;color:var(--mute)}
 #entry{width:min(100%,46rem);margin:clamp(1rem,7vh,5rem) auto auto;padding:clamp(18px,4vw,36px);background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--dawn);border-radius:5px;overflow:auto}
 #entry h2{font-size:clamp(1.65rem,4vw,2.4rem);line-height:1.1}#entry>p{max-width:62ch}#entry h3{font-size:1.1rem}
 .eyebrow{font:11px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--dawn);margin:0 0 12px}
@@ -158,7 +172,7 @@ input[type=text],input[type=number],input[type=password],select{background:var(-
 .toast.win{border-left-color:var(--ok)}
 .node{cursor:pointer}
 .node text{pointer-events:none;font-family:var(--mono)}
-.nlabel{font-family:var(--body);font-size:9.5px;fill:var(--ink);paint-order:stroke;stroke:var(--sea);stroke-width:2.5px;stroke-linejoin:round}
+.nlabel{font-family:var(--body);font-size:9.5px;fill:var(--ink);paint-order:stroke;stroke:#0e1b26;stroke-width:2.8px;stroke-linejoin:round}
 @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
 .tgt{animation:pulse 1.6s infinite}
 @media (prefers-reduced-motion:reduce){.tgt{animation:none}}
@@ -182,6 +196,7 @@ input[type=text],input[type=number],input[type=password],select{background:var(-
 }
 </style>
 
+<div id="top-loader" class="top-loader" hidden aria-hidden="true"><div class="top-loader-bar"></div></div>
 <div class="app">
   <div class="top">
     <div class="brand"><h1>Lands at the Ends of Time</h1><span>War room &middot; 1939 &middot; two factions, one map</span></div>
@@ -857,8 +872,8 @@ const PERM = {
   soldier:['contribute','spy']
 };
 const MAX_CHIEFS = 4, MAX_ATTACKERS = 6;
-// Recruitment is the exception to the leader's general command authority.
-const can = (role, p) => PERM[role] === '*' ? p !== 'recruit' : (PERM[role] || []).includes(p);
+// Leaders (Führer / Prophet King) have full command authority, including recruitment.
+const can = (role, p) => PERM[role] === '*' || (PERM[role] || []).includes(p);
 const postCan = (pl,p) => !!pl && (can(pl.role,p) || (p === 'attack' && pl.attackSeat === true));
 const usesAttackSeat = pl => pl.role !== 'leader' && postCan(pl,'attack');
 function seats(players,team){
@@ -1215,7 +1230,7 @@ A.contribute = (s, c, p) => {
 };
 A.recruit = (s, c, p) => {
   const issuer = s.players[c.name];
-  if(issuer?.team !== c.team || !postCan(issuer,'recruit')) return {err:'Only a staff chief may recruit.'};
+  if(issuer?.team !== c.team || !postCan(issuer,'recruit')) return {err:'Only your faction leader or a staff chief may recruit.'};
   const t = s.terr[p.tid], U = UNITS[p.unit], n = p.n;
   if(!Number.isInteger(n) || n < 1 || n > 20) return {err:'Choose a valid recruitment quantity.'};
   if(!t || t.o !== c.team) return {err:'You can only recruit in your own territory.'};
@@ -1477,9 +1492,19 @@ A.membership = (s,c,p) => {
   const first = !s.owner && !Object.keys(s.players).length;
   if(first !== (p.create === true)) return {err:'The room changed. Review the latest roster.'};
   s.players[c.name] = {team:p.team,role:first?'leader':'soldier',title:'',cd:0,cp:CP_START,account:c.account,salt:c.salt};
-  if(first) s.owner = c.name;
+  if(first){
+    s.owner = c.name;
+    const rn = typeof p.roomName === 'string' ? p.roomName.trim().slice(0, 48) : '';
+    if(rn) s.roomName = rn;
+  }
   log(s,c.now,'all',`${c.name} ${first?'created the room for':'joined'} ${TEAMS[p.team].name}.`,'sys');
   return {ok:first?'Room created. Invite the other faction.':'You joined as a Soldier.'};
+};
+A.renameRoom = (s, c, p) => {
+  if(!campaignRoom(s) || c.name !== s.owner) return {err:'Only the room owner can rename this room.'};
+  const rn = String(p?.roomName || '').trim().slice(0, 48);
+  if(rn) s.roomName = rn; else delete s.roomName;
+  return {ok: rn ? `Room named "${rn}".` : 'Custom room name cleared.'};
 };
 // A guest can correct a mistaken choice before launch, never change sides
 // during play or take an appointed role/attack seat to the other faction.
@@ -1528,8 +1553,9 @@ A.enlist = (s, c, p) => { if(campaignRoom(s)) return {err:'Sign in with your own
 A.reset = (s, c, p) => {
   if(p.rev !== s.rev || p.origin !== s.origin || p.created !== s.created) return {err:'The room changed. Review the latest map before resetting.'};
   if(campaignRoom(s) && c.name!==s.owner) return {err:'Only the room owner can reset this campaign.'};
-  const players = s.players, fresh = newGame(c.now, s.capitalStart === true,s.v);
+  const players = s.players, roomName = s.roomName, fresh = newGame(c.now, s.capitalStart === true,s.v);
   if(campaignRoom(s)) fresh.owner=s.owner; // reset returns to staging, never invents members
+  if(typeof roomName === 'string' && roomName) fresh.roomName = roomName;
   for(const pl of Object.values(players)){ pl.cp = CP_START; if(campaignRoom(s)) pl.cd=0; }
   Object.keys(s).forEach(k => delete s[k]); Object.assign(s, fresh, {players});
   return {ok:'The map is reset.', reset:true};
@@ -1836,7 +1862,7 @@ function advanceFront(s,now,expected,allowRaids = false){
       (battle.win ? `captured ${place} from ${defender}` : `was repelled by ${defender} at ${place}`);
     const route = from ? `${campaignRoom(s) && !recovery?'Border counterattack':'Expedition'} from ${TD[from].name}` : 'Local resistance';
     log(s,now,'all',`${COUNTRIES[k].name} ${result}. ${route}: ${battle.sent} sent, ${battle.attLost} lost; ${battle.defLost} defenders lost.`,'front',
-      {tid:to,by:'neutral',country:k,win:battle.win,...(from ? {from} : {}),...(recovery ? {recovery:true} : {})});
+      {tid:to,by:'neutral',prev:side,country:k,win:battle.win,...(from ? {from} : {}),...(recovery ? {recovery:true} : {})});
   } else if(drills || reinforced || mustered || stoodDown){
     log(s,now,'all',`Independent powers held their ground. ${drills} drills completed; ${reinforced} garrison reinforcements arrived${mustered ? `; ${mustered} joined local resistance forces` : ''}.`,'front',{sites});
   } else return false;
@@ -1863,9 +1889,22 @@ const TAB = Math.random().toString(36).slice(2, 10);
 const validRoom = r => typeof r === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(r);
 const RELAYS = {emqx:'wss://broker.emqx.io:8084/mqtt', hivemq:'wss://broker.hivemq.com:8884/mqtt', mosquitto:'wss://test.mosquitto.org:8081/mqtt'};
 const appPath = path => path.replace(/\/(?:index\.html)?$/i,'');
-const LAST_ROOM = 'eot-last-room:v1:' + appPath(location.pathname);
+const LAST_ROOM = 'eot-last-room:v2:' + appPath(location.pathname);
+const RESET_KEY = 'eot-reset:v2';
 function readPref(key){ try{ return localStorage.getItem(key); }catch(_){ return null; } }
 function putPref(key,value){ try{ localStorage.setItem(key,value); }catch(_){} }
+(function resetLegacyStorage(){
+  try{
+    if(typeof localStorage === 'undefined' || typeof localStorage.key !== 'function' || readPref(RESET_KEY) === '1') return;
+    const stale = [];
+    for(let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(k && k.startsWith('eot-') && !k.includes(':v2')) stale.push(k);
+    }
+    for(const k of stale) localStorage.removeItem(k);
+    putPref(RESET_KEY, '1');
+  }catch(_){}
+})();
 function firebaseRoot(value){
   try{ const u = new URL(value); return u.protocol === 'https:' && /\.(firebaseio\.com|firebasedatabase\.app)$/.test(u.hostname) && !u.username && !u.password && !u.port && u.pathname === '/' && !u.search && !u.hash ? u.origin : ''; }catch(_){ return ''; }
 }
@@ -2014,6 +2053,7 @@ function validAppointments(players){
 // Called only after the generic roster and appointment shapes have been checked.
 function validPlayerRoom(p){
   if(p.capitalStart!==true || !['lobby','active'].includes(p.phase) || !validUsername(p.owner) ||
+    (p.roomName !== undefined && (typeof p.roomName !== 'string' || p.roomName.length > 48)) ||
     !Object.hasOwn(p.players,p.owner) || p.players[p.owner].role!=='leader' || !record(p.terr) || Object.keys(p.terr).length!==ATLAS.length) return false;
   const ids=new Set(), names=new Set();
   for(const [name,pl] of Object.entries(p.players)){
@@ -2058,7 +2098,7 @@ function loadLiveCache(room){
   }catch(e){ return null; }
 }
 function createMqttDb(room){
-  const PFX = 'lands-eot/v1/' + room + '/';
+  const PFX = 'lands-eot/v2/' + room + '/';
   const DIAL_MS = 2000, DISCOVERY_MS = 600, RETRY_MS = 350, LEASE_MS = 1500;
   const clients = new Set(), floors = new Map(); // warnings survive a redial, but are never published as saves
   let active = null, onSnap = null, dead = false, conflict = false;
@@ -2439,7 +2479,15 @@ const savedPost = {name:readPref('eot-me'),ph:readPref('eot-ph')}; // old room l
 let me = savedPost;
 // A portable game identity is separate from membership in any one room. Only
 // salt + public fingerprint go on the relay; neither is a usable session key.
-const SESSION_KEY = 'eot-profile:v1';
+const SESSION_KEY = 'eot-profile:v2';
+const KEYRING_KEY = 'eot-keyring:v2';
+const ROOMS_KEY = 'eot-rooms:v2';
+const STATS_KEY = 'eot-stats:v2';
+const NOTIF_KEY = 'eot-notif:v2';
+const GCLIENT_KEY = 'eot-gclient:v2';
+// Paste your Google Cloud OAuth 2.0 Web Client ID below (authorized for https://utsab1433.github.io) to enable 1-tap Google Sign-In for all players:
+const GOOGLE_CLIENT_ID = '';
+const googleClientId = () => (GOOGLE_CLIENT_ID || readPref(GCLIENT_KEY) || '').trim();
 const hex = bytes => [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('');
 const randomHex = n => hex(crypto.getRandomValues(new Uint8Array(n)));
 const digest = async text => hex(await crypto.subtle.digest('SHA-256',te_.encode(text)));
@@ -2449,12 +2497,174 @@ async function profileKey(name,password,salt){
   const material = await crypto.subtle.importKey('raw',te_.encode(password),'PBKDF2',false,['deriveBits']);
   return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',iterations:310000,salt:te_.encode('eot-profile-v1:'+name.toLowerCase()+':'+salt)},material,256));
 }
+function readJsonPref(key,fallback){
+  try{ const v = JSON.parse(readPref(key)); return v && typeof v === 'object' ? v : fallback; }catch(_){ return fallback; }
+}
+function saveKeyring(p){
+  if(!validUsername(p?.name) || !validSalt(p?.salt) || !fingerprint(p?.id)) return;
+  const ring = readJsonPref(KEYRING_KEY, {});
+  ring[p.name.toLowerCase()] = {name:p.name, salt:p.salt, id:p.id, google:!!p.google, email:p.email || ''};
+  putPref(KEYRING_KEY, JSON.stringify(ring));
+}
+function findKeyring(name){
+  const ring = readJsonPref(KEYRING_KEY, {}), e = ring[String(name || '').trim().toLowerCase()];
+  return e && validUsername(e.name) && validSalt(e.salt) && fingerprint(e.id) ? e : null;
+}
+function loadRooms(acctName = account?.name){
+  const all = readJsonPref(ROOMS_KEY, {});
+  const prefix = acctName ? acctName.toLowerCase() + ':' : '';
+  return Object.entries(all)
+    .filter(([k,v]) => v && typeof v === 'object' && (!prefix || k.startsWith(prefix)))
+    .map(([k,v]) => ({...v, _key:k}))
+    .sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+function saveRoomOverview(st){
+  if(!st || !campaignRoom(st) || !account || !memberMatches(st,account)) return;
+  const team = st.players[account.name]?.team, role = st.players[account.name]?.role;
+  const all = readJsonPref(ROOMS_KEY, {}), key = account.name.toLowerCase() + ':' + ROOM;
+  const prev = all[key] || {};
+  all[key] = {
+    room: ROOM,
+    roomName: (typeof st.roomName === 'string' && st.roomName.trim()) ? st.roomName.trim() : (prev.localName || ''),
+    localName: prev.localName || '',
+    via, fb: FB_URL || '', relay: relayPin || '', rev: st.rev || 1,
+    phase: st.phase, team, role, win: st.win || null,
+    myCount: team ? countOf(st, team) : 0,
+    enemyCount: team ? countOf(st, OTHER(team)) : 0,
+    totalCount: provincesOf(st).length,
+    created: st.created, updatedAt: Date.now()
+  };
+  putPref(ROOMS_KEY, JSON.stringify(all));
+}
+function setLocalRoomName(roomKey, label){
+  const all = readJsonPref(ROOMS_KEY, {});
+  const target = all[roomKey] ? roomKey : Object.keys(all).find(k => all[k]?.room === roomKey && (!account || k.startsWith(account.name.toLowerCase() + ':')));
+  if(!target) return;
+  all[target].localName = String(label || '').trim().slice(0,48);
+  all[target].roomName = all[target].localName || all[target].roomName;
+  putPref(ROOMS_KEY, JSON.stringify(all));
+}
+function forgetRoomOverview(roomKey){
+  const all = readJsonPref(ROOMS_KEY, {});
+  const target = all[roomKey] ? roomKey : Object.keys(all).find(k => all[k]?.room === roomKey && (!account || k.startsWith(account.name.toLowerCase() + ':')));
+  if(!target) return;
+  delete all[target];
+  putPref(ROOMS_KEY, JSON.stringify(all));
+}
+function readRoomCustomName(roomCode){
+  const entry = loadRooms().find(r => r.room === roomCode);
+  return entry?.localName || entry?.roomName || '';
+}
+function loadStats(acctName = account?.name){
+  if(!acctName) return {campaigns:{},battlesAttacked:0,battlesWon:0,provincesCaptured:0,troopsRecruited:0,ordersIssued:0};
+  const all = readJsonPref(STATS_KEY, {});
+  const cur = all[acctName.toLowerCase()];
+  return cur && typeof cur === 'object' ? {campaigns:{},battlesAttacked:0,battlesWon:0,provincesCaptured:0,troopsRecruited:0,ordersIssued:0,...cur} :
+    {campaigns:{},battlesAttacked:0,battlesWon:0,provincesCaptured:0,troopsRecruited:0,ordersIssued:0};
+}
+function saveStats(acctName, stats){
+  if(!acctName) return;
+  const all = readJsonPref(STATS_KEY, {});
+  all[acctName.toLowerCase()] = stats;
+  putPref(STATS_KEY, JSON.stringify(all));
+}
+function recordStatsOrder(name, payload, res, st){
+  if(!account || !campaignRoom(st) || ['noop','applyupdate','membership'].includes(name)) return;
+  const s = loadStats(account.name);
+  s.ordersIssued = (s.ordersIssued || 0) + 1;
+  if(name === 'recruit' && Number.isInteger(payload?.n)) s.troopsRecruited = (s.troopsRecruited || 0) + payload.n;
+  if(name === 'attack'){
+    s.battlesAttacked = (s.battlesAttacked || 0) + 1;
+    if(res?.battle){ s.battlesWon = (s.battlesWon || 0) + 1; s.provincesCaptured = (s.provincesCaptured || 0) + 1; }
+  }
+  if(name === 'annex' && !res?.err) s.provincesCaptured = (s.provincesCaptured || 0) + 1;
+  saveStats(account.name, s);
+}
+function syncStatsFromState(st){
+  if(!account || !campaignRoom(st) || !memberMatches(st,account)) return;
+  const team = st.players[account.name]?.team;
+  if(!team) return;
+  const s = loadStats(account.name);
+  const key = String(st.created || ROOM);
+  const prev = s.campaigns[key] || {team};
+  s.campaigns[key] = {team, win: st.win ? (st.win.team === team ? 'win' : 'loss') : 'active'};
+  saveStats(account.name, s);
+}
+let swReg = null;
+function registerPushWorker(){
+  try{
+    if(typeof navigator !== 'undefined' && navigator.serviceWorker && typeof location !== 'undefined' && location.protocol?.startsWith('http')){
+      navigator.serviceWorker.register('./sw.js').then(reg => { swReg = reg; }).catch(() => {});
+    }
+  }catch(_){}
+}
+const notifAllowed = () => typeof Notification !== 'undefined' && Notification.permission === 'granted' && readPref(NOTIF_KEY) !== 'off';
+async function enableAttackNotifications(){
+  if(typeof Notification === 'undefined') return toast('Notifications are not supported in this browser.', 'bad');
+  try{
+    const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+    if(perm === 'granted'){
+      putPref(NOTIF_KEY, 'on');
+      registerPushWorker();
+      toast('Attack notifications enabled!', 'win');
+    } else {
+      toast('Notification permission was not granted.', 'bad');
+    }
+  }catch(_){ toast('Could not request notification permission.', 'bad'); }
+  renderAll();
+}
+function fireAttackPush(title, body, tag){
+  try{
+    const url = typeof location !== 'undefined' ? location.href : './';
+    if(swReg?.active){ swReg.active.postMessage({type:'ATTACK_ALERT', title, body, url, tag}); return; }
+    if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+      const n = new Notification(title, {body, tag});
+      n.onclick = () => { try{ window.focus(); }catch(_){} };
+    }
+  }catch(_){}
+}
+let prevOwners = null, alertedLogKeys = new Set();
+function checkAttackNotifications(st, isInitial){
+  if(!st || !campaignRoom(st)){ prevOwners = null; return; }
+  const team = myTeam();
+  const owners = {};
+  for(const id of provincesOf(st)) owners[id] = st.terr[id]?.o;
+  if(isInitial || !team){
+    prevOwners = owners;
+    for(const l of st.log || []) alertedLogKeys.add(l.t + '|' + l.msg);
+    return;
+  }
+  const alerts = [];
+  for(const l of (st.log || []).slice(0, 8)){
+    const lk = l.t + '|' + l.msg;
+    if(alertedLogKeys.has(lk)) continue;
+    alertedLogKeys.add(lk);
+    if((l.kind === 'battle' || l.kind === 'front') && l.by && l.by !== team && (l.prev === team || (l.tid && (prevOwners?.[l.tid] === team || owners[l.tid] === team)))){
+      const place = TD[l.tid]?.name || 'a province';
+      alerts.push({tid:l.tid, place, msg:l.msg, key:lk});
+    }
+  }
+  if(!alerts.length && prevOwners){
+    for(const id of Object.keys(owners)){
+      if(prevOwners[id] === team && owners[id] !== team){
+        alerts.push({tid:id, place:TD[id]?.name || id, msg:`${TD[id]?.name || id} is under attack and fell!`, key:'cap:'+st.rev+':'+id});
+      }
+    }
+  }
+  prevOwners = owners;
+  if(!alerts.length) return;
+  const label = st.roomName || ROOM;
+  for(const a of alerts.slice(0, 2)){
+    toast(`⚔ ${a.place} is under attack!`, 'bad');
+    if(notifAllowed()) fireAttackPush(`Under Attack · ${label}`, a.msg, 'atk-' + ROOM + '-' + (a.tid || a.key));
+  }
+}
 // One pinned directory, not three independent copies. Cooperative clients never
 // overwrite an existing account. A missing echo, stalled lease or invalid record
 // fails closed. Sign-in is read-only; signup confirms the retained record itself.
 function directoryRecord(topic,candidate,current){
   return new Promise((resolve,reject)=>{
-    const prefix = 'lands-eot/profiles/v1/'+topic+'/', nonce = randomHex(12), leaseMs = 1500;
+    const prefix = 'lands-eot/profiles/v2/'+topic+'/', nonce = randomHex(12), leaseMs = 1500;
     const ws = new WebSocket(RELAYS.emqx,'mqtt'); ws.binaryType = 'arraybuffer';
     let rx = new Uint8Array(), joined = false, echoed = false, warmed = false, claiming = false, writing = false, locked = '', deadline = 0, done = false, warm;
     const timer = setTimeout(()=>finish(null,'Account directory did not confirm. Check your connection and retry.'),10000);
@@ -2503,7 +2713,7 @@ function directoryRecord(topic,candidate,current){
     };
   });
 }
-let account = null, accountBusy = false, accountMode = 'signin', accountError = '', profileGeneration = 0, restoring = false, announcedIdentity = '';
+let account = null, accountBusy = false, googleBusy = false, accountMode = 'signin', accountError = '', profileGeneration = 0, restoring = false, announcedIdentity = '', pendingRoomName = '';
 function memberMatches(st,profile){
   const pl=profile && st?.players[profile.name];
   return !!pl && pl.account===profile.id && pl.salt===profile.salt;
@@ -2521,29 +2731,50 @@ function syncPresence(announceNow = true){
   announcedIdentity = next;
   if(announceNow && mode === 'live' && NET.status === 'live') NET.announce();
 }
+function updateTopLoader(){
+  const el = $('#top-loader');
+  if(!el) return;
+  const active = restoring || accountBusy || googleBusy || busy ||
+    (!atHome && !badAddress && !['live','local','error','incompatible'].includes(mode));
+  el.hidden = !active;
+}
 async function restoreProfile(){
   const gen = ++profileGeneration; restoring = true; accountBusy = false; account = null;
+  updateTopLoader();
   try{
     const session = JSON.parse(readPref(SESSION_KEY));
     if(session && validUsername(session.name) && fingerprint(session.key) && validSalt(session.salt)){
       const id = await accountId(session.name,session.key,session.salt);
-      if(id===session.id && gen===profileGeneration) account = {name:session.name,id,salt:session.salt};
+      if(id===session.id && gen===profileGeneration){
+        account = {name:session.name,id,salt:session.salt,localVerified:true,google:!!session.google,email:session.email||''};
+        saveKeyring(account);
+      }
     }
   }catch(_){} finally{if(gen===profileGeneration){restoring=false;applyIdentity();syncPresence();renderAll();}}
 }
 function signOut(){
-  frontWatch?.depart(); profileGeneration++; account = null; accountBusy = restoring = false; accountError=''; accountMode='signin';
+  frontWatch?.depart(); profileGeneration++; account = null; accountBusy = googleBusy = restoring = false; accountError=''; accountMode='signin';
   try{localStorage.removeItem(SESSION_KEY);}catch(_){} applyIdentity(); syncPresence(false); closeModal(); NET.announce(); renderAll();
 }
+async function completeAuth(profile, key, extra = {}){
+  const card = {name:profile.name, salt:profile.salt, id:profile.id, google:!!extra.google, email:extra.email||''};
+  saveKeyring(card);
+  account = {...card, verified:true, localVerified:true};
+  putPref(SESSION_KEY, JSON.stringify({name:profile.name, key, salt:profile.salt, id:profile.id, google:!!extra.google, email:extra.email||''}));
+  if(!readPref(SESSION_KEY)) toast('Signed in for this visit. Browser storage is unavailable.');
+  applyIdentity(); syncPresence(false); NET.announce();
+}
 async function authenticate(){
-  if(accountBusy || restoring || !campaignRoom(S) || (startingMap && creatingRoom!==ROOM)) return;
+  if(accountBusy || restoring || (!atHome && (!campaignRoom(S) || (startingMap && creatingRoom!==ROOM)))) return;
   const name = $('#account-name').value.trim().normalize('NFC'), password = $('#account-password').value, signup = accountMode === 'signup';
   const fail = msg => {accountError=msg; const el=$('#account-error'); if(el) el.textContent=msg;};
   if(!globalThis.crypto?.subtle) return fail('Sign-in needs a secure connection. Open this game over HTTPS.');
   if(!validUsername(name)) return fail('Use 2–30 letters, numbers, spaces, underscores or hyphens; begin with a letter or number.');
   if(!password || password.length>256 || (signup && password.length<8)) return fail('Use a game password of 8–256 characters.');
-  const gen=++profileGeneration, roomBoot=bootId, current=()=>gen===profileGeneration && roomBoot===bootId && campaignRoom(S);
-  accountBusy=true; fail(''); const button=$('#account-submit'); button.disabled=true; button.textContent=signup?'Creating account…':'Signing in…';
+  const gen=++profileGeneration, roomBoot=bootId, current=()=>gen===profileGeneration && roomBoot===bootId && (atHome || campaignRoom(S));
+  accountBusy=true; fail(''); updateTopLoader();
+  const button=$('#account-submit');
+  if(button){ button.disabled=true; button.innerHTML=`<span class="spinner" aria-hidden="true"></span>${signup?'Creating account…':'Signing in…'}`; }
   try{
     const topic=await profileTopic(name); let key, profile;
     const member=Object.keys(S?.players || {}).find(n=>n.toLowerCase()===name.toLowerCase());
@@ -2553,19 +2784,95 @@ async function authenticate(){
       const candidate={name,salt,id:await accountId(name,key,salt)};
       if(!current()) return; profile=await directoryRecord(topic,candidate,current);
     } else {
-      // If a directory relay loses its retained data, the confirmed room still knows
-      // its member. Never replace the roster identity with a newer directory record.
-      profile=member ? {name:member,salt:S.players[member].salt,id:S.players[member].account} : await directoryRecord(topic,null,current);
+      // If a directory relay loses its retained data, check the confirmed room or local keyring
+      // and repair the public card so existing players are never locked out.
+      if(member){
+        profile = {name:member,salt:S.players[member].salt,id:S.players[member].account};
+      } else {
+        try{
+          profile = await directoryRecord(topic,null,current);
+        }catch(dirErr){
+          const local = findKeyring(name);
+          if(!local) throw dirErr;
+          profile = local;
+        }
+      }
       if(profile.name.toLowerCase()!==name.toLowerCase()) throw Error('Account record does not match this username.');
       key=await profileKey(profile.name,password,profile.salt);
       if(await accountId(profile.name,key,profile.salt)!==profile.id) throw Error('Incorrect username or password.');
+      if(!member && current()){
+        // Quietly ensure the directory relay still holds this verified card.
+        directoryRecord(topic,{name:profile.name,salt:profile.salt,id:profile.id},current).catch(()=>{});
+      }
     }
     if(!current()) return;
-    account={...profile,verified:true}; putPref(SESSION_KEY,JSON.stringify({name:profile.name,key,salt:profile.salt,id:profile.id}));
-    if(!readPref(SESSION_KEY)) toast('Signed in for this visit. Browser storage is unavailable.');
-    applyIdentity(); syncPresence(false); NET.announce();
+    await completeAuth(profile, key);
+    if(M === 'account') closeModal();
   }catch(e){if(current()) fail(e.message || 'Could not verify this account.');}
-  finally{if(gen===profileGeneration){accountBusy=false; if(button){button.disabled=false;button.textContent=signup?'Create account':'Sign in and continue';} renderAll();}}
+  finally{if(gen===profileGeneration){accountBusy=false; updateTopLoader(); if(button){button.disabled=false;button.textContent=signup?'Create account':'Sign in and continue';} renderAll();}}
+}
+function loadGoogleGsi(){
+  if(window.google?.accounts?.oauth2) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = () => window.google?.accounts?.oauth2 ? resolve() : reject(Error('Google Sign-In did not initialize.'));
+    s.onerror = () => reject(Error('Could not load Google Sign-In script. Check your connection.'));
+    document.head.appendChild(s);
+  });
+}
+async function googleSignIn(){
+  const cid = googleClientId();
+  if(!cid){
+    M = 'account'; renderModal();
+    toast('Add a Google OAuth Client ID in Account settings to use Continue with Google.', 'bad');
+    return;
+  }
+  if(googleBusy || accountBusy || restoring) return;
+  const gen = ++profileGeneration, roomBoot = bootId, current = () => gen === profileGeneration && roomBoot === bootId;
+  googleBusy = true; updateTopLoader(); renderDesk();
+  try{
+    await loadGoogleGsi();
+    const token = await new Promise((resolve, reject) => {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: cid,
+        scope: 'openid profile email',
+        callback: r => r?.access_token ? resolve(r.access_token) : reject(Error(r?.error_description || 'Google sign-in was cancelled.'))
+      });
+      client.requestAccessToken({prompt: 'select_account'});
+    });
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {headers:{Authorization:'Bearer '+token}});
+    if(!r.ok) throw Error('Could not read your Google profile.');
+    const info = await r.json();
+    if(!info?.sub || !current()) throw Error('Incomplete Google account response.');
+    const rawName = (info.name || info.email?.split('@')[0] || 'Commander').normalize('NFC').replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 30);
+    const name = validUsername(rawName) ? rawName : 'Player ' + info.sub.slice(-6);
+    const topic = await profileTopic(name);
+    const secret = 'google-sub:' + info.sub;
+    let profile = findKeyring(name);
+    if(!profile){
+      try{ profile = await directoryRecord(topic, null, current); }catch(_){ profile = null; }
+    }
+    if(profile){
+      const key = await profileKey(profile.name, secret, profile.salt);
+      if(await accountId(profile.name, key, profile.salt) !== profile.id) throw Error(`Username "${profile.name}" is already registered with a password. Sign in with password or pick another name.`);
+      await completeAuth(profile, key, {google:true, email:info.email || ''});
+    } else {
+      const salt = randomHex(16), key = await profileKey(name, secret, salt);
+      const candidate = {name, salt, id: await accountId(name, key, salt)};
+      const savedCard = await directoryRecord(topic, candidate, current).catch(() => candidate);
+      await completeAuth(savedCard, key, {google:true, email:info.email || ''});
+    }
+    if(M === 'account') closeModal();
+    toast(`Signed in as ${account.name} via Google.`, 'win');
+  }catch(e){
+    if(current()){
+      accountError = e.message || 'Google sign-in failed.';
+      toast(accountError, 'bad');
+    }
+  } finally {
+    if(gen === profileGeneration){ googleBusy = false; updateTopLoader(); renderAll(); }
+  }
 }
 const expectedPw = (n, state = S) => campaignRoom(state) ? state.players[n]?.account : state?.players[n]?.pw || (Object.hasOwn(PWH,n) ? PWH[n] : null);
 const officerIn = (st, who) => st?.players[who.name] && !!who.ph && expectedPw(who.name, st) === who.ph && can(st.players[who.name].role, 'research');
@@ -2615,25 +2922,40 @@ async function act(name, payload){
   const store = db, campaign = S.created, orderDialog = M;
   const began = Date.now(), who = {...me}, pl = S.players[who.name];
   const subject = ['setrole','remove','appointLeader'].includes(name) && S.players[payload?.name], subjectPw = subject && expectedPw(payload.name,S);
-  const needs = {start:'*',appointLeader:'*',changeFaction:'contribute',applyupdate:'contribute',contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
+  const needs = {start:'*',appointLeader:'*',renameRoom:'*',changeFaction:'contribute',applyupdate:'contribute',contribute:'contribute', recruit:'recruit', fort:'fort', stance:'stance', research:'research', mastery:'research', move:'move', attack:'attack', spy:'spy', honey:'honey', sabotage:'sabotage', decap:'decap', annex:'annex', propose:'dip', answer:'dip', breakpact:'dip', setrole:'*', remove:'*', reset:'*'};
   const memberOrder = name==='membership', profile = account, first = memberOrder && startingMap;
-  const allowed = st => !campaignRoom(st) ? !memberOrder && !['start','appointLeader','changeFaction'].includes(name) :
+  const allowed = st => !campaignRoom(st) ? !memberOrder && !['start','appointLeader','changeFaction','renameRoom'].includes(name) :
     !!profile && profile===account && (memberOrder ? (!first || (creatingRoom===ROOM && canStartEmpty())) :
       name!=='enlist' && name!=='applyupdate' && memberMatches(st,profile) &&
       (name!=='changeFaction' || canChangeFaction(st,who.name)) &&
-      (!waitingRoom(st) || ['start','appointLeader','changeFaction','setrole','remove'].includes(name)));
+      (!waitingRoom(st) || ['start','appointLeader','renameRoom','changeFaction','setrole','remove'].includes(name)));
   if(!allowed(S)) return toast(waitingRoom(S) && profile ? 'Join your faction and wait for the owner to start the campaign.' : 'Sign in to a confirmed room first.', 'bad');
   if(!memberOrder && name !== 'enlist' && name !== 'noop'){
     if(!pl || !authed()) return toast('Choose your post and enter its password first.', 'bad');
     const need = needs[name]; if(need === '*' ? pl.role !== 'leader' : !postCan(pl,need)) return toast(`Your role (${ROLES[pl.role]}) cannot do that.`, 'bad');
   }
-  busy = true; if(needsDesk()) renderDesk(); renderHud();
+  busy = true; updateTopLoader(); if(needsDesk()) renderDesk(); renderHud();
   try{
-    // A restored session entering an unfamiliar room needs an identity proof,
-    // not a new password prompt. Finish outside the short room write lease.
+    // A restored session entering an unfamiliar room checks the directory, and if the
+    // public relay dropped its retained card, re-publishes its verified local profile.
     if(memberOrder && !profile.verified){
       const epoch=authorityEpoch, current=()=>store===db && epoch===authorityEpoch && profile===account && liveBoard() && S.created===campaign;
-      const card=await directoryRecord(await profileTopic(profile.name),null,current);
+      const topic = await profileTopic(profile.name);
+      let card;
+      try{
+        card = await directoryRecord(topic,null,current);
+      }catch(err){
+        if(!current()) return;
+        const missing = /No account with that username/i.test(err?.message || '');
+        const offlineDir = /unavailable|did not confirm/i.test(err?.message || '');
+        if(profile.localVerified && missing){
+          card = await directoryRecord(topic,{name:profile.name,salt:profile.salt,id:profile.id},current).catch(() => ({name:profile.name,salt:profile.salt,id:profile.id}));
+        } else if(profile.localVerified && offlineDir){
+          card = {name:profile.name,salt:profile.salt,id:profile.id};
+        } else {
+          throw err;
+        }
+      }
       if(!current()) return;
       if(card.id!==profile.id || card.name!==profile.name || card.salt!==profile.salt) throw Error('This account changed. Sign in again.');
       profile.verified=true;
@@ -2660,16 +2982,18 @@ async function act(name, payload){
         return toast('This appointment changed. Review the latest Council roster.', 'bad');
     }
     const ctx = {now, name:memberOrder ? profile.name : who.name, account:profile?.id, salt:profile?.salt, team:player?.team, role:player?.role};
-    const res = A[name](base,ctx,memberOrder ? {team:payload?.team,create:first} : payload || {});
+    const res = A[name](base,ctx,memberOrder ? {team:payload?.team,create:first,roomName:payload?.roomName ?? pendingRoomName} : payload || {});
     if(res.err){ toast(res.err, 'bad'); return; }
+    if(memberOrder && first) pendingRoomName = '';
     if(!res.reset && name !== 'applyupdate') checkWin(base, now);
-    if(!waitingRoom(base) && !res.reset && !memberOrder && !['start','noop'].includes(name)) recordFrontTraffic(base,now,now-began >= SLOW_ORDER_MS);
+    if(!waitingRoom(base) && !res.reset && !memberOrder && !['start','noop','renameRoom'].includes(name)) recordFrontTraffic(base,now,now-began >= SLOW_ORDER_MS);
     base.rev = nextRev; base.origin = TAB; await ref.set(base);
+    recordStatsOrder(name, payload, res, base);
     if(!displayed(store,base)) return; // only a confirmed delivery can replace S
     if(res.ok) toast(res.ok, res.battle === false ? 'bad' : (res.battle ? 'win' : ''));
     if(orderDialog && M === orderDialog && ['move','attack'].includes(name)) closeModal();
   }catch(e){ if(store === db) toast(e && e.code === 'not_granted' || (e && /permission|denied/i.test(e.message || '')) ? 'You can look but not play. Ask the owner for contributor access.' : ('Order failed: ' + (e && e.message || e)), 'bad'); }
-  finally{ if(store === db){ busy = false; renderAll(); } }
+  finally{ if(store === db){ busy = false; updateTopLoader(); renderAll(); } }
 }
 // A local live streak permits v8 operations. Old maps also require a two-way
 // muster for ordinary raids; an online dot is never authority for either.
@@ -2877,12 +3201,13 @@ function createSharedDb(cap,wire){
 }
 let bootId = 0;
 async function boot(){
-  frontWatch?.depart(); frontWatch = null; frontWrite = null; busy = false; announcedIdentity = '';
+  frontWatch?.depart(); frontWatch = null; frontWrite = null; busy = false; announcedIdentity = ''; prevOwners = null; alertedLogKeys.clear();
   const id = ++bootId, wire = wireRoom(); confirmed = null; cutoverAt = 0; ui.confirmReset = null; sawSavedRoom = startingMap = false; homeReceipt = readPref(LAST_ROOM); authorityEpoch++;
   if(NET.destroy) NET.destroy();
   clearTimeout(loadTimer); NET.peers.clear(); db = NET.destroy = NET.reconnect = null; NET.announce = () => {};
   S = backup = legacyBackup = preUpdateBackup = conflictCopy = null; cacheKey = backend = waitReason = ''; relayChoices = []; seen = Date.now(); shown.clear();
   mode = NET.status = 'connecting'; NET.transport = 'Checking the saved room…';
+  updateTopLoader();
   if(atHome){ mode = 'home'; NET.status='off'; renderAll(); return; }
   if(badAddress){ mode = 'incompatible'; NET.status = 'off'; renderAll(); return; }
   renderAll(); // Geography only. No stocks, garrisons, provisional purchases or income from a cache.
@@ -2934,6 +3259,8 @@ async function boot(){
       applyIdentity(); syncPresence(wasLive);
       if(creatingRoom===ROOM) creationIntent(null);
       rememberBoard(confirmed);
+      saveRoomOverview(S); syncStatsFromState(S);
+      checkAttackNotifications(S, !wasSaved || st.origin === TAB);
       if(!wasSaved || st.origin === TAB) seen = Date.now(); else announce();
     } else if(!S){ S = newGame(Date.now()); startingMap = true; applyIdentity(); syncPresence(false); } // confirmed empty, never published just by visiting
     renderAll();
@@ -3020,7 +3347,8 @@ function roomPillHtml(){
   const live = mode === 'live', offline = NET.status === 'off';
   if(badAddress) return '<span class="roompill">No campaign selected</span>';
   const lbl = live ? (sawSavedRoom ? `Live · #${S?.rev ?? minRev}` : 'Empty room') : offline ? 'Offline' : 'Syncing…';
-  return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)} · ${n} connected"><span class="sdot ${live ? 'live' : offline ? 'off' : 'conn'}"></span><span>Mastery · ${esc(ROOM)} · ${lbl}</span></button>`;
+  const namePart = S?.roomName ? `${esc(S.roomName)} (${esc(ROOM)})` : esc(ROOM);
+  return `<button class="btn sm roompill" data-act="room" title="${esc(NET.transport)} · ${n} connected"><span class="sdot ${live ? 'live' : offline ? 'off' : 'conn'}"></span><span>${namePart} · ${lbl}</span></button>`;
 }
 function syncText(){
   if(badAddress || mode === 'incompatible') return 'Incompatible room address or unreadable save. No data has been changed.';
@@ -3043,31 +3371,34 @@ function updateMe(html){
   root.innerHTML = headerMarkup = html; liveControl(root,focused)?.focus({preventScroll:true});
 }
 function renderHud(){
+  updateTopLoader();
   if(M === 'room'){
     const roster = $('#room-presence'), html = roomPresenceHtml();
     if(roster && roster.innerHTML !== html) roster.innerHTML = html;
   }
   if(needsDesk()){
-    $('#hud').innerHTML=$('#score').innerHTML=''; updateMe(atHome ? (account ? `<span>${esc(account.name)}</span><button class="btn sm" data-act="signout">Sign out</button>`:'') : roomPillHtml());
-    $('#banner').innerHTML=atHome || liveBoard()?'':`<div class="banner" role="status">${esc(syncText())}</div>`; return;
+    $('#hud').innerHTML=$('#score').innerHTML='';
+    const acctBtn = account ? `<button class="btn sm" data-act="account">${esc(account.name)} · Stats</button><button class="btn sm" data-act="signout">Log out</button>` : '';
+    updateMe(atHome ? acctBtn : roomPillHtml() + (account ? `<button class="btn sm" data-act="account">Account</button>` : ''));
+    $('#banner').innerHTML=atHome || liveBoard() || !S ? '' : `<div class="banner" role="status">${esc(syncText())}</div>`; return;
   }
   if(!S){
     $('#hud').innerHTML = $('#score').innerHTML = ''; updateMe(roomPillHtml());
-    $('#banner').innerHTML = mode === 'live' ? '' : `<div class="banner" role="status">${esc(syncText())}</div>`; return;
+    $('#banner').innerHTML = (mode === 'live' || mode === 'connecting') ? '' : `<div class="banner" role="status">${esc(syncText())}</div>`; return;
   }
   const t = myTeam(), team = t || 'reich', P = projectedEconomy(), inc = income(S, team);
   refreshPrices(P);
-  document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#c9c3ae');
+  document.documentElement.style.setProperty('--acc', t ? TEAMS[t].hex : '#8fc7f0');
   const vr = vpOf(S, 'reich'), vd = vpOf(S, 'dawn'), vn = totalVP(S) - vr - vd;
   const lands = team => { const n = countOf(S,team); return `${n} ${n === 1 ? 'province' : 'provinces'}`; };
   $('#score').innerHTML = `<div class="scorerow"><span style="color:var(--reich)">${icon('reich')} The Reich <b>${vr} VP · ${lands('reich')}</b></span><span style="color:var(--dawn)"><b>${lands('dawn')} · ${vd} VP</b> Black Dawn ${icon('dawn')}</span></div><div class="bar" title="Victory points. ${Math.round(DOM_SHARE * 100)}% held for 45 minutes wins the war."><i style="width:${vr / totalVP(S) * 100}%;background:var(--reich)"></i><i style="width:${vn / totalVP(S) * 100}%;background:var(--neutral);opacity:.45"></i><i style="width:${vd / totalVP(S) * 100}%;background:var(--dawn)"></i></div>`;
   const pl = authed() ? S.players[me.name] : null, post = postView(S.players,me.name);
-  updateMe(roomPillHtml() + (pl ? `<div class="who"><b>${esc(post.name)}</b><small>${esc(post.caption)}</small></div>${icon(pl.team)}<button class="btn sm" data-act="${campaignRoom(S)?'signout':'switch'}">${campaignRoom(S)?'Sign out':'Switch'}</button>` : `<button class="btn pri" data-act="switch">Choose your post</button>`));
+  updateMe(roomPillHtml() + (pl ? `<div class="who"><b>${esc(post.name)}</b><small>${esc(post.caption)}</small></div>${icon(pl.team)}${campaignRoom(S)?`<button class="btn sm" data-act="account">Account</button><button class="btn sm" data-act="signout">Log out</button>`:`<button class="btn sm" data-act="switch">Switch</button>`}` : `<button class="btn pri" data-act="switch">Choose your post</button>`));
   const T = P.teams[team], cp = P.players[me.name]?.cp, rate = r => S.win ? 'War ended' : !liveBoard() ? 'Last save' : !sawSavedRoom ? 'Starting stock' : '+' + inc[r].toFixed(1) + '/min';
   $('#hud').innerHTML = (t ? `<div class="hudcell stock"><span class="k">Stockpiles</span>${TEAMS[t].name}</div>` : `<div class="hudcell stock"><span class="k">Spectating</span>Choose a post to see your faction’s stockpiles.</div>`) + (t ? RK : []).map(r => `<div class="hudcell res"><span class="k">${RES[r]}</span><span class="v">${fmt(T.res[r])}</span><span class="r">${rate(r)}</span></div>`).join('') +
     (t ? `<div class="hudcell cp" title="Your personal command points"><span class="k">Your CP</span><span class="v">${Math.floor(cp)}<span class="mut" style="font-size:11px">/${CPMAX}</span></span><span class="cpbar"><i style="width:${cp / CPMAX * 100}%"></i></span><span class="r">${S.win ? 'War ended' : !liveBoard() ? 'Last save' : cp >= CPMAX ? 'Full' : `+1/${CP_MS / 1000}s`}</span></div>` : '') +
-    (t ? `<div class="hudcell away" title="Five minutes without input marks this device away. AFK players do not count toward World front operations."><span class="k">${isAway() ? 'AFK' : 'AFK in'}</span><span>${isAway() ? 'Interact to return' : clockText(lastInput+AFK_MS-Date.now())}</span></div>` : '') +
-    (busy ? `<div class="hudcell sending"><span class="k">Sending orders…</span></div>` : '');
+    (t ? `<div class="hudcell away" title="Five minutes without input marks this device away."><span class="k">${isAway() ? 'AFK' : 'AFK in'}</span><span>${isAway() ? 'Interact to return' : clockText(lastInput+AFK_MS-Date.now())}</span></div>` : '') +
+    (busy ? `<div class="hudcell sending"><span class="spinner" aria-hidden="true"></span><span class="k">Sending orders…</span></div>` : '');
   let b = '';
   if(S.win) b = `<div class="banner win" style="color:${tcol(S.win.team)}">${TEAMS[S.win.team].name} wins. <span style="font-family:var(--body);font-size:14px;text-transform:none;letter-spacing:0;color:var(--ink)">${esc(S.win.why)}</span></div>`;
   else {
@@ -3133,7 +3464,77 @@ function zoomAt(f,cx,cy){
   ui.curReg=''; renderMapnav();
 }
 const polyPts = p => { const o = []; for(let i = 0; i < p.length; i += 2){ const [x, y] = proj(p[i], p[i+1]); o.push(x.toFixed(1) + ',' + y.toFixed(1)); } return o.join(' '); };
-let baseMap='', paintedMap=null;
+let baseMap='', paintedMap=null, CELL_PTS={};
+const LAND_SHADES = ['#4c6f48','#56784b','#456542','#5e7b4d','#4b7050'];
+function countryShade(k){
+  let h = 0; for(let i = 0; i < (k||'').length; i++) h = (h * 31 + k.charCodeAt(i)) | 0;
+  return LAND_SHADES[Math.abs(h) % LAND_SHADES.length];
+}
+function clipHalfPlane(poly, mx, my, dx, dy, q){
+  if(!poly.length) return poly;
+  const out = [], ins = p => (p.x - mx)*dx + (p.y - my)*dy <= 0;
+  for(let i = 0; i < poly.length; i++){
+    const a = poly[(i + poly.length - 1) % poly.length], b = poly[i], ia = ins(a), ib = ins(b);
+    const hit = () => {
+      const den = (b.x - a.x)*dx + (b.y - a.y)*dy;
+      const t = den ? ((mx - a.x)*dx + (my - a.y)*dy) / den : 0.5;
+      return {x: a.x + t*(b.x - a.x), y: a.y + t*(b.y - a.y)};
+    };
+    if(ia && ib) out.push(b);
+    else if(ia && !ib){ const I = hit(); out.push({x:I.x, y:I.y, edgeQ:b.edgeQ}); }
+    else if(!ia && ib){ const I = hit(); out.push({x:I.x, y:I.y, edgeQ:q}); out.push(b); }
+  }
+  return out;
+}
+function buildLandIndex(){
+  return LAND.map(raw => {
+    const pts = []; let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(let i = 0; i < raw.length; i += 2){
+      const [x,y] = proj(raw[i], raw[i+1]);
+      pts.push([x,y]);
+      if(x<minX) minX=x; if(y<minY) minY=y; if(x>maxX) maxX=x; if(y>maxY) maxY=y;
+    }
+    return {pts, minX, minY, maxX, maxY};
+  });
+}
+function pointInPoly(x, y, poly){
+  if(x<poly.minX || x>poly.maxX || y<poly.minY || y>poly.maxY) return false;
+  let inside = false;
+  const pts = poly.pts;
+  for(let i = 0, j = pts.length - 1; i < pts.length; j = i++){
+    const xi = pts[i][0], yi = pts[i][1], xj = pts[j][0], yj = pts[j][1];
+    if(((yi > y) !== (yj > y)) && (x < (xj - xi)*(y - yi)/(yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function clipSegToLand(x1, y1, x2, y2, polys){
+  const sMinX = Math.min(x1,x2), sMaxX = Math.max(x1,x2), sMinY = Math.min(y1,y2), sMaxY = Math.max(y1,y2);
+  const ts = [0, 1], dx = x2 - x1, dy = y2 - y1;
+  const cand = polys.filter(p => sMaxX >= p.minX && sMinX <= p.maxX && sMaxY >= p.minY && sMinY <= p.maxY);
+  if(!cand.length) return '';
+  for(const poly of cand){
+    const pts = poly.pts;
+    for(let i = 0, j = pts.length - 1; i < pts.length; j = i++){
+      const x3 = pts[j][0], y3 = pts[j][1], x4 = pts[i][0], y4 = pts[i][1];
+      const ex = x4 - x3, ey = y4 - y3, den = dx*ey - dy*ex;
+      if(Math.abs(den) < 1e-6) continue;
+      const t = ((x3 - x1)*ey - (y3 - y1)*ex) / den;
+      const u = ((x3 - x1)*dy - (y3 - y1)*dx) / den;
+      if(t > 1e-4 && t < 1 - 1e-4 && u >= 0 && u <= 1) ts.push(t);
+    }
+  }
+  ts.sort((a,b) => a - b);
+  let d = '';
+  for(let i = 0; i < ts.length - 1; i++){
+    const t0 = ts[i], t1 = ts[i+1];
+    if(t1 - t0 < 1e-4) continue;
+    const tm = (t0 + t1) / 2, mx = x1 + dx*tm, my = y1 + dy*tm;
+    if(cand.some(poly => pointInPoly(mx, my, poly))){
+      d += `M${(x1+dx*t0).toFixed(1)},${(y1+dy*t0).toFixed(1)}L${(x1+dx*t1).toFixed(1)},${(y1+dy*t1).toFixed(1)}`;
+    }
+  }
+  return d;
+}
 function paintMap(markup){
   // Most remote revisions (e.g. a trade or a field duty) don't change geography.
   // Keep native keyboard focus and ongoing pointer gestures in that case.
@@ -3144,27 +3545,85 @@ function paintMap(markup){
 }
 function buildBase(){
   const grid = []; for(let lon = -160; lon <= 180; lon += 20){ const [x] = proj(lon, 0); grid.push(`<line x1="${x}" y1="0" x2="${x}" y2="${H}"/>`); } for(let lat = -50; lat <= 70; lat += 20){ const [, y] = proj(0, lat); grid.push(`<line x1="0" y1="${y}" x2="${W}" y2="${y}"/>`); }
-  baseMap = `<rect width="${W}" height="${H}" fill="var(--sea)"/><g stroke="#1b2a2e" stroke-width="1" opacity=".5">${grid.join('')}</g>` +
-    `<g fill="var(--land)" stroke="#3a4d45" stroke-width="1.2" stroke-linejoin="round">${LAND.map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g>` +
-    `<g fill="var(--sea)" stroke="#2c3b35" stroke-width="1.2">${WATER.map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g><polygon points="${polyPts(CRIMEA)}" fill="var(--land)" stroke="#2c3b35" stroke-width="1.2"/>`;
+  const landPolys = LAND.map(p => `<polygon points="${polyPts(p)}"/>`).join('');
+  const landIdx = buildLandIndex();
+  const landIds = ATLAS.filter(id => id !== 'BMT');
+  CELL_PTS = {};
+  const shadeFills = [];
+  let countryD = '', stateD = '';
+  for(const p of landIds){
+    const A_ = TD[p], R = 360;
+    let poly = [{x:A_.x-R,y:A_.y-R,edgeQ:null},{x:A_.x+R,y:A_.y-R,edgeQ:null},{x:A_.x+R,y:A_.y+R,edgeQ:null},{x:A_.x-R,y:A_.y+R,edgeQ:null}];
+    for(const q of landIds){
+      if(q === p) continue;
+      const B_ = TD[q], dx = B_.x - A_.x, dy = B_.y - A_.y;
+      if(dx*dx + dy*dy > 760*760) continue;
+      poly = clipHalfPlane(poly, (A_.x+B_.x)/2, (A_.y+B_.y)/2, dx, dy, q);
+      if(poly.length < 3) break;
+    }
+    if(poly.length < 3) continue;
+    const pts = poly.map(v => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(' ');
+    CELL_PTS[p] = pts;
+    const hp = ATLAS_HOME[p];
+    shadeFills.push({poly, color:countryShade(hp)});
+    for(let i = 0; i < poly.length; i++){
+      const a = poly[(i + poly.length - 1) % poly.length], b = poly[i], q = b.edgeQ;
+      if(!q || p > q) continue;
+      const seg = clipSegToLand(a.x, a.y, b.x, b.y, landIdx);
+      if(!seg) continue;
+      if(ATLAS_HOME[q] !== hp) countryD += seg; else stateD += seg;
+    }
+  }
+  let landLayer = `<g fill="var(--land)" stroke="#1f3b4a" stroke-width="1.5" stroke-linejoin="round">${landPolys}</g>`;
+  try{
+    const c = typeof document !== 'undefined' && document.createElement?.('canvas');
+    const ctx = c && typeof c.getContext === 'function' && c.getContext('2d');
+    if(ctx){
+      const cw = 1400, ch = 512, sx = cw / W, sy = ch / H;
+      c.width = cw; c.height = ch;
+      ctx.save(); ctx.beginPath();
+      for(const poly of landIdx){
+        poly.pts.forEach(([x,y], i) => i ? ctx.lineTo(x*sx, y*sy) : ctx.moveTo(x*sx, y*sy));
+        ctx.closePath();
+      }
+      ctx.clip();
+      for(const f of shadeFills){
+        ctx.beginPath();
+        f.poly.forEach((v, i) => i ? ctx.lineTo(v.x*sx, v.y*sy) : ctx.moveTo(v.x*sx, v.y*sy));
+        ctx.closePath();
+        ctx.fillStyle = f.color;
+        ctx.fill();
+      }
+      ctx.restore();
+      const png = c.toDataURL('image/png');
+      landLayer += `<image href="${png}" width="${W}" height="${H}" preserveAspectRatio="none"/>`;
+    }
+  }catch(_){}
+  baseMap = `<rect width="${W}" height="${H}" fill="var(--sea)"/><g stroke="#245e84" stroke-width="1" opacity=".45">${grid.join('')}</g>` +
+    landLayer +
+    (stateD ? `<path d="${stateD}" fill="none" stroke="#2a3f2d" stroke-width="1" stroke-dasharray="3 3" opacity=".55"/>` : '') +
+    (countryD ? `<path d="${countryD}" fill="none" stroke="#18281b" stroke-width="2.1" stroke-linecap="round" opacity=".9"/>` : '') +
+    `<g fill="none" stroke="#1f3b4a" stroke-width="1.6" stroke-linejoin="round">${landPolys}</g>` +
+    `<g fill="var(--sea)" stroke="#1f3b4a" stroke-width="1.4">${WATER.map(p => `<polygon points="${polyPts(p)}"/>`).join('')}</g><polygon points="${polyPts(CRIMEA)}" fill="${countryShade(ATLAS_HOME.CRI)}" stroke="#1f3b4a" stroke-width="1.4"/>`;
 }
 function renderMap(){
   if(!S || needsDesk()){ paintMap(baseMap); return; }
   const viewer = myTeam() || 'spectator';
   const links = linksOf(S).map(l => { const A_ = TD[l.a], B_ = TD[l.b], oa = S.terr[l.a].o, ob = S.terr[l.b].o; const front = oa !== ob && oa !== 'neutral' && ob !== 'neutral'; const hot = sel && (l.a === sel || l.b === sel);
-    return `<line x1="${A_.x}" y1="${A_.y}" x2="${B_.x}" y2="${B_.y}" stroke="${front ? '#ff7a5c' : hot ? '#e6e3d8' : '#3b4a44'}" stroke-width="${front ? 2.4 : hot ? 1.8 : 1}" ${l.sea ? 'stroke-dasharray="3 5"' : ''} opacity="${front || hot ? .95 : .7}"/>`; }).join('');
+    return `<line x1="${A_.x}" y1="${A_.y}" x2="${B_.x}" y2="${B_.y}" stroke="${front ? '#ff7a5c' : hot ? '#ffffff' : '#2d4537'}" stroke-width="${front ? 2.4 : hot ? 1.8 : 1.1}" ${l.sea ? 'stroke-dasharray="3 5"' : ''} opacity="${front || hot ? .95 : .65}"/>`; }).join('');
   const sels = sel ? neighbors(S,sel).map(n => n.id) : [];
   const nodes = provincesOf(S).map(id => { const D = TD[id], t = S.terr[id], r = D.fcap ? 20 : (D.cap ? 16 : 13), ex = visible(S, viewer, id); const n = total(t.u); const label = ex ? n : (n ? '~' + Math.max(3, Math.round(n / 3) * 3) : '0');
     const country = COUNTRIES[countryAt(S,id)]?.name;
     const fill = tcol(t.o), isSel = sel === id, near = sels.includes(id);
-    const strokeCol = D.fcap ? '#fff' : (D.cap ? '#d9c98e' : '#0c0f0e');
+    const strokeCol = D.fcap ? '#fff' : (D.cap ? '#f0df99' : '#0f1c24');
     const strokeW = D.fcap ? 2.8 : (D.cap ? 2 : 1.5);
     return `<g class="node" data-act="sel" data-id="${id}" tabindex="0" role="button" aria-label="${esc(D.name)}, ${country || t.o}"><title>${esc(D.name)} · ${D.reg}${D.fcap ? ' · Faction Capital' : D.cap ? ' · National Capital' : ''} · ${country ? country + ' · Independent' : t.o === 'neutral' ? 'Neutral' : TEAMS[t.o].short} · ${D.vp} VP</title>` +
-      (isSel ? `<circle cx="${D.x}" cy="${D.y}" r="${r + 6}" fill="none" stroke="#fff" stroke-width="2"/>` : '') + (near && !isSel ? `<circle class="tgt" cx="${D.x}" cy="${D.y}" r="${r + 5}" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="2 3"/>` : '') +
-      `<circle cx="${D.x}" cy="${D.y}" r="${r}" fill="${fill}" fill-opacity="${t.o === 'neutral' ? .75 : 1}" stroke="${strokeCol}" stroke-width="${strokeW}"/>` +
-      `<text x="${D.x}" y="${D.y + 3.5}" text-anchor="middle" font-size="${String(label).length > 3 ? 8 : 10}" font-weight="500" fill="${t.o === 'dawn' ? '#16120a' : '#fff'}">${label}</text>` +
-      (D.fcap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="9" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">⚑</text>` : (D.cap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="8" fill="#d9c98e" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">◆</text>` : '')) +
-      (D.vp >= 3 ? `<text x="${D.x + r - 2}" y="${D.y - r + 6}" font-size="8" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c0f0e" stroke-width="2">★${D.vp}</text>` : '') +
+      (t.o !== 'neutral' ? `<circle cx="${D.x}" cy="${D.y}" r="${r + 14}" fill="${fill}" fill-opacity=".18" pointer-events="none"/>` : '') +
+      (isSel ? `<circle cx="${D.x}" cy="${D.y}" r="${r + 6}" fill="none" stroke="#fff" stroke-width="2"/>` : '') + (near && !isSel ? `<circle class="tgt" cx="${D.x}" cy="${D.y}" r="${r + 5}" fill="none" stroke="#fff" stroke-width="1.2" stroke-dasharray="2 3"/>` : '') +
+      `<circle cx="${D.x}" cy="${D.y}" r="${r}" fill="${fill}" fill-opacity="${t.o === 'neutral' ? .85 : 1}" stroke="${strokeCol}" stroke-width="${strokeW}"/>` +
+      `<text x="${D.x}" y="${D.y + 3.5}" text-anchor="middle" font-size="${String(label).length > 3 ? 8 : 10}" font-weight="600" fill="${t.o === 'dawn' ? '#16120a' : '#fff'}">${label}</text>` +
+      (D.fcap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="9" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c141d" stroke-width="2">⚑</text>` : (D.cap ? `<text x="${D.x - r + 2}" y="${D.y - r + 6}" font-size="8" fill="#f0df99" text-anchor="middle" style="paint-order:stroke" stroke="#0c141d" stroke-width="2">◆</text>` : '')) +
+      (D.vp >= 3 ? `<text x="${D.x + r - 2}" y="${D.y - r + 6}" font-size="8" fill="#fff" text-anchor="middle" style="paint-order:stroke" stroke="#0c141d" stroke-width="2">★${D.vp}</text>` : '') +
       `<text class="nlabel" x="${D.x}" y="${D.y + r + 10}" text-anchor="middle">${esc(D.name)}</text></g>`; }).join('');
   paintMap(baseMap + `<g>${links}</g><g>${nodes}</g>`);
 }
@@ -3253,30 +3712,30 @@ function ordersBriefing(){
   const garrison=base ? `<button class="btn pri" data-act="goto" data-id="${base}">Open ${esc(TD[base].name)} orders</button>` : '';
   let title, text, actions;
   if(S.win){
-    title='Campaign complete'; text=S.win.why; actions=link('log','Read the campaign log',true);
+    title='Campaign complete'; text=S.win.why; actions=link('log','Campaign log',true);
   } else if(!team){
-    title='Explore the campaign'; text='Choose your post to give orders, or use the directory below to inspect a province.';
+    title='Explore the campaign'; text='Choose your post to give orders, or tap any country below.';
     actions=deskButton('switch','Choose your post',true);
   } else if(role==='leader'){
-    title='Lead your faction'; text='Open a friendly garrison to plan an attack along one map line. To recruit troops, appoint a teammate as Chief of staff in Council.';
+    title='Lead your faction'; text='Tap a friendly province to recruit, move, fortify, or attack. Manage faction posts in Council.';
     actions=garrison+link('council','Manage posts');
   } else if(role==='chief'){
-    title='Prepare your garrison'; text='Open a friendly province and choose Recruit here to raise troops. Use Attack from here to preview an advance before spending points.';
+    title='Prepare your garrison'; text='Tap a friendly province to recruit troops, move units, or launch an attack.';
     actions=garrison;
   } else if(postCan(pl,'attack')){
-    title='Use your attack seat'; text='Your leader has authorized you to order attacks. Open a friendly garrison and choose a neighboring target. Your regular role is unchanged.';
+    title='Use your attack seat'; text='Tap a friendly garrison to attack a connected province.';
     actions=garrison+link('council','View your post');
   } else if(role==='diplomat'){
-    title='Open negotiations'; text='Offer a trade or propose a ceasefire in Diplomacy. You can also scout a province or buy a weak neutral neighbor by treaty.';
+    title='Open negotiations'; text='Send a trade or ceasefire in Diplomacy, or scout enemy provinces.';
     actions=link('dip','Open diplomacy',true);
   } else {
-    title='Start with field duty'; text='Add manpower, steel or oil to your faction for free. You can also spy on a foreign province. ' +
-      (campaignRoom(S) && !seats(S.players,team).leaders ? `Ask ${S.owner} to appoint your side’s first commander in Council.` : 'Your leader assigns command roles in Council.');
+    title='Start with field duty'; text='Earn free resources in Field duty or scout a foreign province. ' +
+      (campaignRoom(S) && !seats(S.players,team).leaders ? `Ask ${S.owner} to appoint your side’s leader in Council.` : 'Your leader can promote you in Council.');
     actions=link('council','Open field duty',true);
   }
-  const goal=campaignRoom(S)?'Secure the enemy homeland and take their last province. Taking their capital alone does not win the war.':'Capture the enemy headquarters or take their last province.';
-  return `<section class="card briefing"><p class="eyebrow">Command desk${team?' / '+ROLES[role]:''}</p><h2 id="briefing-title" tabindex="-1">${title}</h2><p>${esc(text)}</p><div class="row">${actions}</div>
-    <details data-keep="guide"><summary id="guide-summary">How do I play?</summary><p>${goal} You can also win by holding ${DOM_SHARE*100}% of victory points for ${DOM_MS/60000} minutes.</p><p>Each province supplies your whole faction. Command points (CP) are yours alone; they refill as you play. Inspecting a province or previewing an order costs nothing.</p>${link('rules','Read the rules')}</details></section>`;
+  const goal=campaignRoom(S)?'Take all enemy provinces (capitals do not surrender other states)':'Capture Berlin or Nigeria (or all enemy provinces)';
+  return `<section class="card briefing"><p class="eyebrow">Command${team?' / '+ROLES[role]:''}</p><h2 id="briefing-title" tabindex="-1">${title}</h2><p>${esc(text)}</p><div class="row">${actions}</div>
+    <details data-keep="guide"><summary id="guide-summary">Quick guide</summary><p><b>Win:</b> ${goal}, or hold ${Math.round(DOM_SHARE*100)}% of victory points for ${DOM_MS/60000} min.</p><p><b>Orders:</b> 1 CP to move or recruit, 2 CP to attack or spy. CP refills automatically.</p>${link('rules','Full rules')}</details></section>`;
 }
 function panelOrders(){
   if(!sel) return ordersBriefing()+nationDirectory()+frontList()+`<div class="front-entry"><span><b>Independent powers</b><small>Field intelligence &amp; operations</small></span><button class="btn sm" data-act="tab" data-k="front">World front →</button></div>`;
@@ -3366,7 +3825,7 @@ function panelTroops(){
       </div>`;
     }).join('') + `</div>`;
   }).join('');
-  return `<div class="card sm"><div class="row sb"><h3>Troops &amp; Divisions</h3><span class="mut sm">${canRec ? `Recruiting in ${esc(TD[sel].name)}` : S.win ? 'Recruitment is closed: the war has ended.' : !can(myRole(),'recruit') ? `Only staff chiefs can recruit${myRole() === 'leader' ? ' (appoint a teammate in Council).' : '.'}` : 'Select one of your territories to recruit'}</span></div>${divBarHtml('tdiv', curDiv, team)}</div>${passHtml}${sections}`;
+  return `<div class="card sm"><div class="row sb"><h3>Troops &amp; Divisions</h3><span class="mut sm">${canRec ? `Recruiting in ${esc(TD[sel].name)}` : S.win ? 'Recruitment closed: war ended.' : !can(myRole(),'recruit') ? 'Leaders and chiefs of staff can recruit.' : 'Select one of your territories to recruit'}</span></div>${divBarHtml('tdiv', curDiv, team)}</div>${passHtml}${sections}`;
 }
 function frontList(){
   const team = myTeam() || 'reich'; const rows = linksOf(S).filter(l => { const a = S.terr[l.a].o, b = S.terr[l.b].o; return a !== b && a !== 'neutral' && b !== 'neutral'; }).map(l => { const mineA = S.terr[l.a].o === team; const my = mineA ? l.a : l.b, en = mineA ? l.b : l.a; return `<div class="row sb"><button class="chip" data-act="sel" data-id="${my}">${esc(TD[my].name)}</button><span class="mut">faces</span><button class="chip" data-act="sel" data-id="${en}">${esc(TD[en].name)}</button></div>`; }).join('');
@@ -3615,14 +4074,11 @@ function panelFront(){
 
 function panelRules(){
   const hdr = Object.keys(STANCES).map(k => `<th>${STANCES[k]}</th>`).join('');
-  return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>${campaignRoom(S)?'Conquer a country state by state. Capturing a capital or faction HQ takes only that province; it does not surrender the remaining states. Secure the rest of the enemy homeland before taking its last province.':'Capture the enemy capital: <b>Berlin</b> or <b>Nigeria</b>. Instant victory.'}</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of all victory points for 45 minutes.</li>${campaignRoom(S)?'':'<li>Or leave the enemy without land.</li>'}</ul></div>
-  <div class="card sm"><h3>Resources and time</h3>Every province pays resources to its faction every minute (Industry raises income). Command points (CP) belong to your post, not your faction. Each player starts with ${CP_START} and regains 1 CP every ${CP_MS / 1000} seconds, up to ${CPMAX}. A move or recruitment order costs 1 CP; an attack or spy mission costs 2.</div>
-  <div class="card sm"><h3>Independent countries</h3>With one active player online, independent countries train, rebuild and try to reclaim their national capitals. ${campaignRoom(S)?'They can counterattack other occupied states along their borders, even with one active faction.':'Other raids require both factions.'} Operations normally run every 90 seconds and slow to 3 minutes when orders are arriving quickly or the room lock is slow. Five minutes without input marks a post AFK until its player interacts again. Open <button class="btn sm" data-act="tab" data-k="front">World front</button> for the live clock, readiness and latest dispatch. Nothing accumulates offline.</div>
-  <div class="card sm"><h3>Troop mastery</h3>Faction doctrines unlock formations. In Research → Troop mastery, choose a formation to improve its Attack, Defense or Vitality. Its role talent needs Attack and Defense at the rank you want to buy; tactic talents also need the matching doctrine. Each ability has five ranks and only affects the selected formation.</div>
-  <div class="card sm"><h3>Attacking</h3>Attack from a friendly garrison into an enemy or neutral province joined to it by one map line. Choose your units and a tactic. Mechanized units burn oil (1 per 2 armor, air or ships). Friendly moves also follow one map line. ${SEA_CROSSING} Strength comes from unit stats × your tech, then terrain, forts, a little luck. The side with more strength wins; losses fall on both.</div>
-  <div class="card sm"><h3>Tactics beat postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div><p class="mut" style="margin:6px 0 0">A tactic multiplies only the matching units. A defender's posture is hidden until you scout. Neutral lands have a fixed hidden posture.</p></div>
-  <div class="card sm"><h3>The map</h3>Full world map: North America, Central America, the Caribbean, South America, Europe, Africa, the Middle East, Asia, Siberia and Oceania. Use the continent buttons at the top-left of the map or the World Nations &amp; Capitals directory to jump anywhere. Dashed lines are sea routes. ⚑ marks faction HQs (Berlin &amp; Nigeria); ◆ marks national capitals.</div>
-  <div class="card sm"><h3>Roles</h3><b>Leader</b>: commands attacks and appoints posts. Only the four staff chiefs can recruit, in any friendly province. The leader can fill six non-leader attack seats; chiefs count toward the six. Attack-only appointments keep their normal game role. <b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies. <b>Diplomat</b>: treaties, trade, annexation, spies, sabotage. <b>Soldier</b>: field duty and spies. Leaders can reassign roles in the Council.</div>`;
+  return `<div class="card sm"><h3>How to win</h3><ul style="margin:0;padding-left:18px"><li>${campaignRoom(S)?'Conquer all enemy provinces state by state. Capturing a capital does not surrender its other states.':'Capture Berlin or Nigeria (or take all enemy land).'}</li><li>Or hold <b>${Math.round(DOM_SHARE * 100)}%</b> of victory points for 45 minutes.</li></ul></div>
+  <div class="card sm"><h3>Resources &amp; CP</h3>Provinces pay Gold, Steel, Oil, and Manpower each minute. Your personal CP starts at ${CP_START} and refills +1 every ${CP_MS / 1000}s (max ${CPMAX}). Move/Recruit: 1 CP · Attack/Spy: 2 CP.</div>
+  <div class="card sm"><h3>Attacking</h3>Select a friendly garrison, choose a connected target, pick units and a tactic. Armor/Air/Ships consume Oil. Terrain, forts, tech, and tactic matchups shape combat.</div>
+  <div class="card sm"><h3>Tactics vs Postures</h3><div class="scroll"><table><tr><th></th>${hdr}</tr>${Object.keys(TACT).map(k => `<tr><td>${TACT[k].n}</td>${Object.keys(STANCES).map(s => `<td>×${MATRIX[k][s]}</td>`).join('')}</tr>`).join('')}</table></div></div>
+  <div class="card sm"><h3>Roles</h3><b>Leader (${TEAMS.reich.leader} / ${TEAMS.dawn.leader})</b>: full command — recruit, move, attack, fortify, research, diplomacy, and manage posts.<br><b>Chief of staff</b>: recruit, move, attack, fortify, posture, research, spies.<br><b>Diplomat</b>: treaties, trade, annexation, spies, sabotage.<br><b>Soldier</b>: field duty and spies (or attacks if granted an attack seat).</div>`;
 }
 let panelContext='', deferredPanel=false;
 function renderPanel(refreshBudget = true){
@@ -3671,10 +4127,10 @@ function showDialog(key,html,initial){
   if(!same) loginAttempt = null;
   // Keep the room form, disclosure and scroll position usable while friends publish orders.
   const dialog = root.querySelector?.('[role=dialog]'), scroll = same && dialog ? dialog.scrollTop : 0;
-  const roomDraft = same && M === 'room' ? {room:$('#roomin').value,fb:$('#fbin').value,open:$('#room-backup').open,error:$('#roomin-error')?.textContent} : null;
+  const roomDraft = same && M === 'room' ? {room:$('#roomin').value,fb:$('#fbin').value,roomName:$('#roomnamein')?.value,open:$('#room-backup').open,error:$('#roomin-error')?.textContent} : null;
   const selection = focused?.tagName === 'INPUT' && typeof focused.selectionStart === 'number' ? [focused.selectionStart,focused.selectionEnd] : null;
   modalKey = key; modalMarkup = html; root.innerHTML = html; $('.app').inert = true;
-  if(roomDraft){ $('#roomin').value = roomDraft.room; $('#fbin').value = roomDraft.fb; $('#room-backup').open = roomDraft.open;
+  if(roomDraft){ $('#roomin').value = roomDraft.room; $('#fbin').value = roomDraft.fb; if($('#roomnamein') && roomDraft.roomName !== undefined) $('#roomnamein').value = roomDraft.roomName; $('#room-backup').open = roomDraft.open;
     if(roomDraft.error){$('#roomin-error').textContent=roomDraft.error;$('#roomin').setAttribute('aria-invalid','true');}
   }
   const next = liveControl(root,focused) || (initial && root.querySelector?.(initial)) || root.querySelector?.('[role=dialog]');
@@ -3703,15 +4159,78 @@ function roomPresenceHtml(){
   }).join('');
   return `<h3>${backend === 'mqtt' ? 'Connected devices' : 'Confirmed here'} (${peers.length})</h3><div class="pres">${peerHtml}</div>`;
 }
+function googleIconSvg(){
+  return `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1C3.3 21.4 7.4 24 12 24z"/><path fill="#FBBC05" d="M5.3 14.3c-.2-.7-.4-1.5-.4-2.3s.1-1.6.4-2.3V6.6H1.3C.5 8.2 0 10 0 12s.5 3.8 1.3 5.4l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4C17.9 1.2 15.2 0 12 0 7.4 0 3.3 2.6 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z"/></svg>`;
+}
+function googleBtnHtml(label = 'Continue with Google'){
+  const busyNow = accountBusy || googleBusy;
+  return `<button type="button" class="google-btn" data-act="google" ${busyNow ? 'disabled' : ''}>${busyNow ? '<span class="spinner" aria-hidden="true"></span>' : googleIconSvg()}<span>${esc(label)}</span></button>`;
+}
+function accountStatsHtml(){
+  const st = loadStats(), rooms = loadRooms();
+  const wonWars = Object.values(st.campaigns || {}).filter(c => c.win === 'win').length;
+  const items = [
+    ['Battles won', st.battlesWon || 0],
+    ['Attacks sent', st.battlesAttacked || 0],
+    ['Captures', st.provincesCaptured || 0],
+    ['Troops raised', st.troopsRecruited || 0],
+    ['Wars won', wonWars],
+    ['Campaigns', Math.max(rooms.length, Object.keys(st.campaigns || {}).length)]
+  ];
+  return `<div class="stats-grid">${items.map(([k, v]) => `<div class="stat-box"><b>${v}</b><span>${k}</span></div>`).join('')}</div>`;
+}
+function roomOverviewCard(r){
+  const label = r.localName || r.roomName || r.room;
+  const side = r.team ? `${TEAMS[r.team]?.short || r.team}${r.role ? ' · ' + ROLES[r.role] : ''}` : 'Spectator';
+  const enemy = r.team ? TEAMS[OTHER(r.team)]?.short : 'Enemy';
+  const pct = r.totalCount ? `${r.myCount || 0} yours · ${r.enemyCount || 0} ${enemy} / ${r.totalCount}` : 'Saved room';
+  const status = r.win ? `Ended (${TEAMS[r.win.team]?.short || r.win.team || 'Done'})` : r.phase === 'lobby' ? 'Lobby' : 'Active war';
+  return `<div class="room-item">
+    <div class="room-head">
+      <div><b>${esc(label)}</b> <span class="mono mut sm">${esc(r.room)}</span></div>
+      <span class="sm mut">${esc(status)}</span>
+    </div>
+    <div class="sm mut">${esc(side)} · ${pct}</div>
+    <div class="row" style="margin-top:6px">
+      <button type="button" class="btn pri sm" data-act="openroom" data-room="${esc(r.room)}">Open</button>
+      <input type="text" aria-label="Custom name for ${esc(r.room)}" class="room-rename-in" data-room="${esc(r.room)}" value="${esc(r.localName || r.roomName || '')}" placeholder="Custom room name" maxlength="40" style="flex:1;min-width:110px">
+      <button type="button" class="btn sm" data-act="renameroom" data-room="${esc(r.room)}">Save name</button>
+      <button type="button" class="btn sm danger" data-act="forgetroom" data-room="${esc(r.room)}" aria-label="Remove ${esc(label)} from list">×</button>
+    </div>
+  </div>`;
+}
 function renderModal(refreshBudget = true){
+  if(M === 'account'){
+    const perm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+    const notifOn = notifAllowed();
+    const cid = googleClientId();
+    showDialog('account:'+bootId+':'+(account?.name || 'guest'),`<div class="modalbg"><div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label="Account and stats">
+      <h2>${account ? esc(account.name) : 'Account'}</h2>
+      ${account ? `<div class="sm mut">${account.google ? `Signed in with Google${account.email ? ' (' + esc(account.email) + ')' : ''}` : 'Signed in locally & across your rooms'}</div>` : `<div class="sm mut">Sign in once — your account stays logged in on this browser.</div>`}
+      ${!account ? `<div class="card sm"><h3>Quick sign in</h3>${googleBtnHtml()}<form data-form="account" class="account-form" style="margin-top:10px"><div class="seg" role="group" aria-label="Account access">${[['signin','Sign in'],['signup','Sign up']].map(([k,label])=>`<button type="button" class="${accountMode===k?'on':''}" aria-pressed="${accountMode===k}" data-act="${k}">${label}</button>`).join('')}</div><label>Username<input type="text" id="account-name" autocomplete="username" maxlength="30" autocapitalize="none" required></label><label>Password<input id="account-password" type="password" autocomplete="${accountMode==='signup'?'new-password':'current-password'}" maxlength="256" required></label><span id="account-error" role="status">${esc(accountError)}</span><button class="btn pri" id="account-submit" ${accountBusy?'disabled':''}>${accountBusy?'<span class="spinner" aria-hidden="true"></span>':''}${accountMode==='signup'?'Create account':'Sign in'}</button></form></div>` : ''}
+      <div class="card sm"><h3>Your Player Stats</h3>${accountStatsHtml()}</div>
+      <div class="card sm"><h3>Attack Notifications</h3>
+        <p class="sm mut">Get notified when an enemy attacks your territories. ${notifOn ? 'Alerts are enabled for this browser.' : perm === 'denied' ? 'Blocked in browser settings — allow notifications for this site to enable.' : 'Enable browser & Service Worker alerts.'}</p>
+        <div class="row">${notifOn ? '<button type="button" class="btn sm" data-act="disablenotif">Disable alerts</button>' : '<button type="button" class="btn pri sm" data-act="enablenotif">Enable attack alerts</button>'}</div>
+        <p class="sm mut" style="margin-top:6px">Note: Static hosting has no remote Web Push server, so background alerts work while the site or worker stays active; full closed-browser push requires a VAPID push server.</p>
+      </div>
+      <details class="card sm"><summary style="cursor:pointer;font-weight:600">Google Sign-In setup</summary>
+        <p class="sm mut" style="margin:6px 0">Paste your Google OAuth 2.0 Web Client ID to enable <b>Continue with Google</b>.</p>
+        <div class="row"><input type="text" id="gclientin" aria-label="Google OAuth Client ID" value="${esc(cid)}" placeholder="12345-abc.apps.googleusercontent.com" style="flex:1;font-family:var(--mono);font-size:11px"><button type="button" class="btn sm pri" data-act="savegclient">Save</button></div>
+      </details>
+      <div class="row">${account ? '<button type="button" class="btn danger" data-act="signout">Log out</button>' : ''}<button type="button" class="btn pri" data-act="closem">Done</button></div>
+    </div></div>`);
+    return;
+  }
   if(M === 'room'){
-    const canShare = canInvite();
+    const canShare = canInvite(), curName = S?.roomName || readRoomCustomName(ROOM);
     showDialog('room:'+bootId,`<div class="modalbg"><div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-label="War Room">
-      <h2>Mastery War Room · ${esc(ROOM)}</h2>
+      <h2>${curName ? esc(curName) + ' · ' : ''}${esc(ROOM)}</h2>
       <div class="sm mut">Source: <b>${esc(NET.transport)}</b>${canShare ? ` · Live · Revision #${S.rev}` : startingMap ? ' · Confirmed empty' : ` · ${esc(syncText())}`}</div>
       <div class="card sm" id="room-presence">${roomPresenceHtml()}</div>
       <div class="card sm"><h3>Invite friends</h3><div class="row"><input type="text" readonly id="roomlink" aria-label="Room invite link" value="${canShare ? esc(roomUrl()) : ''}" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn pri sm" data-act="copyroom" ${canShare ? '' : 'disabled'}>Copy link</button></div><div class="mut sm" style="margin-top:6px">${canShare ? 'Share this exact link. It selects the same room, rules and data source on every device.' : 'Share the link once the saved campaign is live.'}</div></div>
-      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" aria-label="Room code or invite link" aria-describedby="roomin-error" value="${esc(ROOM)}" placeholder="Code or invite link" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New Mastery room</button></div><span class="form-note" id="roomin-error" role="status"></span><p class="mut sm" style="margin:6px 0 0">In a new room, the Reich starts with Berlin and Black Dawn with Nigeria. Every other province starts neutral. Joining an existing room keeps its saved borders.</p></div>
+      <div class="card sm"><h3>Custom room name</h3><div class="row"><input type="text" id="roomnamein" aria-label="Custom room name" value="${esc(curName)}" placeholder="e.g. Friday Europe Campaign" maxlength="40" style="flex:1"><button type="button" class="btn sm pri" data-act="saveroomname">Save name</button></div></div>
+      <div class="card sm"><h3>Switch or create room</h3><div class="row"><input type="text" id="roomin" aria-label="Room code or invite link" aria-describedby="roomin-error" value="${esc(ROOM)}" placeholder="Code or invite link" style="flex:1;font-family:var(--mono)"><button class="btn sm" data-act="joinroom">Join</button><button class="btn sm" data-act="newroom">New Mastery room</button></div><span class="form-note" id="roomin-error" role="status"></span></div>
       <details class="card sm" id="room-backup"><summary style="cursor:pointer;font-weight:600">Backup &amp; optional permanent Firebase DB</summary>
         <div class="mut sm" style="margin:6px 0">Public relays can lose retained saves. Export a backup you want to keep. Selecting a Firebase database opens a different data source; it does not move or upload this campaign.</div>
         <div class="row" style="margin-bottom:8px"><input type="text" id="fbin" aria-label="Firebase database URL" value="${esc(FB_URL)}" placeholder="https://your-app-default-rtdb.firebaseio.com" style="flex:1;font-family:var(--mono);font-size:11px"><button class="btn sm" data-act="savefb">Use</button>${FB_URL ? '<button class="btn sm" data-act="clearfb">Clear</button>' : ''}</div>
@@ -3819,42 +4338,47 @@ function renderDesk(){
   if(root.hidden){if(entryMarkup) root.innerHTML=''; entryMarkup=entryPage=''; return false;}
   let page='', html=''; const ready=liveBoard()&&!busy;
   if(atHome){
-    page='home'; const last=recentRoom();
-    html=`<p class="eyebrow">Multiplayer · Mastery</p><h2>Enter the war room</h2><p>Join your friends’ campaign or start a new map together.</p>
+    page='home:'+(account?.name||'')+':'+(accountBusy?'1':'0'); const last=recentRoom(), rooms=loadRooms();
+    html=`<p class="eyebrow">Multiplayer · Mastery</p><h2>Enter the war room</h2><p>Join a campaign or start a new map.</p>
+      <div class="card sm" style="margin:12px 0">
+        ${account ? `<div class="row sb"><div><b>${esc(account.name)}</b> <span class="mut sm">· Signed in</span></div><div class="row"><button type="button" class="btn sm" data-act="account">Stats &amp; Alerts</button><button type="button" class="btn sm" data-act="signout">Log out</button></div></div>` : `<div class="row sb"><div><b>Sign in once</b> <span class="mut sm">to keep your account and stats across rooms.</span></div><div class="row">${googleBtnHtml()}<button type="button" class="btn pri sm" data-act="account">Sign in / Sign up</button></div></div>`}
+      </div>
       <div class="desk-grid"><form data-form="joincode"><h3>Join with a code or link</h3><label>Room code or invite link<input type="text" id="home-code" aria-describedby="home-code-error" autocomplete="off" autocapitalize="none" required placeholder="Code or full invite link"></label><button class="btn pri">Join room</button><span class="form-note" id="home-code-error" role="status"></span></form>
-      <section><h3>Create a campaign</h3><p>Pick your side, then invite a friend to the other side. You decide when to start.</p>${deskButton('newroom','New Mastery room')}</section></div>
-      ${last?deskButton('resume','Return to '+esc(last.room)):''}`;
+      <section><h3>Create a campaign</h3><p>Pick your side, then invite a friend.</p><label>Custom room name (optional)<input type="text" id="new-room-name" maxlength="40" placeholder="e.g. Europe Front"></label>${deskButton('newroom','New Mastery room')}</section></div>
+      ${rooms.length ? `<section style="margin-top:16px"><h3>Your rooms (${rooms.length})</h3><div class="room-list">${rooms.map(roomOverviewCard).join('')}</div></section>` : ''}
+      ${last && !rooms.some(r => r.room === last.room) ? `<div style="margin-top:12px">${deskButton('resume','Return to '+esc(last.room))}</div>` : ''}`;
   } else if(startingMap && creatingRoom!==ROOM){
     page='missing'; html=`<p class="eyebrow">Room lookup</p><h2>Room not found</h2><p>No saved campaign was found at <b>${esc(ROOM)}</b>. Check the code or ask the owner for the full invite. No new room was created.</p>${backToRooms()}`;
-  } else if(restoring || !account){
-    const signup=accountMode==='signup'; page='account:'+bootId+':'+accountMode;
-    html=`<p class="eyebrow">Mastery / ${esc(ROOM)}</p><h2>${restoring?'Restoring your session':signup?'Create your account':startingMap?'Sign in to create a room':'Sign in to join'}</h2>${entrySteps(1)}
-      ${restoring?'<p>Checking the saved sign-in on this device…</p>':`<p>${startingMap?'Sign in or sign up, then choose which side to lead. You’ll get an invite link in the lobby.':'Sign in to your existing game account, or sign up if this is your first visit.'} This browser remembers your sign-in.</p>
+  } else if(!account){
+    const signup=accountMode==='signup'; page='account:'+bootId+':'+accountMode+':'+(accountBusy?'1':'0');
+    html=`<p class="eyebrow">Mastery / ${esc(ROOM)}</p><h2>${signup?'Create your account':startingMap?'Sign in to create a room':'Sign in to join'}</h2>${entrySteps(1)}
+      <p>${startingMap?'Sign in once, then choose your side.':'Sign in or create an account to join.'}</p>
+      <div style="margin-bottom:12px">${googleBtnHtml()}</div>
       <form data-form="account" class="account-form"><div class="seg" role="group" aria-label="Account access">${[['signin','Sign in'],['signup','Sign up']].map(([k,label])=>`<button type="button" class="${accountMode===k?'on':''}" aria-pressed="${accountMode===k}" data-act="${k}">${label}</button>`).join('')}</div><label>Username<input type="text" id="account-name" autocomplete="username" maxlength="30" autocapitalize="none" required></label>
       <label>Password<input id="account-password" type="password" autocomplete="${signup?'new-password':'current-password'}" maxlength="256" required></label>
-      ${signup?'<small class="mut">Use a game-only password of at least eight characters. Don’t reuse a password from another site. There is no password reset.</small>':''}<span id="account-error" role="status"></span>
-      <div class="row"><button class="btn pri" id="account-submit">${signup?'Create account':'Sign in and continue'}</button></div></form>`}${backToRooms()}`;
+      ${signup?'<small class="mut">At least 8 characters. Remembered automatically on this browser.</small>':''}<span id="account-error" role="status"></span>
+      <div class="row"><button class="btn pri" id="account-submit" ${accountBusy?'disabled':''}>${accountBusy?'<span class="spinner" aria-hidden="true"></span>':''}${signup?'Create account':'Sign in and continue'}</button></div></form>${backToRooms()}`;
   } else if(!myTeam() && Object.keys(S.players).some(n=>n.toLowerCase()===account.name.toLowerCase())){
-    page='occupied-name'; html=`<h2>Username already in this room</h2><p>This post belongs to another account. Sign in with the password used for this room or choose another username.</p>${deskButton('signout','Sign out')} ${backToRooms()}`;
+    page='occupied-name'; html=`<h2>Username already in this room</h2><p>This post belongs to another account. Log in with that account or choose another username.</p>${deskButton('signout','Log out')} ${backToRooms()}`;
   } else if(!myTeam()){
-    if(S.win){page='ended'; html=`<h2>Campaign has ended</h2><p>This room no longer accepts players. Join another room or create one to play.</p>${backToRooms()}`;}
+    if(S.win){page='ended'; html=`<h2>Campaign has ended</h2><p>This room no longer accepts players.</p>${backToRooms()}`;}
     else {page='faction'; const first=startingMap;
-    html=`<p class="eyebrow">${esc(account.name)} / ${esc(ROOM)}</p><h2>Choose your faction</h2>${entrySteps(2)}<p>${first?'You are creating this room. You will lead the side you choose.':'Join as a Soldier. Your faction leader can appoint you to another role later.'}</p>
+    html=`<p class="eyebrow">${esc(account.name)} / ${esc(S.roomName || ROOM)}</p><h2>Choose your faction</h2>${entrySteps(2)}<p>${first?'You are creating this room and will lead the side you choose.':'Join as a Soldier. Your leader can assign roles in Council.'}</p>
       <div class="desk-grid">${['reich','dawn'].map(t=>factionChoice(t,first,ready)).join('')}</div>
-      <div class="row">${backToRooms()}${deskButton('signout','Sign out')}</div>`;}
+      <div class="row">${backToRooms()}${deskButton('account','Account')}${deskButton('signout','Log out')}</div>`;}
   } else {
     page='staging'; const owner=S.owner===account.name, filled=roomReady(S);
     const other=OTHER(myTeam()), missing=['reich','dawn'].find(t=>!roomPosts(S,t).length);
     const vacant=filled && owner && !seats(S.players,other).leaders;
-    html=`<p class="eyebrow">Mastery / Assembly</p><h2>Campaign lobby</h2>${entrySteps(3)}<p>Room code: <strong class="mono">${esc(ROOM)}</strong> · Owner: ${esc(S.owner)}</p>
+    html=`<p class="eyebrow">Mastery / Assembly</p><h2>Campaign lobby</h2>${entrySteps(3)}<p>${S.roomName ? `<strong>${esc(S.roomName)}</strong> · ` : ''}Room code: <strong class="mono">${esc(ROOM)}</strong> · Owner: ${esc(S.owner)}</p>
       <div class="desk-grid">${['reich','dawn'].map(t=>{const posts=roomPosts(S,t,true);return `<section style="--flag:${TEAMS[t].css}"><h3>${TEAMS[t].name} · ${posts.length}</h3>${posts.length?posts.map(([n,p])=>`<div class="desk-post"><b>${esc(n)}</b>${n===me.name?' (you)':''} · ${p.role==='leader'?TEAMS[t].leader:ROLES[p.role]} ${appointmentButton(S,n)}</div>`).join(''):'<p>Waiting for a player…</p>'}</section>`;}).join('')}</div>
-      <p role="status">${filled?'Both factions have joined.':`Invite someone to join <b>${TEAMS[missing].name}</b> to unlock the start button.`} ${owner?'Only you can start this game.':`<b>${esc(S.owner)}</b> starts the game.`} Until then the map and resources stay still.</p>
-      ${vacant?`<p class="sm">${TEAMS[other].name} has no commander yet. Use <b>Appoint</b> beside a player above to let them lead that faction. Starting the game will not promote them.</p>`:!owner?`<p class="sm">${!seats(S.players,myTeam()).leaders?`${TEAMS[myTeam()].name} has no commander yet. As a Soldier you can do field duty and scout, while only a commander can move or attack with troops. Ask ${esc(S.owner)} to appoint you as ${TEAMS[myTeam()].leader} before or after starting.`:myRole()==='soldier'?`As a Soldier you can do field duty and scout; your ${TEAMS[myTeam()].leader} assigns troop command and other roles in Council.`:''}</p>`:''}
+      <p role="status">${filled?'Both factions have joined.':`Invite someone to join <b>${TEAMS[missing].name}</b> to unlock Start.`} ${owner?'You can start when ready.':`<b>${esc(S.owner)}</b> starts the game.`}</p>
+      ${vacant?`<p class="sm">${TEAMS[other].name} has no commander yet. Use <b>Appoint</b> beside a player above.</p>`:!owner?`<p class="sm">${!seats(S.players,myTeam()).leaders?`${TEAMS[myTeam()].name} has no commander yet. As a Soldier, only a commander can move or attack — ask ${esc(S.owner)} to appoint ${TEAMS[myTeam()].leader}.`:''}</p>`:''}
       <div class="row"><button class="btn ${filled&&owner?'':'pri'}" data-act="copyroom" ${canInvite()?'':'disabled'}>Copy invite link</button>${owner?`<button class="btn pri" data-act="startcampaign" ${ready&&filled?'':'disabled'}>Start campaign</button>`:''}<button class="btn" data-act="room">Room invite</button></div>
-      ${canChangeFaction(S,me.name)?`<details class="lobby-change" data-keep="change-side"><summary>Picked the wrong side?</summary><p>You can switch before launch as an unappointed Soldier. Your room title won’t carry over.</p><button class="btn" data-act="lobbyside" data-team="${other}" ${ready?'':'disabled'}>Switch to ${TEAMS[other].name}</button></details>`:''}
-      <div class="row desk-exit">${backToRooms()}${deskButton('signout','Sign out')}</div>`;
+      ${canChangeFaction(S,me.name)?`<details class="lobby-change" data-keep="change-side"><summary>Picked the wrong side?</summary><p>You can switch before launch as an unappointed Soldier.</p><button class="btn" data-act="lobbyside" data-team="${other}" ${ready?'':'disabled'}>Switch to ${TEAMS[other].name}</button></details>`:''}
+      <div class="row desk-exit">${backToRooms()}${deskButton('account','Account')}${deskButton('signout','Log out')}</div>`;
   }
-  if(busy) html+='<p class="sm mut" role="status">Waiting for the room to confirm…</p>';
+  if(busy) html+='<p class="sm mut" role="status"><span class="spinner" aria-hidden="true"></span> Waiting for the room to confirm…</p>';
   const signature=page+'|'+html;
   if(entryMarkup!==signature){
     const active=document.activeElement, focused=root.contains(active) && active;
@@ -3925,6 +4449,33 @@ document.addEventListener('click', e => {
     return;
   }
   if(a==='signout') return signOut();
+  if(a==='account'){ M='account'; renderModal(); return; }
+  if(a==='google') return googleSignIn();
+  if(a==='savegclient'){
+    const val=($('#gclientin')?.value||'').trim();
+    putPref(GCLIENT_KEY,val); toast(val?'Google OAuth Client ID saved.':'Google OAuth Client ID cleared.');
+    renderModal(); return;
+  }
+  if(a==='enablenotif') return enableAttackNotifications().then(()=>renderModal());
+  if(a==='disablenotif'){ putPref(NOTIF_KEY,'off'); toast('Attack alerts paused.'); renderModal(); return; }
+  if(a==='saveroomname'){
+    const nm=($('#roomnamein')?.value||'').trim().slice(0,40);
+    setLocalRoomName(ROOM,nm);
+    if(S && liveBoard() && campaignRoom(S) && authed() && myRole()==='leader') return act('renameRoom',{name:nm}).then(()=>renderModal());
+    toast(nm?'Room name saved.':'Room name cleared.'); renderAll(); return;
+  }
+  if(a==='openroom' && d.room){
+    const r=loadRooms().find(x=>x.room===d.room);
+    if(r) return navigate(r.room,r.via||'mqtt',r.fb||'',r.relay||'emqx',r.rev||0);
+    return navigate(d.room,'mqtt','','emqx');
+  }
+  if(a==='renameroom' && d.room){
+    const input=[...document.querySelectorAll('.room-rename-in')].find(x=>x.dataset.room===d.room);
+    const nm=(input?.value||'').trim().slice(0,40);
+    setLocalRoomName(d.room,nm); toast(nm?`Named "${nm}".`:'Custom room name cleared.');
+    renderAll(); return;
+  }
+  if(a==='forgetroom' && d.room){ forgetRoomOverview(d.room); renderAll(); return; }
   if(a==='membership') return act('membership',{team:d.team});
   if(a==='startcampaign') return act('start');
   if(a==='lobbyside') return act('changeFaction',{team:d.team});
@@ -4000,6 +4551,7 @@ document.addEventListener('click', e => {
   }
   if(a === 'joinroom') return openCode($('#roomin'));
   if(a === 'newroom'){
+    pendingRoomName = ($('#new-room-name')?.value || '').trim().slice(0,40);
     creationIntent('war-'+randomHex(6));
     return navigate(creatingRoom,'mqtt','','emqx');
   }
@@ -4244,7 +4796,9 @@ setInterval(() => {
 
 buildBase(); setVB(); renderMapnav();
 if(window.claude && window.claude.hot && window.claude.hot.snapshot){ try{ window.claude.hot.snapshot(() => ({sel, tab})); }catch(e){} }
-boot(); if(readPref(SESSION_KEY)) restoreProfile();
+if(readPref(SESSION_KEY)) restoreProfile();
+if(notifAllowed()) registerPushWorker();
+boot();
 window.__eot = {get S(){return S;}, act, A, TD, ADJ, LINKS, tick, newGame, checkWin, recruitCost, researchCost, masteryCost};
 })();
 </script>

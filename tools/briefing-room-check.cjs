@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 module.exports = async function briefing({origin, page, peer, state, publish, latest, writes}) {
   const room = 'board-guide-test',
-    topic = `lands-eot/v1/${room}:mastery-1/state`,
+    topic = `lands-eot/v2/${room}:mastery-1/state`,
     url = `${origin}/?room=${room}&rules=mastery-1&via=mqtt&relay=emqx&rev=50`;
   const st = structuredClone(state);
   st.rev = 50;
