@@ -12,7 +12,16 @@ function rng(seed) {
   };
 }
 function engine(path) {
-  const script = fs.readFileSync(path, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+  if (!fs.existsSync(path)) {
+    throw Error(`Reference HTML not found at ${path}. This checkout is shallow: run "git fetch --unshallow" (or "git fetch origin <sha>") before comparing against a historical engine.`);
+  }
+  const source = fs.readFileSync(path, 'utf8');
+  if (source.length < 10000) {
+    throw Error(`Reference HTML at ${path} is empty or truncated (${source.length} bytes). A failed "git show <sha>:index.html" writes an empty file; fetch that commit first.`);
+  }
+  const match = source.match(/<script>([\s\S]*?)<\/script>/);
+  if (!match) throw Error(`Reference HTML at ${path} has no inline <script> block.`);
+  const script = match[1];
   const i = script.indexOf('/* ============================ STORE & REAL-TIME MULTIPLAYER');
   assert.ok(i > 0);
   const math = Object.create(Math);
@@ -31,10 +40,14 @@ assert.ok(
   Number.isSafeInteger(seed) && Number.isSafeInteger(cases) && cases > 0,
   'Use an integer seed and a positive battle count.'
 );
-// Normalize personal CP and the version tag; the engine comparison uses identical garrisons.
+// Normalize personal CP and the version tag; the engine comparison uses identical
+// garrisons. Newer builds also record the two battle rolls for auditability; that is
+// diagnostic metadata, not a rules change, so it is stripped before comparing.
+const stripRolls = s => { for (const entry of s.log || []) delete entry.rolls; return s; };
 function asPersonal(s) {
   s.v = 7;
   s.ruleset = 'mastery-1';
+  stripRolls(s);
   for (const pl of Object.values(s.players)) pl.cp = s.teams[pl.team].cp;
   for (const side of Object.values(s.teams)) delete side.cp;
   return s;
@@ -159,6 +172,7 @@ for (let i = 0; i < cases; i++) {
   old.checkWin(a, now + 60000);
   next.checkWin(b, now + 60000);
   asPersonal(a);
+  stripRolls(b); // the newer build also records battle rolls; that is metadata, not a rule
   for (const [name, pl] of Object.entries(a.players))
     pl.cp = st.teams[pl.team].cp + 2 - (name === ctx.name ? 2 : 0); // one minute, one attack
   equal(b, a, 'after battle, income and victory check ' + i);
