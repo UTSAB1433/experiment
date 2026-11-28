@@ -26,3 +26,20 @@ Open **Orders** in the **Command desk**. The first card gives you a starting act
 **Winning:** Secure the enemy homeland and take the opposing faction’s last province, or hold **60% of all victory points for 45 minutes**. Taking a capital alone does not take its country. Use **World front → Country control** to see which states remain. Independent armies can fight back while a player is active.
 
 Earlier saved campaigns keep their own map, logins and victory rules. For those differences, backup guidance and how to run the checks, see [TESTING.md](TESTING.md).
+
+## Running it yourself
+
+The whole game is one static file, `index.html`.
+
+- **Play:** open `index.html` in a browser, or serve the folder (`npm run serve`, or any static host). Sign-in and the room relay need `https:` or `localhost`; opening the file directly from disk will not let you sign in.
+- **Check it:** Node 22 or newer, then `npm test` (or `node --test`) from the repository root. No dependencies are installed or fetched; the suite runs the real engine in a sandbox with fake brokers, storage and clock.
+
+## Leaving and coming back over several days
+
+This is a campaign you play across sessions, so here is exactly what is — and is not — guaranteed.
+
+- **Orders are durable.** Every confirmed order is stored as a retained record on the public relay (or your own Firebase database) under the room's own address, and mirrored into this browser. Both players can close the browser and come back later.
+- **Your own copy exists too.** The room keeps a rolling autosave in this browser and can export the whole campaign as JSON (**Room → Copy save JSON** or **Download backup**). Export after a big session.
+- **What a free public relay does not promise:** that it keeps a retained record forever, and that nobody else can write to the room. Use a unique room code, a game-only password, and your own Firebase database if you want the campaign to be permanent and access-controlled.
+- **A long pause is not a windfall.** Income stops accruing after two hours away; the rest of the gap is simply not banked, so nobody returns to an absurd stockpile. Command points stay personal and hard-capped at 20.
+- **If the room looks empty**, your save was probably not lost. The app shows the last revision it confirmed on that device and offers the cached copy, and it keeps trying the other public relays instead of waiting on one dead host.

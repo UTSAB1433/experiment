@@ -12,7 +12,7 @@ Mastery is the only playable ruleset. Existing Mastery rooms keep their original
 - The new atlas has **201 playable provinces**: Berlin for the Reich, Nigeria for Black Dawn, and 199 neutral. Its 54 additional strategic states expand major powers and large countries; they are game regions, not a census of all administrative subdivisions. Small one-province countries still play as before. Tehran and Lima are distinct places. Click a state or open **World front → Country control** to see the homeland, each side’s progress and who holds all its states. Capturing a capital transfers only that state. To eliminate a faction, secure its homeland and take its last holding; a lone-HQ rush cannot skip the surrounding states. Timed world-VP domination remains a separate victory.
 - Once launched, **one active faction player** is enough for a neighboring independent army to counterattack an occupied ordinary state. Home-state counterattacks and capital recoveries share the existing one-battle budget. Border counterattacks use actual adjacent troops, the usual losses and sea-crossing rules. No offline catch-up or raids on the two HQs.
 
-**Remembered sign-in and trust boundary.** This is a static, cooperative multiplayer game, not a private account server. Sign-up and sign-in run over HTTPS/Web Crypto. A one-time directory lookup uses the pinned EMQX relay and a separate `lands-eot/profiles/v1/` namespace; a registration waits for the subscription, read and lease echoes, then confirms its retained record. The directory and room roster contain a display name, random salt and a public fingerprint, not the password or the derived session key. A known member can sign in against the confirmed room even if the directory loses its record. A restored session joining an unfamiliar room verifies its identity without asking for the password again. A fresh browser with no session uses the directory to sign in outside an existing membership. Passwords are case-sensitive and there is no email recovery.
+**Remembered sign-in and trust boundary.** This is a static, cooperative multiplayer game, not a private account server. Sign-up and sign-in run over HTTPS/Web Crypto. A one-time directory lookup uses the pinned EMQX relay and a separate `lands-eot/profiles/v1/` namespace; a registration waits for the subscription, read and lease echoes, then confirms its retained record. The directory and room roster contain a display name, random salt and a public fingerprint, not the password or the derived session key. A known member can sign in against the confirmed room even if the directory loses its record. A restored session joining an unfamiliar room verifies its identity without asking for the password again. A fresh browser with no session uses the directory to sign in outside an existing membership. V8 passwords are case-sensitive and spaces count, so the password is used exactly as typed; there is no email recovery. Only legacy v6/v7 posts keep the older folded rule they were created with (upper case, with spaces and hyphens removed), which is applied to those posts alone.
 
 The session is kept in this browser’s origin storage until sign-out or site-data removal. Returning to a room restores its saved faction and role, not a second membership. A private window, another browser or a cleared profile requires sign-in again. As with the existing game saves, public brokers do **not** enforce access control against custom publishers or guarantee permanent retention. Use unique game passwords and keep valuable campaign backups; deployment for untrusted users needs a trusted identity/state service.
 
@@ -78,10 +78,16 @@ Existing v6 saves need no reset. Older battles and recognizable place-specific o
 From the repository root, on Node 22 or 24:
 
 ```sh
-node --test
+npm test                          # equivalent to: node --test
 node --test --test-concurrency=1
 git diff --check
 ```
+
+CI runs this matrix on Node 22 and 24 for every push and pull request (`.github/workflows/tests.yml`). Nothing is installed: the suite reads the real inline engine, so a change that breaks it cannot be merged silently.
+
+`test/session-resilience.test.cjs` pins the behaviour a multi-day campaign depends on: a disconnect keeps the last confirmed board visible read-only instead of a blank page, a pinned relay that stops answering is widened to the other public brokers, a 24-hour pause cannot be banked as a windfall, v8 passwords are matched exactly (only legacy posts fold case), and removing a post succeeds, is logged, and cannot be done quietly.
+
+**Reconnect and catch-up rules.** Returning to a room never waits forever on one host: after two silent redials the client re-probes the other public relays, keeping the room's cache identity intact so the last confirmed save is still available for export. A cold load still shows no board until the broker confirms it (a stale army must never flash), but it states the last confirmed revision and offers the cached copy; a mid-session drop keeps the confirmed map on screen, read-only. Income is credited for at most `CATCHUP_MIN` (two hours) of absence, so a real-world pause cannot hand either side a day of uncontested production.
 
 `test-support/war-room.cjs` runs the application's actual inline script in a VM with disposable storage, sockets, a DOM fixture and controllable time. Tests exercise both factions, all 73 formations and their four tracks, 8,760 batch-price combinations, fixed-roll battles, stale quotes, permissions, duplicate orders, and malformed or late saves. `test/unified-campaign.test.cjs` covers captured HQs, unit conservation, saved progress, legacy username collisions, chief and attack limits, stale appointments, and player attacks over direct land and sea links. Disconnected orders must not change the save or spend CP or oil. The rollout tests cover missing lock/save echoes, backend switches, imports, resets, conditional upgrades with Firebase pruning/ETags/stream races, and shared-DB state and lock paths. The Firebase and shared-DB adapters in these tests use fixtures, **not hosted services**.
 
@@ -91,7 +97,10 @@ git diff --check
 
 Use a temporary directory outside the checkout. The reference is the historic game engine, not an expected-value formula copied from the new code. If a reference commit is missing from a shallow clone, fetch that commit by SHA first.
 
+This checkout is usually shallow, so fetch the reference commit before extracting it. The tool now fails with that instruction instead of a confusing `TypeError`:
+
 ```sh
+git fetch --unshallow 2>/dev/null || git fetch origin b1df2301c7d5cea978ec721357f9c317dfd4d741
 work=$(mktemp -d)
 export EOT_CLASSIC_HTML="$work/classic.html"
 git show b1df2301c7d5cea978ec721357f9c317dfd4d741:index.html > "$EOT_CLASSIC_HTML"
@@ -107,6 +116,7 @@ This checks the retained historical starting layout, accounting for the new vers
 With the same temporary `work` directory as above:
 
 ```sh
+git fetch origin 6604204e01b68238901b06bf1fa149aa11c83919 # shallow clones need this first
 export EOT_V6_HTML="$work/previous.html"
 git show 6604204e01b68238901b06bf1fa149aa11c83919:index.html > "$EOT_V6_HTML"
 npm install --prefix "$work" --no-audit --no-fund \
